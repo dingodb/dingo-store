@@ -235,11 +235,22 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
   time_info->set_document_index_write_time_ns(tracker->DocumentIndexwriteTime());
 
   const auto& time = tracker->GetTime();
-  for (const auto& [name, elapsed, skip_version] : time.elapsed_times) {
+  for (const auto& et : time.elapsed_times) {
     auto* mut_elapsed_time = time_info->add_elapsed_times();
-    mut_elapsed_time->set_name(name);
-    mut_elapsed_time->set_time_us(elapsed);
-    mut_elapsed_time->set_skip_version(skip_version);
+    mut_elapsed_time->set_name(et.name);
+    mut_elapsed_time->set_time_us(et.elapsed_time_us);
+    mut_elapsed_time->set_skip_version(et.skip_versions);
+    auto* perf = mut_elapsed_time->mutable_rocksdb_perf();
+    perf->set_block_cache_hit_count(et.rocksdb_perf.block_cache_hit_count);
+    perf->set_block_read_count(et.rocksdb_perf.block_read_count);
+    perf->set_block_read_time_ns(et.rocksdb_perf.block_read_time_ns);
+    perf->set_block_decompress_time_ns(et.rocksdb_perf.block_decompress_time_ns);
+    perf->set_internal_key_skipped_count(et.rocksdb_perf.internal_key_skipped_count);
+    perf->set_internal_delete_skipped_count(et.rocksdb_perf.internal_delete_skipped_count);
+    perf->set_user_key_comparison_count(et.rocksdb_perf.user_key_comparison_count);
+    perf->set_block_read_byte(et.rocksdb_perf.block_read_byte);
+    perf->set_seek_internal_seek_time_ns(et.rocksdb_perf.seek_internal_seek_time_ns);
+    perf->set_find_next_user_entry_time_ns(et.rocksdb_perf.find_next_user_entry_time_ns);
   }
 }
 

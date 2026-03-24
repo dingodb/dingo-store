@@ -50,11 +50,39 @@
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
+#include "rocksdb/perf_context.h"
+#include "rocksdb/perf_level.h"
 #include "rocksdb/sst_file_reader.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
 namespace dingodb {
+
+// RAII helper for RocksDB PerfContext
+struct RocksDBPerfGuard {
+  rocksdb::PerfContext *perf_ctx;
+
+  RocksDBPerfGuard() {
+    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+    perf_ctx = rocksdb::get_perf_context();
+    perf_ctx->Reset();
+  }
+
+  ~RocksDBPerfGuard() { rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable); }
+
+  Tracker::RocksDBPerfContext GetPerfContext() const {
+    return {perf_ctx->block_cache_hit_count,
+            perf_ctx->block_read_count,
+            perf_ctx->block_read_time,
+            perf_ctx->block_decompress_time,
+            perf_ctx->internal_key_skipped_count,
+            perf_ctx->internal_delete_skipped_count,
+            perf_ctx->user_key_comparison_count,
+            perf_ctx->block_read_byte,
+            perf_ctx->seek_internal_seek_time,
+            perf_ctx->find_next_user_entry_time};
+  }
+};
 
 DEFINE_int64(max_short_value_in_write_cf, 256, "max short value in write cf");
 DEFINE_int64(max_batch_get_count, 4096, "max batch get count");
@@ -453,7 +481,7 @@ butil::Status TxnIterator::Init(TrackerPtr tracker) {
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
       << fmt::format("[txn]Init start_ts:{}, get_snapshot+reader elapsed:{} us", start_ts_, snapshot_elapsed);
   if (tracker) {
-    tracker->RecordElapsedTime("init:get_snapshot+reader", snapshot_elapsed, 0);
+    tracker->RecordElapsedTime("init:get_snapshot_reader", snapshot_elapsed, 0);
   }
 
   // construct write iter
@@ -495,20 +523,31 @@ butil::Status TxnIterator::Init(TrackerPtr tracker) {
   }
 
   // iter write and lock iter, if lock_ts < start_ts, return LockInfo
+  Tracker::RocksDBPerfContext write_seek_perf;
+  Tracker::RocksDBPerfContext lock_seek_perf;
+
   step_time = Helper::TimestampUs();
-  write_iter_->Seek(write_iter_options.lower_bound);
+  {
+    RocksDBPerfGuard perf_guard;
+    write_iter_->Seek(write_iter_options.lower_bound);
+    write_seek_perf = perf_guard.GetPerfContext();
+  }
   uint64_t write_seek_elapsed = Helper::TimestampUs() - step_time;
 
   step_time = Helper::TimestampUs();
-  lock_iter_->Seek(lock_iter_options.lower_bound);
+  {
+    RocksDBPerfGuard perf_guard;
+    lock_iter_->Seek(lock_iter_options.lower_bound);
+    lock_seek_perf = perf_guard.GetPerfContext();
+  }
   uint64_t lock_seek_elapsed = Helper::TimestampUs() - step_time;
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-      << fmt::format("[txn]Init start_ts:{}, write_iter_seek elapsed:{} us, lock_iter_seek elapsed:{} us",
-                     start_ts_, write_seek_elapsed, lock_seek_elapsed);
+      << fmt::format("[txn]Init start_ts:{}, write_iter_seek elapsed:{} us, lock_iter_seek elapsed:{} us", start_ts_,
+                     write_seek_elapsed, lock_seek_elapsed);
   if (tracker) {
-    tracker->RecordElapsedTime("init:write_iter_seek", write_seek_elapsed, 0);
-    tracker->RecordElapsedTime("init:lock_iter_seek", lock_seek_elapsed, 0);
+    tracker->RecordElapsedTime("init:write_iter_seek", write_seek_elapsed, 0, write_seek_perf);
+    tracker->RecordElapsedTime("init:lock_iter_seek", lock_seek_elapsed, 0, lock_seek_perf);
   }
 
   if ((!write_iter_->Valid()) && (!lock_iter_->Valid())) {
@@ -1250,12 +1289,11 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
   }
 
   if (Helper::TimestampUs() - start_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn]BatchGet start_ts:{}, key:{}, txn_reader init elapsed:{} ms", start_ts,
-                       Helper::TimestampUs() - start_time);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        "[txn]BatchGet start_ts:{}, txn_reader init elapsed:{} ms", start_ts, Helper::TimestampUs() - start_time);
   }
 
-  tracker->RecordElapsedTime("txn_reader init", Helper::TimestampUs() - start_time, 0);
+  tracker->RecordElapsedTime("init:txn_reader", Helper::TimestampUs() - start_time, 0);
   int64_t response_memory_size = 0;
 
   auto write_iter = txn_reader.GetWriteIter();
@@ -1266,6 +1304,7 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
 
   uint64_t batch_get_time = Helper::TimestampMs();
   int64_t total_skip_versions = 0;
+  Tracker::RocksDBPerfContext total_perf;
   // for every key in keys, get lock info, if lock_ts < start_ts, return LockInfo
   // else find the latest write below our start_ts
   // then read data from data_cf
@@ -1321,7 +1360,11 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
         << ", iter_options.upper_bound: " << Helper::StringToHex(iter_options.upper_bound);
 
     // check isolation level and return value
-    write_iter->Seek(iter_options.lower_bound);
+    {
+      RocksDBPerfGuard perf_guard;
+      write_iter->Seek(iter_options.lower_bound);
+      total_perf += perf_guard.GetPerfContext();
+    }
     int64_t write_ver_count = 0;
     while (write_iter->Valid() && write_iter->Key() < iter_options.upper_bound) {
       if (write_iter->Key().length() <= 8) {
@@ -1426,7 +1469,7 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
     }
   }
 
-  tracker->RecordElapsedTime("scan keys ", Helper::TimestampUs() - batch_get_time, total_skip_versions);
+  tracker->RecordElapsedTime("scan_keys", Helper::TimestampUs() - batch_get_time, total_skip_versions, total_perf);
 
   if (Helper::TimestampUs() - start_time > FLAGS_rpc_elapse_time_threshold_ms * 1000) {
     DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
@@ -1462,10 +1505,11 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
 
   DINGO_LOG(INFO) << fmt::format(
       "[txn][{}] Scan start_ts: {} range: {} isolation_level: {} start_ts: {} limit: {} key_only: {} is_reverse: {} "
-      "resolved_locks size: {} disable_coprocessor: {} coprocessor: {} txn_result_info: {}.",
+      "resolved_locks size: {} disable_coprocessor: {} coprocessor: {} txn_result_info: {}, has_more: {}, "
+      "end_scan_key: {}.",
       stream->StreamId(), start_ts, Helper::RangeToString(range), pb::store::IsolationLevel_Name(isolation_level),
       start_ts, limit, key_only, is_reverse, resolved_locks.size(), disable_coprocessor, coprocessor.ShortDebugString(),
-      txn_result_info.ShortDebugString());
+      txn_result_info.ShortDebugString(), has_more, Helper::StringToHex(end_scan_key));
   uint64_t start_time = Helper::TimestampUs();
   if (isolation_level != pb::store::SnapshotIsolation && isolation_level != pb::store::ReadCommitted) {
     DINGO_LOG(ERROR) << fmt::format("[txn][{}] TxnScan invalid isolation_level: {}.", stream->StreamId(),
@@ -1492,15 +1536,21 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
       DINGO_LOG(ERROR) << s;
       return butil::Status(status.error_code(), s);
     }
-    tracker->RecordElapsedTime("txn_iterator init", Helper::TimestampUs() - iter_init_time, 0);
+    tracker->RecordElapsedTime("init:txn_iterator", Helper::TimestampUs() - iter_init_time, 0);
     if (Helper::TimestampUs() - iter_init_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
           "[txn]Scan start_ts:{}, iter_init elapsed:{} ms.", start_ts, Helper::TimestampUs() - iter_init_time);
     }
 
     uint64_t seek_start_time = Helper::TimestampUs();
-    status = iter->Seek(range.start_key());
-    tracker->RecordElapsedTime("seek start key", Helper::TimestampUs() - seek_start_time, iter->GetSkippedVersions());
+    Tracker::RocksDBPerfContext seek_perf;
+    {
+      RocksDBPerfGuard perf_guard;
+      status = iter->Seek(range.start_key());
+      seek_perf = perf_guard.GetPerfContext();
+    }
+    tracker->RecordElapsedTime("seek_start_key", Helper::TimestampUs() - seek_start_time, iter->GetSkippedVersions(),
+                               seek_perf);
     iter->ResetSkippedVersions();
     if (Helper::TimestampUs() - seek_start_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
@@ -1561,6 +1611,7 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
     size_t bytes = 0;
     uint64_t valid_result_time = Helper::TimestampUs();
     auto count = 0;
+    RocksDBPerfGuard scan_perf_guard;
     while (iter->Valid(txn_result_info)) {
       uint64_t iter_time = Helper::TimestampUs();
       auto key = iter->Key();
@@ -1612,8 +1663,8 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
         }
       }
     }
-    tracker->RecordElapsedTime("txn_iterator scan", Helper::TimestampUs() - valid_result_time,
-                               iter->GetSkippedVersions());
+    tracker->RecordElapsedTime("txn_iterator_scan", Helper::TimestampUs() - valid_result_time,
+                               iter->GetSkippedVersions(), scan_perf_guard.GetPerfContext());
 
     if (Helper::TimestampUs() - valid_result_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -1645,226 +1696,124 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
     }
   }
   if (Helper::TimestampUs() - start_time > FLAGS_rpc_elapse_time_threshold_ms * 1000) {
-    DINGO_LOG(INFO) << fmt::format("[txn]Scan start_ts:{}, elapsed:{} us.", start_ts,
-                                   Helper::TimestampUs() - start_time);
+    DINGO_LOG(INFO) << fmt::format("[txn]Scan start_ts:{}, kv_size:{}, has_more:{}, elapsed:{} us.", start_ts,
+                                   kvs.size(), has_more, Helper::TimestampUs() - start_time);
   }
   return butil::Status::OK();
 }
 
 bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock");
 
-  butil::Status TxnEngineHelper::PessimisticLock(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      const std::vector<pb::store::Mutation> &mutations, const std::string &primary_lock, int64_t start_ts,
-      int64_t lock_ttl, int64_t for_update_ts, bool return_values, std::vector<pb::common::KeyValue> &kvs) {
-    BvarLatencyGuard bvar_guard(&g_txn_pessimistic_lock_latency);
+butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                               std::shared_ptr<Context> ctx,
+                                               const std::vector<pb::store::Mutation> &mutations,
+                                               const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
+                                               int64_t for_update_ts, bool return_values,
+                                               std::vector<pb::common::KeyValue> &kvs) {
+  BvarLatencyGuard bvar_guard(&g_txn_pessimistic_lock_latency);
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
-        << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
-        << ", for_update_ts: " << for_update_ts << ", return_values: " << return_values;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
+      << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+      << ", for_update_ts: " << for_update_ts << ", return_values: " << return_values;
 
-    if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_pessimistic_count)) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                       << ", mutations_size: " << mutations.size()
-                       << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
-                       << ", for_update_ts: " << for_update_ts << ", mutations.size() > FLAGS_max_pessimistic_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "pessimistic lock mutations.size() > FLAGS_max_pessimistic_count");
+  if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_pessimistic_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                     << ", mutations_size: " << mutations.size()
+                     << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+                     << ", for_update_ts: " << for_update_ts << ", mutations.size() > FLAGS_max_pessimistic_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "pessimistic lock mutations.size() > FLAGS_max_pessimistic_count");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_lock;
+  auto *response = dynamic_cast<pb::store::TxnPessimisticLockResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", for_update_ts: " << for_update_ts << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+
+  auto *error = response->mutable_error();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  // for every mutation, check and do lock, if any one of the mutation is failed, the whole lock is failed
+  // 1. check if a lock is exists:
+  for (const auto &mutation : mutations) {
+    if (mutation.op() != pb::store::Op::Lock) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+                       << ", invalid mutation op, op: " << mutation.op();
+      error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+      error->set_errmsg("invalid mutation op");
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid mutation op");
     }
 
-    std::vector<pb::common::KeyValue> kv_puts_lock;
-    auto *response = dynamic_cast<pb::store::TxnPessimisticLockResponse *>(ctx->Response());
-    if (response == nullptr) {
+    // 1.check if the key is locked
+    //   if the key is locked, return LockInfo
+    pb::store::LockInfo lock_info;
+    auto ret = txn_reader.GetLockInfo(mutation.key(), lock_info);
+    if (!ret.ok()) {
+      // Now we need to fatal exit to prevent data inconsistency between raft peers
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", for_update_ts: " << for_update_ts << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+                       << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
+                       << ", status: " << ret.error_str();
+
+      error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      error->set_errmsg(ret.error_str());
+
+      // need response to client
+      return ret;
     }
 
-    auto *error = response->mutable_error();
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
-
-    // for every mutation, check and do lock, if any one of the mutation is failed, the whole lock is failed
-    // 1. check if a lock is exists:
-    for (const auto &mutation : mutations) {
-      if (mutation.op() != pb::store::Op::Lock) {
+    if (!lock_info.primary_lock().empty()) {
+      if (lock_info.for_update_ts() == 0) {
+        // this is a optimistic lock, return lock_info
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-                         << ", invalid mutation op, op: " << mutation.op();
-        error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-        error->set_errmsg("invalid mutation op");
-        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid mutation op");
-      }
-
-      // 1.check if the key is locked
-      //   if the key is locked, return LockInfo
-      pb::store::LockInfo lock_info;
-      auto ret = txn_reader.GetLockInfo(mutation.key(), lock_info);
-      if (!ret.ok()) {
-        // Now we need to fatal exit to prevent data inconsistency between raft peers
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
-                         << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
-                         << ", status: " << ret.error_str();
-
-        error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-        error->set_errmsg(ret.error_str());
-
-        // need response to client
-        return ret;
-      }
-
-      if (!lock_info.primary_lock().empty()) {
-        if (lock_info.for_update_ts() == 0) {
-          // this is a optimistic lock, return lock_info
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-                           << ", key: " << Helper::StringToHex(mutation.key())
-                           << " is locked by optimistic lock, lock_info: " << lock_info.ShortDebugString();
-          // return lock_info
-          *response->add_txn_result()->mutable_locked() = lock_info;
-          continue;
-        } else if (lock_info.lock_ts() == start_ts) {
-          if (lock_info.for_update_ts() == for_update_ts) {
-            // this is same pessimistic lock request, just do nothing.
-            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-                << ", key: " << Helper::StringToHex(mutation.key())
-                << " is locked by self, lock_info: " << lock_info.ShortDebugString();
-
-            if (return_values) {
-              pb::store::WriteInfo write_info;
-              auto ret2 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
-              if (!ret2.ok()) {
-                // Now we need to fatal exit to prevent data inconsistency between raft peers
-                DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
-                                                start_ts)
-                                 << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
-                                 << ", status: " << ret2.error_str();
-
-                error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-                error->set_errmsg(ret2.error_str());
-
-                // need response to client
-                return ret2;
-              }
-            }
-
-            continue;
-          } else if (lock_info.for_update_ts() < for_update_ts) {
-            // this is a same pessimistic lock with a new for_update_ts, we need to update the lock
-            pb::common::KeyValue kv;
-            kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-
-            lock_info.set_primary_lock(primary_lock);
-            lock_info.set_lock_ts(start_ts);
-            lock_info.set_for_update_ts(for_update_ts);
-            lock_info.set_key(mutation.key());
-            lock_info.set_lock_ttl(lock_ttl);
-            lock_info.set_lock_type(pb::store::Op::Lock);
-            lock_info.set_extra_data(mutation.value());
-            kv.set_value(lock_info.SerializeAsString());
-            kv_puts_lock.push_back(kv);
-
-            if (return_values) {
-              pb::store::WriteInfo write_info;
-              auto ret3 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
-              if (!ret3.ok()) {
-                // Now we need to fatal exit to prevent data inconsistency between raft peers
-                DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
-                                                start_ts)
-                                 << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
-                                 << ", status: " << ret3.error_str();
-
-                error->set_errcode(static_cast<pb::error::Errno>(ret3.error_code()));
-                error->set_errmsg(ret3.error_str());
-
-                // need response to client
-                return ret3;
-              }
-            }
-          } else {
-            // lock_info.for_update_ts() > for_update_ts, this is a illegal request, we return lock_info
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-                             << ", key: " << Helper::StringToHex(mutation.key())
-                             << " is locked by pessimistic with larger for_update_ts, lock_info: "
-                             << lock_info.ShortDebugString();
-
-            // return lock_info
-            *response->add_txn_result()->mutable_locked() = lock_info;
-            continue;
-          }
-        } else {
-          // this is a lock conflict, return lock_info
+                         << ", key: " << Helper::StringToHex(mutation.key())
+                         << " is locked by optimistic lock, lock_info: " << lock_info.ShortDebugString();
+        // return lock_info
+        *response->add_txn_result()->mutable_locked() = lock_info;
+        continue;
+      } else if (lock_info.lock_ts() == start_ts) {
+        if (lock_info.for_update_ts() == for_update_ts) {
+          // this is same pessimistic lock request, just do nothing.
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
               << ", key: " << Helper::StringToHex(mutation.key())
-              << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+              << " is locked by self, lock_info: " << lock_info.ShortDebugString();
 
-          // add txn_result for response
-          // setup lock_info
-          *response->add_txn_result()->mutable_locked() = lock_info;
+          if (return_values) {
+            pb::store::WriteInfo write_info;
+            auto ret2 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
+            if (!ret2.ok()) {
+              // Now we need to fatal exit to prevent data inconsistency between raft peers
+              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
+                                              start_ts)
+                               << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
+                               << ", status: " << ret2.error_str();
 
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-              << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
-              << ", lock_info: " << lock_info.ShortDebugString();
+              error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+              error->set_errmsg(ret2.error_str());
 
-          // need response to client
-          continue;
-        }
-      } else {
-        // there is not lock exists, we need to check if for_update_ts will confict with commit_ts
-        pb::store::WriteInfo write_info;
-        int64_t commit_ts = 0;
-        int64_t min_commit_ts = start_ts;
-        if (return_values) {
-          min_commit_ts = 0;
-        }
-        auto ret4 = txn_reader.GetWriteInfo(min_commit_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true,
-                                            write_info, commit_ts);
-        if (!ret4.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-                           << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
-                           << ", min_commit_ts: " << min_commit_ts << ", status: " << ret4.error_str();
-          error->set_errcode(static_cast<pb::error::Errno>(ret4.error_code()));
-          error->set_errmsg(ret4.error_str());
-          return ret4;
-        }
-        if (commit_ts >= for_update_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "find this transaction is committed,return  WriteConflict with for_update_ts: " << for_update_ts
-              << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts
-              << ", write_info: " << write_info.ShortDebugString();
-
-          // pessimistic lock meet write_conflict here
-          // add txn_result for response
-          // setup write_conflict ( this may not be necessary, when lock_info is set)
-          auto *txn_result = response->add_txn_result();
-          auto *write_conflict = txn_result->mutable_write_conflict();
-          write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_PessimisticRetry);
-          write_conflict->set_start_ts(start_ts);
-          write_conflict->set_conflict_ts(commit_ts);
-          write_conflict->set_key(mutation.key());
-          write_conflict->set_primary_key(lock_info.primary_lock());
-
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-              << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
-              << ", write_info: " << write_info.ShortDebugString();
+              // need response to client
+              return ret2;
+            }
+          }
 
           continue;
-        } else {
-          // there is no lock and no write_confict, we can do lock
+        } else if (lock_info.for_update_ts() < for_update_ts) {
+          // this is a same pessimistic lock with a new for_update_ts, we need to update the lock
           pb::common::KeyValue kv;
           kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
-          pb::store::LockInfo lock_info;
           lock_info.set_primary_lock(primary_lock);
           lock_info.set_lock_ts(start_ts);
           lock_info.set_for_update_ts(for_update_ts);
@@ -1873,323 +1822,534 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
           lock_info.set_lock_type(pb::store::Op::Lock);
           lock_info.set_extra_data(mutation.value());
           kv.set_value(lock_info.SerializeAsString());
-
           kv_puts_lock.push_back(kv);
+
           if (return_values) {
-            auto ret5 = txn_reader.GetOldValue(mutation.key(), start_ts, true, write_info, kvs);
-            if (!ret5.ok()) {
+            pb::store::WriteInfo write_info;
+            auto ret3 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
+            if (!ret3.ok()) {
               // Now we need to fatal exit to prevent data inconsistency between raft peers
               DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
                                               start_ts)
                                << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
-                               << ", status: " << ret5.error_str();
+                               << ", status: " << ret3.error_str();
 
-              error->set_errcode(static_cast<pb::error::Errno>(ret5.error_code()));
-              error->set_errmsg(ret5.error_str());
+              error->set_errcode(static_cast<pb::error::Errno>(ret3.error_code()));
+              error->set_errmsg(ret3.error_str());
 
               // need response to client
-              return ret5;
+              return ret3;
             }
           }
-        }
-      }
-    }
-
-    if (response->txn_result_size() > 0) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] PessimisticLock return txn_result,", ctx->RegionId())
-          << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
-      return butil::Status::OK();
-    }
-
-    if (kv_puts_lock.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] PessimisticLock return empty kv_puts_lock,", ctx->RegionId())
-          << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
-      return butil::Status::OK();
-    }
-
-    // after all mutations is processed, write into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-    auto *lock_puts = cf_put_delete->add_puts_with_cf();
-    lock_puts->set_cf_name(Constant::kTxnLockCF);
-    for (auto &kv_put : kv_puts_lock) {
-      auto *kv = lock_puts->add_kvs();
-      kv->set_key(kv_put.key());
-      kv->set_value(kv_put.value());
-
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-          << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
-          << ", value: " << Helper::StringToHex(kv_put.value());
-    }
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
-                       << ", write raft engine failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
-  }
-
-  bvar::LatencyRecorder g_txn_do_update_lock_latency("dingo_txn_do_update_lock");
-
-  butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-                                              const pb::store::LockInfo &lock_info) {
-    BvarLatencyGuard bvar_guard(&g_txn_do_update_lock_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] UpdateLock, start_ts: {}", ctx->RegionId(), lock_info.lock_ts())
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-        << ", lock_info: " << lock_info.ShortDebugString();
-
-    auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn][region({})] UpdateLock", region->Id())
-                                                            << ", region is not found, region_id: " << ctx->RegionId();
-
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
-
-    std::vector<pb::common::KeyValue> kv_puts_lock;
-
-    // update lock_info
-    pb::common::KeyValue kv;
-    kv.set_key(mvcc::Codec::EncodeKey(lock_info.key(), Constant::kLockVer));
-    kv.set_value(lock_info.SerializeAsString());
-
-    kv_puts_lock.push_back(kv);
-
-    if (kv_puts_lock.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] UpdateLock return empty kv_puts_lock,", region->Id())
-          << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << lock_info.lock_ts()
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-          << ", lock_info: " << lock_info.ShortDebugString();
-
-      return butil::Status::OK();
-    }
-
-    // write lock_info into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-    auto *lock_puts = cf_put_delete->add_puts_with_cf();
-    lock_puts->set_cf_name(Constant::kTxnLockCF);
-    for (auto &kv_put : kv_puts_lock) {
-      auto *kv = lock_puts->add_kvs();
-      kv->set_key(kv_put.key());
-      kv->set_value(kv_put.value());
-
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] UpdateLock,", region->Id())
-          << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
-          << ", value: " << Helper::StringToHex(kv_put.value());
-    }
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
-                       << ", write raft engine failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
-  }
-
-  bvar::LatencyRecorder g_txn_pessimistic_rollback_latency("dingo_txn_pessimistic_rollback");
-
-  butil::Status TxnEngineHelper::PessimisticRollback(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      store::RegionPtr region, int64_t start_ts, int64_t for_update_ts, const std::vector<std::string> &keys) {
-    BvarLatencyGuard bvar_guard(&g_txn_pessimistic_rollback_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
-        << ", keys_size: " << keys.size();
-
-    if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_pessimistic_count)) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                       << ", for_update_ts: " << for_update_ts << ", keys_size: " << keys.size()
-                       << ", keys.size() > FLAGS_max_pessimistic_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "pessimistic rollback keys.size() > FLAGS_max_pessimistic_count");
-    }
-
-    std::vector<std::string> kv_dels_lock;
-
-    auto *response = dynamic_cast<pb::store::TxnPessimisticRollbackResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
-                       << ", for_update_ts: " << for_update_ts << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-
-    auto *error = response->mutable_error();
-
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", region->Id(), start_ts)
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
-
-    // for every key, check and do rollback lock, if any one of the rollback is failed, the whole lock is failed
-    // 1. check if a lock is exists:
-    //    if a lock exists: a)  if start_ts
-    for (const auto &key : keys) {
-      // 1.check if the key is locked
-      //   if the key is locked, return LockInfo
-      pb::store::LockInfo lock_info;
-      auto ret = txn_reader.GetLockInfo(key, lock_info);
-      if (!ret.ok()) {
-        // Now we need to fatal exit to prevent data inconsistency between raft peers
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", region->Id(), start_ts)
-                         << ", get lock info failed, key: " << Helper::StringToHex(key)
-                         << ", status: " << ret.error_str();
-
-        error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-        error->set_errmsg(ret.error_str());
-
-        // need response to client
-        return ret;
-      }
-
-      if (!lock_info.primary_lock().empty()) {
-        if (lock_info.lock_type() != pb::store::Op::Lock) {
-          // this is a optimistic lock or pessimistic lock in prewrite stage, return lock_info
-          DINGO_LOG(WARNING) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                             << ", key: " << Helper::StringToHex(key)
-                             << " is locked by optimistic lock or pessimistic lock in prewrite stage, lock_info: "
-                             << lock_info.ShortDebugString();
-          // return lock_info
-          *response->add_txn_result()->mutable_locked() = lock_info;
-          continue;
-        } else if (lock_info.lock_ts() == start_ts) {
-          if (lock_info.for_update_ts() <= for_update_ts) {
-            // this is same pessimistic lock request, just do rollback.
-            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                << ", key: " << Helper::StringToHex(key)
-                << " is locked by self, can do rollback, lock_info: " << lock_info.ShortDebugString();
-            kv_dels_lock.push_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
-            continue;
-          } else {
-            // this is a same pessimistic lock with a not equal for_update_ts, there may be some error
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                             << ", key: " << Helper::StringToHex(key)
-                             << " is locked by pessimistic with not equal for_update_ts, lock_info: "
-                             << lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts;
-            // return lock_info
-            *response->add_txn_result()->mutable_locked() = lock_info;
-            continue;
-          }
         } else {
-          // this is a lock conflict, return lock_info
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-              << ", key: " << Helper::StringToHex(key)
-              << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+          // lock_info.for_update_ts() > for_update_ts, this is a illegal request, we return lock_info
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+                           << ", key: " << Helper::StringToHex(mutation.key())
+                           << " is locked by pessimistic with larger for_update_ts, lock_info: "
+                           << lock_info.ShortDebugString();
 
-          // add txn_result for response
-          // setup lock_info
+          // return lock_info
           *response->add_txn_result()->mutable_locked() = lock_info;
           continue;
         }
       } else {
-        // there is not lock exists, rollback need to do nothing, just return ok.
+        // this is a lock conflict, return lock_info
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+            << ", key: " << Helper::StringToHex(mutation.key())
+            << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+
+        // add txn_result for response
+        // setup lock_info
+        *response->add_txn_result()->mutable_locked() = lock_info;
+
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+            << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+            << ", lock_info: " << lock_info.ShortDebugString();
+
+        // need response to client
+        continue;
+      }
+    } else {
+      // there is not lock exists, we need to check if for_update_ts will confict with commit_ts
+      pb::store::WriteInfo write_info;
+      int64_t commit_ts = 0;
+      int64_t min_commit_ts = start_ts;
+      if (return_values) {
+        min_commit_ts = 0;
+      }
+      auto ret4 = txn_reader.GetWriteInfo(min_commit_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true,
+                                          write_info, commit_ts);
+      if (!ret4.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+                         << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
+                         << ", min_commit_ts: " << min_commit_ts << ", status: " << ret4.error_str();
+        error->set_errcode(static_cast<pb::error::Errno>(ret4.error_code()));
+        error->set_errmsg(ret4.error_str());
+        return ret4;
+      }
+      if (commit_ts >= for_update_ts) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "find this transaction is committed,return  WriteConflict with for_update_ts: " << for_update_ts
+            << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts
+            << ", write_info: " << write_info.ShortDebugString();
+
+        // pessimistic lock meet write_conflict here
+        // add txn_result for response
+        // setup write_conflict ( this may not be necessary, when lock_info is set)
+        auto *txn_result = response->add_txn_result();
+        auto *write_conflict = txn_result->mutable_write_conflict();
+        write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_PessimisticRetry);
+        write_conflict->set_start_ts(start_ts);
+        write_conflict->set_conflict_ts(commit_ts);
+        write_conflict->set_key(mutation.key());
+        write_conflict->set_primary_key(lock_info.primary_lock());
+
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+            << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
+            << ", write_info: " << write_info.ShortDebugString();
+
+        continue;
+      } else {
+        // there is no lock and no write_confict, we can do lock
+        pb::common::KeyValue kv;
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+
+        pb::store::LockInfo lock_info;
+        lock_info.set_primary_lock(primary_lock);
+        lock_info.set_lock_ts(start_ts);
+        lock_info.set_for_update_ts(for_update_ts);
+        lock_info.set_key(mutation.key());
+        lock_info.set_lock_ttl(lock_ttl);
+        lock_info.set_lock_type(pb::store::Op::Lock);
+        lock_info.set_extra_data(mutation.value());
+        kv.set_value(lock_info.SerializeAsString());
+
+        kv_puts_lock.push_back(kv);
+        if (return_values) {
+          auto ret5 = txn_reader.GetOldValue(mutation.key(), start_ts, true, write_info, kvs);
+          if (!ret5.ok()) {
+            // Now we need to fatal exit to prevent data inconsistency between raft peers
+            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
+                                            start_ts)
+                             << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
+                             << ", status: " << ret5.error_str();
+
+            error->set_errcode(static_cast<pb::error::Errno>(ret5.error_code()));
+            error->set_errmsg(ret5.error_str());
+
+            // need response to client
+            return ret5;
+          }
+        }
+      }
+    }
+  }
+
+  if (response->txn_result_size() > 0) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticLock return txn_result,", ctx->RegionId())
+        << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
+
+  if (kv_puts_lock.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticLock return empty kv_puts_lock,", ctx->RegionId())
+        << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
+
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  auto *lock_puts = cf_put_delete->add_puts_with_cf();
+  lock_puts->set_cf_name(Constant::kTxnLockCF);
+  for (auto &kv_put : kv_puts_lock) {
+    auto *kv = lock_puts->add_kvs();
+    kv->set_key(kv_put.key());
+    kv->set_value(kv_put.value());
+
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+        << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
+        << ", value: " << Helper::StringToHex(kv_put.value());
+  }
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+bvar::LatencyRecorder g_txn_do_update_lock_latency("dingo_txn_do_update_lock");
+
+butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                            const pb::store::LockInfo &lock_info) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_update_lock_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] UpdateLock, start_ts: {}", ctx->RegionId(), lock_info.lock_ts())
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_info: " << lock_info.ShortDebugString();
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn][region({})] UpdateLock", region->Id())
+                                                          << ", region is not found, region_id: " << ctx->RegionId();
+
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_lock;
+
+  // update lock_info
+  pb::common::KeyValue kv;
+  kv.set_key(mvcc::Codec::EncodeKey(lock_info.key(), Constant::kLockVer));
+  kv.set_value(lock_info.SerializeAsString());
+
+  kv_puts_lock.push_back(kv);
+
+  if (kv_puts_lock.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] UpdateLock return empty kv_puts_lock,", region->Id())
+        << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << lock_info.lock_ts()
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+        << ", lock_info: " << lock_info.ShortDebugString();
+
+    return butil::Status::OK();
+  }
+
+  // write lock_info into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  auto *lock_puts = cf_put_delete->add_puts_with_cf();
+  lock_puts->set_cf_name(Constant::kTxnLockCF);
+  for (auto &kv_put : kv_puts_lock) {
+    auto *kv = lock_puts->add_kvs();
+    kv->set_key(kv_put.key());
+    kv->set_value(kv_put.value());
+
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
+                                                          << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
+                                                          << ", value: " << Helper::StringToHex(kv_put.value());
+  }
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+bvar::LatencyRecorder g_txn_pessimistic_rollback_latency("dingo_txn_pessimistic_rollback");
+
+butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                   std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                   int64_t start_ts, int64_t for_update_ts,
+                                                   const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_pessimistic_rollback_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
+      << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_pessimistic_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                     << ", for_update_ts: " << for_update_ts << ", keys_size: " << keys.size()
+                     << ", keys.size() > FLAGS_max_pessimistic_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "pessimistic rollback keys.size() > FLAGS_max_pessimistic_count");
+  }
+
+  std::vector<std::string> kv_dels_lock;
+
+  auto *response = dynamic_cast<pb::store::TxnPessimisticRollbackResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+                     << ", for_update_ts: " << for_update_ts << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+
+  auto *error = response->mutable_error();
+
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", region->Id(), start_ts)
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  // for every key, check and do rollback lock, if any one of the rollback is failed, the whole lock is failed
+  // 1. check if a lock is exists:
+  //    if a lock exists: a)  if start_ts
+  for (const auto &key : keys) {
+    // 1.check if the key is locked
+    //   if the key is locked, return LockInfo
+    pb::store::LockInfo lock_info;
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
+    if (!ret.ok()) {
+      // Now we need to fatal exit to prevent data inconsistency between raft peers
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", region->Id(), start_ts)
+                       << ", get lock info failed, key: " << Helper::StringToHex(key)
+                       << ", status: " << ret.error_str();
+
+      error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      error->set_errmsg(ret.error_str());
+
+      // need response to client
+      return ret;
+    }
+
+    if (!lock_info.primary_lock().empty()) {
+      if (lock_info.lock_type() != pb::store::Op::Lock) {
+        // this is a optimistic lock or pessimistic lock in prewrite stage, return lock_info
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+                           << ", key: " << Helper::StringToHex(key)
+                           << " is locked by optimistic lock or pessimistic lock in prewrite stage, lock_info: "
+                           << lock_info.ShortDebugString();
+        // return lock_info
+        *response->add_txn_result()->mutable_locked() = lock_info;
+        continue;
+      } else if (lock_info.lock_ts() == start_ts) {
+        if (lock_info.for_update_ts() <= for_update_ts) {
+          // this is same pessimistic lock request, just do rollback.
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+              << ", key: " << Helper::StringToHex(key)
+              << " is locked by self, can do rollback, lock_info: " << lock_info.ShortDebugString();
+          kv_dels_lock.push_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
+          continue;
+        } else {
+          // this is a same pessimistic lock with a not equal for_update_ts, there may be some error
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+                           << ", key: " << Helper::StringToHex(key)
+                           << " is locked by pessimistic with not equal for_update_ts, lock_info: "
+                           << lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts;
+          // return lock_info
+          *response->add_txn_result()->mutable_locked() = lock_info;
+          continue;
+        }
+      } else {
+        // this is a lock conflict, return lock_info
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
             << ", key: " << Helper::StringToHex(key)
-            << " is not locked, can do rollback, lock_info: " << lock_info.ShortDebugString();
+            << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+
+        // add txn_result for response
+        // setup lock_info
+        *response->add_txn_result()->mutable_locked() = lock_info;
         continue;
       }
-    }
-
-    if (response->txn_result_size() > 0) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] PessimisticRollback return txn_result,", region->Id())
-          << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
-      return butil::Status::OK();
-    }
-
-    if (kv_dels_lock.empty()) {
+    } else {
+      // there is not lock exists, rollback need to do nothing, just return ok.
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
           << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-          << ", kv_dels_lock is empty, start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
-      return butil::Status::OK();
+          << ", key: " << Helper::StringToHex(key)
+          << " is not locked, can do rollback, lock_info: " << lock_info.ShortDebugString();
+      continue;
     }
-
-    // after all mutations is processed, write into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-    auto *lock_dels = cf_put_delete->add_deletes_with_cf();
-    lock_dels->set_cf_name(Constant::kTxnLockCF);
-    for (auto &kv_del : kv_dels_lock) {
-      lock_dels->add_keys(kv_del);
-    }
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                       << ", write raft engine failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
   }
 
-  bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
-
-  int64_t TxnEngineHelper::GenFinalMinCommitTs(store::RegionPtr region, pb::store::LockInfo & lock_info,
-                                               std::string key, int64_t start_ts, int64_t for_update_ts,
-                                               int64_t max_commit_ts) {
-    int64_t region_id = region->Id();
-    auto new_entry = std::make_shared<ConcurrencyManager::LockEntry>();
-    RWLockWriteGuard guard(&new_entry->rw_lock);
-    new_entry->lock_info = lock_info;
-    region->LockKey(key, new_entry);
-
-    int64_t region_max_ts = region->TxnAccessMaxTs();
-    int64_t min_commit_ts = std::max({region_max_ts, start_ts, for_update_ts}) + 1;
-    int64_t final_min_commit_ts = std::max(min_commit_ts, lock_info.min_commit_ts());
-    final_min_commit_ts = (max_commit_ts != 0 && min_commit_ts > max_commit_ts) ? 0 : final_min_commit_ts;
-
-    if (final_min_commit_ts > 0) {
-      lock_info.set_min_commit_ts(final_min_commit_ts);
-      new_entry->lock_info.set_min_commit_ts(final_min_commit_ts);
-    }
-
+  if (response->txn_result_size() > 0) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})]", region_id) << " GenFinalMinCommitTs, region_max_ts:" << region_max_ts
-        << " , start_ts:" << start_ts << " , for_update_ts:" << for_update_ts
-        << ", lock_min_commit_ts:" << lock_info.min_commit_ts() << ", final_min_commit_ts:" << final_min_commit_ts;
-
-    return final_min_commit_ts;
+        << fmt::format("[txn][region({})] PessimisticRollback return txn_result,", region->Id())
+        << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+    return butil::Status::OK();
   }
 
-  butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
-      store::RegionPtr region, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
-      const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
-      int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t min_commit_ts,
-      int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc, bool &use_async_commit,
-      const std::vector<std::string> &secondaries, std::vector<pb::common::KeyValue> &kv_puts_data,
-      std::vector<pb::common::KeyValue> &kv_puts_lock,
-      std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
-      int64_t &final_min_commit_ts) {
-    int64_t region_id = region->Id();
+  if (kv_dels_lock.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+        << ", kv_dels_lock is empty, start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+    return butil::Status::OK();
+  }
 
-    // do Put/Delete/PutIfAbsent
-    if (mutation.op() == pb::store::Op::Put) {
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  auto *lock_dels = cf_put_delete->add_deletes_with_cf();
+  lock_dels->set_cf_name(Constant::kTxnLockCF);
+  for (auto &kv_del : kv_dels_lock) {
+    lock_dels->add_keys(kv_del);
+  }
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
+
+int64_t TxnEngineHelper::GenFinalMinCommitTs(store::RegionPtr region, pb::store::LockInfo &lock_info, std::string key,
+                                             int64_t start_ts, int64_t for_update_ts, int64_t max_commit_ts) {
+  int64_t region_id = region->Id();
+  auto new_entry = std::make_shared<ConcurrencyManager::LockEntry>();
+  RWLockWriteGuard guard(&new_entry->rw_lock);
+  new_entry->lock_info = lock_info;
+  region->LockKey(key, new_entry);
+
+  int64_t region_max_ts = region->TxnAccessMaxTs();
+  int64_t min_commit_ts = std::max({region_max_ts, start_ts, for_update_ts}) + 1;
+  int64_t final_min_commit_ts = std::max(min_commit_ts, lock_info.min_commit_ts());
+  final_min_commit_ts = (max_commit_ts != 0 && min_commit_ts > max_commit_ts) ? 0 : final_min_commit_ts;
+
+  if (final_min_commit_ts > 0) {
+    lock_info.set_min_commit_ts(final_min_commit_ts);
+    new_entry->lock_info.set_min_commit_ts(final_min_commit_ts);
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})]", region_id) << " GenFinalMinCommitTs, region_max_ts:" << region_max_ts
+      << " , start_ts:" << start_ts << " , for_update_ts:" << for_update_ts
+      << ", lock_min_commit_ts:" << lock_info.min_commit_ts() << ", final_min_commit_ts:" << final_min_commit_ts;
+
+  return final_min_commit_ts;
+}
+
+butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
+    store::RegionPtr region, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
+    const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
+    int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t min_commit_ts,
+    int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc, bool &use_async_commit,
+    const std::vector<std::string> &secondaries, std::vector<pb::common::KeyValue> &kv_puts_data,
+    std::vector<pb::common::KeyValue> &kv_puts_lock,
+    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
+    int64_t &final_min_commit_ts) {
+  int64_t region_id = region->Id();
+
+  // do Put/Delete/PutIfAbsent
+  if (mutation.op() == pb::store::Op::Put) {
+    // put data
+    if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
+      pb::common::KeyValue kv;
+      std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
+      kv.set_key(data_key);
+      kv.set_value(mutation.value());
+
+      kv_puts_data.push_back(kv);
+    }
+
+    // put lock
+    {
+      pb::store::LockInfo lock_info = prev_lock_info;
+      lock_info.set_primary_lock(primary_lock);
+      lock_info.set_lock_ts(start_ts);
+      lock_info.set_key(mutation.key());
+      lock_info.set_lock_ttl(lock_ttl);
+      lock_info.set_txn_size(txn_size);
+      if (lock_info.min_commit_ts() < min_commit_ts) {
+        lock_info.set_min_commit_ts(min_commit_ts);
+      }
+      lock_info.set_lock_type(pb::store::Op::Put);
+      if (BAIDU_UNLIKELY(mutation.value().empty())) {
+        return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
+      }
+      if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
+        lock_info.set_short_value(mutation.value());
+      }
+      if (!lock_extra_data.empty()) {
+        lock_info.set_extra_data(lock_extra_data);
+      }
+      if (use_async_commit) {
+        lock_info.set_use_async_commit(true);
+        if (mutation.key() == primary_lock) {
+          *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
+        }
+      }
+      if (try_one_pc || use_async_commit) {
+        final_min_commit_ts =
+            GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
+        if (final_min_commit_ts == 0) {
+          // fallback_to_2PC
+          try_one_pc = false;
+          use_async_commit = false;
+          lock_info.set_use_async_commit(false);
+          lock_info.clear_secondaries();
+        }
+      }
+
+      if (try_one_pc) {
+        locks_for_1pc.push_back(
+            std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+      } else {
+        pb::common::KeyValue kv;
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+        kv.set_value(lock_info.SerializeAsString());
+        kv_puts_lock.push_back(kv);
+      }
+    }
+  } else if (mutation.op() == pb::store::PutIfAbsent) {
+    if (write_info.op() == pb::store::Op::Put) {
+      // this mutation is success with key_exist, go to next mutation
+      // put lock with op=PutIfAbsent
+      // CAUTION: we do nothing in commit if lock.lock_type is PutIfAbsent, this is just a placeholder of a lock
+      // with nothing to do
+      {
+        pb::store::LockInfo lock_info = prev_lock_info;
+        lock_info.set_primary_lock(primary_lock);
+        lock_info.set_lock_ts(start_ts);
+        lock_info.set_key(mutation.key());
+        lock_info.set_lock_ttl(lock_ttl);
+        lock_info.set_txn_size(txn_size);
+        if (lock_info.min_commit_ts() < min_commit_ts) {
+          lock_info.set_min_commit_ts(min_commit_ts);
+        }
+        lock_info.set_lock_type(pb::store::Op::PutIfAbsent);
+        if (!lock_extra_data.empty()) {
+          lock_info.set_extra_data(lock_extra_data);
+        }
+        if (use_async_commit) {
+          lock_info.set_use_async_commit(true);
+          if (mutation.key() == primary_lock) {
+            *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
+          }
+        }
+
+        if (try_one_pc || use_async_commit) {
+          final_min_commit_ts =
+              GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
+          if (final_min_commit_ts == 0) {
+            // fallback_to_2PC
+            try_one_pc = false;
+            use_async_commit = false;
+            lock_info.set_use_async_commit(false);
+            lock_info.clear_secondaries();
+          }
+        }
+
+        if (try_one_pc) {
+          locks_for_1pc.push_back(
+              std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+        } else {
+          pb::common::KeyValue kv;
+          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+          kv.set_value(lock_info.SerializeAsString());
+          kv_puts_lock.push_back(kv);
+        }
+      }
+    } else {
       // put data
       if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
         pb::common::KeyValue kv;
@@ -2227,6 +2387,7 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
             *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
           }
         }
+
         if (try_one_pc || use_async_commit) {
           final_min_commit_ts =
               GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
@@ -2238,7 +2399,6 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
             lock_info.clear_secondaries();
           }
         }
-
         if (try_one_pc) {
           locks_for_1pc.push_back(
               std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
@@ -2249,560 +2409,503 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
           kv_puts_lock.push_back(kv);
         }
       }
-    } else if (mutation.op() == pb::store::PutIfAbsent) {
-      if (write_info.op() == pb::store::Op::Put) {
-        // this mutation is success with key_exist, go to next mutation
-        // put lock with op=PutIfAbsent
-        // CAUTION: we do nothing in commit if lock.lock_type is PutIfAbsent, this is just a placeholder of a lock
-        // with nothing to do
-        {
-          pb::store::LockInfo lock_info = prev_lock_info;
-          lock_info.set_primary_lock(primary_lock);
-          lock_info.set_lock_ts(start_ts);
-          lock_info.set_key(mutation.key());
-          lock_info.set_lock_ttl(lock_ttl);
-          lock_info.set_txn_size(txn_size);
-          if (lock_info.min_commit_ts() < min_commit_ts) {
-            lock_info.set_min_commit_ts(min_commit_ts);
-          }
-          lock_info.set_lock_type(pb::store::Op::PutIfAbsent);
-          if (!lock_extra_data.empty()) {
-            lock_info.set_extra_data(lock_extra_data);
-          }
-          if (use_async_commit) {
-            lock_info.set_use_async_commit(true);
-            if (mutation.key() == primary_lock) {
-              *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
-            }
-          }
+    }
+  } else if (mutation.op() == pb::store::CheckNotExists) {
+    // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key is
+    // exist. So it is more likely to be a get op in prewrite.
+    // do nothing;
+    if (try_one_pc || use_async_commit) {
+      final_min_commit_ts = start_ts + 1;
+    }
+  } else if (mutation.op() == pb::store::Op::Delete) {
+    // put data
+    // for delete, we don't write anything to kTxnDataCf.
+    // when doing commit, we read op from lock_info, and write op to kTxnWriteCf with write_info.
 
-          if (try_one_pc || use_async_commit) {
-            final_min_commit_ts =
-                GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
-            if (final_min_commit_ts == 0) {
-              // fallback_to_2PC
-              try_one_pc = false;
-              use_async_commit = false;
-              lock_info.set_use_async_commit(false);
-              lock_info.clear_secondaries();
-            }
-          }
-
-          if (try_one_pc) {
-            locks_for_1pc.push_back(
-                std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
-          } else {
-            pb::common::KeyValue kv;
-            kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-            kv.set_value(lock_info.SerializeAsString());
-            kv_puts_lock.push_back(kv);
-          }
-        }
-      } else {
-        // put data
-        if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
-          pb::common::KeyValue kv;
-          std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
-          kv.set_key(data_key);
-          kv.set_value(mutation.value());
-
-          kv_puts_data.push_back(kv);
-        }
-
-        // put lock
-        {
-          pb::store::LockInfo lock_info = prev_lock_info;
-          lock_info.set_primary_lock(primary_lock);
-          lock_info.set_lock_ts(start_ts);
-          lock_info.set_key(mutation.key());
-          lock_info.set_lock_ttl(lock_ttl);
-          lock_info.set_txn_size(txn_size);
-          if (lock_info.min_commit_ts() < min_commit_ts) {
-            lock_info.set_min_commit_ts(min_commit_ts);
-          }
-          lock_info.set_lock_type(pb::store::Op::Put);
-          if (BAIDU_UNLIKELY(mutation.value().empty())) {
-            return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
-          }
-          if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
-            lock_info.set_short_value(mutation.value());
-          }
-          if (!lock_extra_data.empty()) {
-            lock_info.set_extra_data(lock_extra_data);
-          }
-          if (use_async_commit) {
-            lock_info.set_use_async_commit(true);
-            if (mutation.key() == primary_lock) {
-              *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
-            }
-          }
-
-          if (try_one_pc || use_async_commit) {
-            final_min_commit_ts =
-                GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
-            if (final_min_commit_ts == 0) {
-              // fallback_to_2PC
-              try_one_pc = false;
-              use_async_commit = false;
-              lock_info.set_use_async_commit(false);
-              lock_info.clear_secondaries();
-            }
-          }
-          if (try_one_pc) {
-            locks_for_1pc.push_back(
-                std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
-          } else {
-            pb::common::KeyValue kv;
-            kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-            kv.set_value(lock_info.SerializeAsString());
-            kv_puts_lock.push_back(kv);
-          }
+    // put lock
+    {
+      pb::store::LockInfo lock_info = prev_lock_info;
+      lock_info.set_primary_lock(primary_lock);
+      lock_info.set_lock_ts(start_ts);
+      lock_info.set_key(mutation.key());
+      lock_info.set_lock_ttl(lock_ttl);
+      lock_info.set_txn_size(txn_size);
+      if (lock_info.min_commit_ts() < min_commit_ts) {
+        lock_info.set_min_commit_ts(min_commit_ts);
+      }
+      lock_info.set_lock_type(pb::store::Op::Delete);
+      if (!lock_extra_data.empty()) {
+        lock_info.set_extra_data(lock_extra_data);
+      }
+      if (use_async_commit) {
+        lock_info.set_use_async_commit(true);
+        if (mutation.key() == primary_lock) {
+          *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
         }
       }
-    } else if (mutation.op() == pb::store::CheckNotExists) {
-      // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key is
-      // exist. So it is more likely to be a get op in prewrite.
-      // do nothing;
+
       if (try_one_pc || use_async_commit) {
-        final_min_commit_ts = start_ts + 1;
-      }
-    } else if (mutation.op() == pb::store::Op::Delete) {
-      // put data
-      // for delete, we don't write anything to kTxnDataCf.
-      // when doing commit, we read op from lock_info, and write op to kTxnWriteCf with write_info.
-
-      // put lock
-      {
-        pb::store::LockInfo lock_info = prev_lock_info;
-        lock_info.set_primary_lock(primary_lock);
-        lock_info.set_lock_ts(start_ts);
-        lock_info.set_key(mutation.key());
-        lock_info.set_lock_ttl(lock_ttl);
-        lock_info.set_txn_size(txn_size);
-        if (lock_info.min_commit_ts() < min_commit_ts) {
-          lock_info.set_min_commit_ts(min_commit_ts);
-        }
-        lock_info.set_lock_type(pb::store::Op::Delete);
-        if (!lock_extra_data.empty()) {
-          lock_info.set_extra_data(lock_extra_data);
-        }
-        if (use_async_commit) {
-          lock_info.set_use_async_commit(true);
-          if (mutation.key() == primary_lock) {
-            *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
-          }
-        }
-
-        if (try_one_pc || use_async_commit) {
-          final_min_commit_ts =
-              GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
-          if (final_min_commit_ts == 0) {
-            // fallback_to_2PC
-            try_one_pc = false;
-            use_async_commit = false;
-            lock_info.set_use_async_commit(false);
-            lock_info.clear_secondaries();
-          }
-        }
-
-        if (try_one_pc) {
-          locks_for_1pc.push_back(
-              std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
-        } else {
-          pb::common::KeyValue kv;
-          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-          kv.set_value(lock_info.SerializeAsString());
-          kv_puts_lock.push_back(kv);
+        final_min_commit_ts =
+            GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
+        if (final_min_commit_ts == 0) {
+          // fallback_to_2PC
+          try_one_pc = false;
+          use_async_commit = false;
+          lock_info.set_use_async_commit(false);
+          lock_info.clear_secondaries();
         }
       }
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite,", region_id)
-                       << ", invalid op, key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
-                       << ", op: " << mutation.op();
-      return butil::Status(pb::error::Errno::EINTERNAL, "invalid op");
+
+      if (try_one_pc) {
+        locks_for_1pc.push_back(
+            std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+      } else {
+        pb::common::KeyValue kv;
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+        kv.set_value(lock_info.SerializeAsString());
+        kv_puts_lock.push_back(kv);
+      }
     }
-    return butil::Status::OK();
+  } else {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite,", region_id)
+                     << ", invalid op, key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
+                     << ", op: " << mutation.op();
+    return butil::Status(pb::error::Errno::EINTERNAL, "invalid op");
   }
+  return butil::Status::OK();
+}
 
-  void TxnEngineHelper::FallbackTo1PCLocks(
-      std::vector<pb::common::KeyValue> & kv_puts_lock,
-      std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> & locks_for_1pc) {
-    for (auto const &[key, data_value, lock_info, is_pessimistic_lock] : locks_for_1pc) {
-      // pessimistic and optimistic lock all need to record
-      pb::common::KeyValue kv;
-      kv.set_key(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
-      kv.set_value(lock_info.SerializeAsString());
-      kv_puts_lock.push_back(kv);
-    }
+void TxnEngineHelper::FallbackTo1PCLocks(
+    std::vector<pb::common::KeyValue> &kv_puts_lock,
+    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc) {
+  for (auto const &[key, data_value, lock_info, is_pessimistic_lock] : locks_for_1pc) {
+    // pessimistic and optimistic lock all need to record
+    pb::common::KeyValue kv;
+    kv.set_key(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
+    kv.set_value(lock_info.SerializeAsString());
+    kv_puts_lock.push_back(kv);
   }
+}
 
-  // Commit and delete all 1pc locks in txn.
-  butil::Status TxnEngineHelper::OnePCommit(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
-      int64_t final_commit_ts,
-      std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> & locks_for_1pc,
-      std::vector<pb::common::KeyValue> & kv_puts_data) {
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-    // for vector index region, commit to vector index
-    auto *vector_add = cf_put_delete->mutable_vector_add();
-    auto *vector_del = cf_put_delete->mutable_vector_del();
+// Commit and delete all 1pc locks in txn.
+butil::Status TxnEngineHelper::OnePCommit(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+    int64_t final_commit_ts,
+    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
+    std::vector<pb::common::KeyValue> &kv_puts_data) {
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  // for vector index region, commit to vector index
+  auto *vector_add = cf_put_delete->mutable_vector_add();
+  auto *vector_del = cf_put_delete->mutable_vector_del();
 
-    // for document index region, commit to document index
-    auto *document_add = cf_put_delete->mutable_document_add();
-    auto *document_del = cf_put_delete->mutable_document_del();
+  // for document index region, commit to document index
+  auto *document_add = cf_put_delete->mutable_document_add();
+  auto *document_del = cf_put_delete->mutable_document_del();
 
-    for (auto const &[key, data_value, lock_info, is_pessimistic_lock] : locks_for_1pc) {
-      if (is_pessimistic_lock) {
-        kv_deletes_lock.push_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
-      }
-      if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
-                           final_commit_ts)
-            << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
-        continue;
-      }
-
-      pb::common::KeyValue kv;
-      std::string write_key = mvcc::Codec::EncodeKey(key, final_commit_ts);
-      kv.set_key(write_key);
-
-      pb::store::WriteInfo write_info;
-      write_info.set_start_ts(start_ts);
-      write_info.set_op(lock_info.lock_type());
-      if (!lock_info.short_value().empty()) {
-        write_info.set_short_value(data_value);
-      }
-      kv.set_value(write_info.SerializeAsString());
-
-      kv_puts_write.push_back(kv);
-
-      if (region->Type() == pb::common::INDEX_REGION &&
-          region->Definition().index_parameter().has_vector_index_parameter()) {
-        if (lock_info.lock_type() == pb::store::Op::Put) {
-          pb::common::VectorWithId vector_with_id;
-          auto ret = vector_with_id.ParseFromString(data_value);
-          if (!ret) {
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                            start_ts, final_commit_ts)
-                             << ", parse vector_with_id failed, key: " << Helper::StringToHex(key)
-                             << ", data_value: " << Helper::StringToHex(data_value)
-                             << ", lock_info: " << lock_info.ShortDebugString();
-            return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
-          }
-
-          *(vector_add->add_vectors()) = vector_with_id;
-        } else if (lock_info.lock_type() == pb::store::Op::Delete) {
-          auto vector_id = VectorCodec::UnPackageVectorId(lock_info.key());
-          if (vector_id == 0) {
-            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                            start_ts, final_commit_ts)
-                             << ", decode vector_id failed, key: " << Helper::StringToHex(lock_info.key())
-                             << ", lock_info: " << lock_info.ShortDebugString();
-          }
-
-          vector_del->add_ids(vector_id);
-        } else {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                          start_ts, final_commit_ts)
-                           << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
-                           << ", lock_info: " << lock_info.ShortDebugString();
-        }
-      }
-
-      if (region->Type() == pb::common::DOCUMENT_REGION &&
-          region->Definition().index_parameter().has_document_index_parameter()) {
-        if (lock_info.lock_type() == pb::store::Op::Put) {
-          pb::common::DocumentWithId document_with_id;
-          auto ret = document_with_id.ParseFromString(data_value);
-          if (!ret) {
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                            start_ts, final_commit_ts)
-                             << ", parse document_with_id failed, key: " << Helper::StringToHex(lock_info.key())
-                             << ", data_value: " << Helper::StringToHex(data_value)
-                             << ", lock_info: " << lock_info.ShortDebugString();
-            return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
-          }
-
-          *(document_add->add_documents()) = document_with_id;
-        } else if (lock_info.lock_type() == pb::store::Op::Delete) {
-          auto document_id = DocumentCodec::UnPackageDocumentId(lock_info.key());
-          if (document_id == 0) {
-            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                            start_ts, final_commit_ts)
-                             << ", decode document_id failed, key: " << Helper::StringToHex(lock_info.key())
-                             << ", lock_info: " << lock_info.ShortDebugString();
-          }
-
-          document_del->add_ids(document_id);
-        } else {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                          start_ts, final_commit_ts)
-                           << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
-                           << ", lock_info: " << lock_info.ShortDebugString();
-        }
-      }
+  for (auto const &[key, data_value, lock_info, is_pessimistic_lock] : locks_for_1pc) {
+    if (is_pessimistic_lock) {
+      kv_deletes_lock.push_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
     }
-    if (kv_puts_data.empty() && kv_puts_write.empty() && kv_deletes_lock.empty()) {
+    if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
           << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
                          final_commit_ts)
-          << ", kv_puts_data is empty and kv_puts_write is empty and kv_deletes_lock is empty";
-      return butil::Status::OK();
+          << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
+      continue;
     }
 
-    if (!kv_puts_data.empty()) {
-      auto *data_puts = cf_put_delete->add_puts_with_cf();
-      data_puts->set_cf_name(Constant::kTxnDataCF);
-      for (auto &kv_put : kv_puts_data) {
-        auto *kv = data_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
+    pb::common::KeyValue kv;
+    std::string write_key = mvcc::Codec::EncodeKey(key, final_commit_ts);
+    kv.set_key(write_key);
+
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(lock_info.lock_type());
+    if (!lock_info.short_value().empty()) {
+      write_info.set_short_value(data_value);
+    }
+    kv.set_value(write_info.SerializeAsString());
+
+    kv_puts_write.push_back(kv);
+
+    if (region->Type() == pb::common::INDEX_REGION &&
+        region->Definition().index_parameter().has_vector_index_parameter()) {
+      if (lock_info.lock_type() == pb::store::Op::Put) {
+        pb::common::VectorWithId vector_with_id;
+        auto ret = vector_with_id.ParseFromString(data_value);
+        if (!ret) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", parse vector_with_id failed, key: " << Helper::StringToHex(key)
+                           << ", data_value: " << Helper::StringToHex(data_value)
+                           << ", lock_info: " << lock_info.ShortDebugString();
+          return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
+        }
+
+        *(vector_add->add_vectors()) = vector_with_id;
+      } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+        auto vector_id = VectorCodec::UnPackageVectorId(lock_info.key());
+        if (vector_id == 0) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", decode vector_id failed, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+
+        vector_del->add_ids(vector_id);
+      } else {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                        start_ts, final_commit_ts)
+                         << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                         << ", lock_info: " << lock_info.ShortDebugString();
       }
     }
 
-    if (!kv_puts_write.empty()) {
-      auto *write_puts = cf_put_delete->add_puts_with_cf();
-      write_puts->set_cf_name(Constant::kTxnWriteCF);
-      for (auto &kv_put : kv_puts_write) {
-        auto *kv = write_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
+    if (region->Type() == pb::common::DOCUMENT_REGION &&
+        region->Definition().index_parameter().has_document_index_parameter()) {
+      if (lock_info.lock_type() == pb::store::Op::Put) {
+        pb::common::DocumentWithId document_with_id;
+        auto ret = document_with_id.ParseFromString(data_value);
+        if (!ret) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", parse document_with_id failed, key: " << Helper::StringToHex(lock_info.key())
+                           << ", data_value: " << Helper::StringToHex(data_value)
+                           << ", lock_info: " << lock_info.ShortDebugString();
+          return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
+        }
+
+        *(document_add->add_documents()) = document_with_id;
+      } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+        auto document_id = DocumentCodec::UnPackageDocumentId(lock_info.key());
+        if (document_id == 0) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", decode document_id failed, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+
+        document_del->add_ids(document_id);
+      } else {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                        start_ts, final_commit_ts)
+                         << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                         << ", lock_info: " << lock_info.ShortDebugString();
       }
     }
-
-    if (!kv_deletes_lock.empty()) {
-      auto *lock_dels = cf_put_delete->add_deletes_with_cf();
-      lock_dels->set_cf_name(Constant::kTxnLockCF);
-      for (auto &kv_del : kv_deletes_lock) {
-        lock_dels->add_keys(kv_del);
-      }
-    }
-
+  }
+  if (kv_puts_data.empty() && kv_puts_write.empty() && kv_deletes_lock.empty()) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] OnePCCommit", region->Id()) << ", kv_puts_data_size: " << kv_puts_data.size()
-        << ", kv_puts_write_size: " << kv_puts_write.size() << ", kv_deletes_lock_size: " << kv_deletes_lock.size()
-        << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
-                       << ", write raft engine failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-    return ret;
+        << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
+                       final_commit_ts)
+        << ", kv_puts_data is empty and kv_puts_write is empty and kv_deletes_lock is empty";
+    return butil::Status::OK();
   }
 
-  butil::Status TxnEngineHelper::DoPreWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-                                            int64_t region_id, int64_t start_ts, int64_t mutation_size,
-                                            std::vector<pb::common::KeyValue> & kv_puts_data,
-                                            std::vector<pb::common::KeyValue> & kv_puts_lock) {
-    if (kv_puts_data.empty() && kv_puts_lock.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Prewrite return empty kv_puts_data and kv_puts_lock,", region_id)
-          << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
-          << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-          << ", mutations_size: " << mutation_size;
-      return butil::Status::OK();
+  if (!kv_puts_data.empty()) {
+    auto *data_puts = cf_put_delete->add_puts_with_cf();
+    data_puts->set_cf_name(Constant::kTxnDataCF);
+    for (auto &kv_put : kv_puts_data) {
+      auto *kv = data_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
     }
-
-    // after all mutations is processed, write into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    if (!kv_puts_data.empty()) {
-      auto *data_puts = cf_put_delete->add_puts_with_cf();
-      data_puts->set_cf_name(Constant::kTxnDataCF);
-      for (auto &kv_put : kv_puts_data) {
-        auto *kv = data_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
-      }
-    }
-
-    if (!kv_puts_lock.empty()) {
-      auto *lock_puts = cf_put_delete->add_puts_with_cf();
-      lock_puts->set_cf_name(Constant::kTxnLockCF);
-      for (auto &kv_put : kv_puts_lock) {
-        auto *kv = lock_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
-      }
-    }
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] Prewrite", region_id) << ", kv_puts_data_size: " << kv_puts_data.size()
-        << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutation_size;
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region_id)
-                       << ", write raft engine failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
   }
 
-  butil::Status TxnEngineHelper::Prewrite(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      store::RegionPtr region, const std::vector<pb::store::Mutation> &mutations, const std::string &primary_lock,
-      int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t min_commit_ts,
-      int64_t max_commit_ts, const std::vector<int64_t> &pessimistic_checks,
-      const std::map<int64_t, int64_t> &for_update_ts_checks, const std::map<int64_t, std::string> &lock_extra_datas,
-      const std::vector<std::string> &secondaries) {
-    BvarLatencyGuard bvar_guard(&g_txn_prewrite_latency);
+  if (!kv_puts_write.empty()) {
+    auto *write_puts = cf_put_delete->add_puts_with_cf();
+    write_puts->set_cf_name(Constant::kTxnWriteCF);
+    for (auto &kv_put : kv_puts_write) {
+      auto *kv = write_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
 
+  if (!kv_deletes_lock.empty()) {
+    auto *lock_dels = cf_put_delete->add_deletes_with_cf();
+    lock_dels->set_cf_name(Constant::kTxnLockCF);
+    for (auto &kv_del : kv_deletes_lock) {
+      lock_dels->add_keys(kv_del);
+    }
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] OnePCCommit", region->Id()) << ", kv_puts_data_size: " << kv_puts_data.size()
+      << ", kv_puts_write_size: " << kv_puts_write.size() << ", kv_deletes_lock_size: " << kv_deletes_lock.size()
+      << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+  return ret;
+}
+
+butil::Status TxnEngineHelper::DoPreWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                          int64_t region_id, int64_t start_ts, int64_t mutation_size,
+                                          std::vector<pb::common::KeyValue> &kv_puts_data,
+                                          std::vector<pb::common::KeyValue> &kv_puts_lock) {
+  if (kv_puts_data.empty() && kv_puts_lock.empty()) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
-        << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
-        << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc << ", min_commit_ts: " << min_commit_ts
-        << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
-        << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
-        << ", lock_extra_datas_size: " << lock_extra_datas.size() << ", secondaries_size: " << secondaries.size();
+        << fmt::format("[txn][region({})] Prewrite return empty kv_puts_data and kv_puts_lock,", region_id)
+        << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
+        << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+        << ", mutations_size: " << mutation_size;
+    return butil::Status::OK();
+  }
 
-    if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_prewrite_count)) {
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  if (!kv_puts_data.empty()) {
+    auto *data_puts = cf_put_delete->add_puts_with_cf();
+    data_puts->set_cf_name(Constant::kTxnDataCF);
+    for (auto &kv_put : kv_puts_data) {
+      auto *kv = data_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  if (!kv_puts_lock.empty()) {
+    auto *lock_puts = cf_put_delete->add_puts_with_cf();
+    lock_puts->set_cf_name(Constant::kTxnLockCF);
+    for (auto &kv_put : kv_puts_lock) {
+      auto *kv = lock_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Prewrite", region_id) << ", kv_puts_data_size: " << kv_puts_data.size()
+      << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutation_size;
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region_id)
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+butil::Status TxnEngineHelper::Prewrite(
+    RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region,
+    const std::vector<pb::store::Mutation> &mutations, const std::string &primary_lock, int64_t start_ts,
+    int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t min_commit_ts, int64_t max_commit_ts,
+    const std::vector<int64_t> &pessimistic_checks, const std::map<int64_t, int64_t> &for_update_ts_checks,
+    const std::map<int64_t, std::string> &lock_extra_datas, const std::vector<std::string> &secondaries) {
+  BvarLatencyGuard bvar_guard(&g_txn_prewrite_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
+      << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+      << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc << ", min_commit_ts: " << min_commit_ts
+      << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
+      << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
+      << ", lock_extra_datas_size: " << lock_extra_datas.size() << ", secondaries_size: " << secondaries.size();
+
+  if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_prewrite_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                     << ", mutations_size: " << mutations.size()
+                     << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+                     << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc
+                     << ", max_commit_ts: " << max_commit_ts
+                     << ", pessimistic_checks_size: " << pessimistic_checks.size()
+                     << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
+                     << ", lock_extra_datas_size: " << lock_extra_datas.size() << ", secondaries_size"
+                     << secondaries.size() << ", mutations.size() > FLAGS_max_prewrite_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "prewrite mutations.size() > FLAGS_max_prewrite_count");
+  }
+
+  if (!pessimistic_checks.empty()) {
+    if (mutations.size() != pessimistic_checks.size()) {
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
                        << ", mutations_size: " << mutations.size()
-                       << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
-                       << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc
-                       << ", max_commit_ts: " << max_commit_ts
                        << ", pessimistic_checks_size: " << pessimistic_checks.size()
-                       << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
-                       << ", lock_extra_datas_size: " << lock_extra_datas.size() << ", secondaries_size"
-                       << secondaries.size() << ", mutations.size() > FLAGS_max_prewrite_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "prewrite mutations.size() > FLAGS_max_prewrite_count");
+                       << ", mutations_size != pessimistic_checks_size";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "mutations_size != pessimistic_checks_size");
+    }
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_data;
+  std::vector<pb::common::KeyValue> kv_puts_lock;
+  std::vector<std::string> kv_dels_lock;  // for PutIfAbsent on pessimistic lock, if key is exists, no put will be
+                                          // done, need to delete the lock in prewrite
+  int64_t final_min_commit_ts = 0;
+  // When 1PC is enabled, locks will be collected here and put into
+  // `writes`, so it can be further processed. The elements are map representing
+  // ((key, value, lock_info, is_pessimistic_lock))
+  std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> locks_for_1pc;
+
+  auto tracker = ctx->Tracker();
+  uint64_t start_time = Helper::TimestampUs();
+
+  struct PhaseTimer {
+    Tracker::ElapsedTime &accum;
+    TxnReader &txn_reader;
+    int64_t start_ts;
+    const std::string &key;
+    const char *phase_name;
+    uint64_t start_us;
+    rocksdb::PerfContext *perf_ctx;
+
+    PhaseTimer(Tracker::ElapsedTime &acc, TxnReader &reader, int64_t ts, const std::string &k, const char *name)
+        : accum(acc), txn_reader(reader), start_ts(ts), key(k), phase_name(name), start_us(Helper::TimestampUs()) {
+      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+      perf_ctx = rocksdb::get_perf_context();
+      perf_ctx->Reset();
     }
 
-    if (!pessimistic_checks.empty()) {
-      if (mutations.size() != pessimistic_checks.size()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
-                         << ", mutations_size: " << mutations.size()
-                         << ", pessimistic_checks_size: " << pessimistic_checks.size()
-                         << ", mutations_size != pessimistic_checks_size";
-        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "mutations_size != pessimistic_checks_size");
+    ~PhaseTimer() {
+      uint64_t elapsed = Helper::TimestampUs() - start_us;
+      accum.elapsed_time_us += elapsed;
+      accum.skip_versions += txn_reader.GetSkippedVersions();
+      accum.rocksdb_perf.block_cache_hit_count += perf_ctx->block_cache_hit_count;
+      accum.rocksdb_perf.block_read_count += perf_ctx->block_read_count;
+      accum.rocksdb_perf.block_read_time_ns += perf_ctx->block_read_time;
+      accum.rocksdb_perf.block_decompress_time_ns += perf_ctx->block_decompress_time;
+      accum.rocksdb_perf.internal_key_skipped_count += perf_ctx->internal_key_skipped_count;
+      accum.rocksdb_perf.internal_delete_skipped_count += perf_ctx->internal_delete_skipped_count;
+      accum.rocksdb_perf.user_key_comparison_count += perf_ctx->user_key_comparison_count;
+      accum.rocksdb_perf.block_read_byte += perf_ctx->block_read_byte;
+      accum.rocksdb_perf.seek_internal_seek_time_ns += perf_ctx->seek_internal_seek_time;
+      accum.rocksdb_perf.find_next_user_entry_time_ns += perf_ctx->find_next_user_entry_time;
+      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+
+      if (elapsed > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn]PreWrite start_ts:{}, key:{}, {}, skip_versions:{} time:{} us", start_ts,
+                           Helper::StringToHex(key), phase_name, txn_reader.GetSkippedVersions(), elapsed);
       }
+      txn_reader.ResetSkippedVersions();
+    }
+  };
+
+  bool use_async_commit = false;
+  if (!secondaries.empty()) {
+    use_async_commit = true;
+  }
+  auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  Tracker::ElapsedTime lock_et{"lock"};
+  Tracker::ElapsedTime write_et{"write"};
+  Tracker::ElapsedTime commit_et{"commit"};
+  // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
+  for (int64_t i = 0; i < mutations.size(); i++) {
+    const auto &mutation = mutations[i];
+
+    // if the mutation request is a repeated (already prewrited beforce, maybe just a retry from executor), will to do
+    // all check and setup response, but do not apply to raft to save time and I/O
+    bool is_repeated_prewrite = false;
+
+    // if need to check pessimistic lock
+    bool need_check_pessimistic_lock = false;
+    if (!pessimistic_checks.empty() && pessimistic_checks[i] == 1) {
+      need_check_pessimistic_lock = true;
     }
 
-    std::vector<pb::common::KeyValue> kv_puts_data;
-    std::vector<pb::common::KeyValue> kv_puts_lock;
-    std::vector<std::string> kv_dels_lock;  // for PutIfAbsent on pessimistic lock, if key is exists, no put will be
-                                            // done, need to delete the lock in prewrite
-    int64_t final_min_commit_ts = 0;
-    // When 1PC is enabled, locks will be collected here and put into
-    // `writes`, so it can be further processed. The elements are map representing
-    // ((key, value, lock_info, is_pessimistic_lock))
-    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> locks_for_1pc;
+    pb::store::LockInfo prev_lock_info;
+    pb::store::WriteInfo write_info;
+    // 1.check if the key is locked
+    //   if the key is locked, return LockInfo
+    {
+      PhaseTimer t(lock_et, txn_reader, start_ts, mutation.key(), "check lock");
 
-    auto tracker = ctx->Tracker();
-    uint64_t start_time = Helper::TimestampUs();
+      auto ret = txn_reader.GetLockInfo(mutation.key(), prev_lock_info);
+      if (!ret.ok()) {
+        // TODO: do read before write to raft state machine
+        // Now we need to fatal exit to prevent data inconsistency between raft peers
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                         << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
+                         << ", status: " << ret.error_str();
 
-    struct PhaseTimer {
-      uint64_t &total_time;
-      int32_t &total_skip_versions;
-      TxnReader &txn_reader;
-      int64_t start_ts;
-      const std::string &key;
-      const char *phase_name;
-      uint64_t start_us;
+        error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        error->set_errmsg(ret.error_str());
 
-      PhaseTimer(uint64_t &total, int32_t &skip_ver, TxnReader &reader, int64_t ts, const std::string &k,
-                 const char *name)
-          : total_time(total),
-            total_skip_versions(skip_ver),
-            txn_reader(reader),
-            start_ts(ts),
-            key(k),
-            phase_name(name),
-            start_us(Helper::TimestampUs()) {}
+        // need response to client
+        return ret;
+      }
 
-      ~PhaseTimer() {
-        uint64_t elapsed = Helper::TimestampUs() - start_us;
-        total_time += elapsed;
-        total_skip_versions += txn_reader.GetSkippedVersions();
+      // for optimistic prewrite
+      if (!need_check_pessimistic_lock) {
+        if (prev_lock_info.lock_type() == pb::store::Op::Lock) {
+          pb::store::WriteInfo prev_write_info;
+          int64_t prev_commit_ts = 0;
+          bool find_record = false;
+          auto status =
+              txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+          if (!status.ok()) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                             << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                             << ", start_ts: " << start_ts << ", status: " << status.error_str();
+          }
 
-        if (elapsed > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
+          if (find_record) {
+            if (use_async_commit) {
+              response->set_min_commit_ts(prev_commit_ts);
+            }
+
+            if (try_one_pc) {
+              response->set_one_pc_commit_ts(prev_commit_ts);
+            }
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+                "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+                "write_info:{}",
+                region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+            return butil::Status::OK();
+          }
+
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn]PreWrite start_ts:{}, key:{}, {}, skip_versions:{} time:{} us", start_ts,
-                             Helper::StringToHex(key), phase_name, txn_reader.GetSkippedVersions(), elapsed);
-        }
-        txn_reader.ResetSkippedVersions();
-      }
-    };
-
-    bool use_async_commit = false;
-    if (!secondaries.empty()) {
-      use_async_commit = true;
-    }
-    auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
-
-    uint64_t total_period_lock_time = 0;
-    uint64_t total_period_write_time = 0;
-    uint64_t total_period_commit_time = 0;
-    int32_t total_period_lock_cf_skip_version = 0;
-    int32_t total_period_write_cf_skip_version = 0;
-    int32_t total_period_commit_cf_skip_version = 0;
-    // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
-    for (int64_t i = 0; i < mutations.size(); i++) {
-      const auto &mutation = mutations[i];
-
-      // if the mutation request is a repeated (already prewrited beforce, maybe just a retry from executor), will to do
-      // all check and setup response, but do not apply to raft to save time and I/O
-      bool is_repeated_prewrite = false;
-
-      // if need to check pessimistic lock
-      bool need_check_pessimistic_lock = false;
-      if (!pessimistic_checks.empty() && pessimistic_checks[i] == 1) {
-        need_check_pessimistic_lock = true;
-      }
-
-      pb::store::LockInfo prev_lock_info;
-      pb::store::WriteInfo write_info;
-      // 1.check if the key is locked
-      //   if the key is locked, return LockInfo
-      {
-        PhaseTimer t(total_period_lock_time, total_period_lock_cf_skip_version, txn_reader, start_ts, mutation.key(),
-                     "check lock");
-
-        auto ret = txn_reader.GetLockInfo(mutation.key(), prev_lock_info);
-        if (!ret.ok()) {
-          // TODO: do read before write to raft state machine
-          // Now we need to fatal exit to prevent data inconsistency between raft peers
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                           << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
-                           << ", status: " << ret.error_str();
-
-          error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-          error->set_errmsg(ret.error_str());
-
-          // need response to client
-          return ret;
+              << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+              << ", optimistic prewrite meet pessimistic lock, key: " << Helper::StringToHex(mutation.key())
+              << ", lock_info: " << prev_lock_info.ShortDebugString();
+          *response->add_txn_result()->mutable_locked() = prev_lock_info;
+          continue;
         }
 
-        // for optimistic prewrite
-        if (!need_check_pessimistic_lock) {
-          if (prev_lock_info.lock_type() == pb::store::Op::Lock) {
+        if (!prev_lock_info.primary_lock().empty()) {
+          // for optimistic prewrite, if the key is locked by same start_ts, this is a repeated prewrite, will skip
+          // write to raft state machine
+          if (prev_lock_info.lock_ts() == start_ts) {
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                << ", key: " << Helper::StringToHex(mutation.key())
+                << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+                << prev_lock_info.ShortDebugString();
+
+            // this is a repeated prewrite, will skip write to raft state machine
+            is_repeated_prewrite = true;
+          } else {
             pb::store::WriteInfo prev_write_info;
             int64_t prev_commit_ts = 0;
             bool find_record = false;
@@ -2832,1169 +2935,1604 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
             }
 
             DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                << ", optimistic prewrite meet pessimistic lock, key: " << Helper::StringToHex(mutation.key())
-                << ", lock_info: " << prev_lock_info.ShortDebugString();
+                << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                << ", key: " << Helper::StringToHex(mutation.key())
+                << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
+
+            // add txn_result for response
+            // setup lock_info
             *response->add_txn_result()->mutable_locked() = prev_lock_info;
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+                << ", lock_info: " << prev_lock_info.ShortDebugString();
+
+            // need response to client
             continue;
-          }
-
-          if (!prev_lock_info.primary_lock().empty()) {
-            // for optimistic prewrite, if the key is locked by same start_ts, this is a repeated prewrite, will skip
-            // write to raft state machine
-            if (prev_lock_info.lock_ts() == start_ts) {
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                  << ", key: " << Helper::StringToHex(mutation.key())
-                  << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-                  << prev_lock_info.ShortDebugString();
-
-              // this is a repeated prewrite, will skip write to raft state machine
-              is_repeated_prewrite = true;
-            } else {
-              pb::store::WriteInfo prev_write_info;
-              int64_t prev_commit_ts = 0;
-              bool find_record = false;
-              auto status = txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts,
-                                                            find_record);
-              if (!status.ok()) {
-                DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                                 << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
-                                 << ", start_ts: " << start_ts << ", status: " << status.error_str();
-              }
-
-              if (find_record) {
-                if (use_async_commit) {
-                  response->set_min_commit_ts(prev_commit_ts);
-                }
-
-                if (try_one_pc) {
-                  response->set_one_pc_commit_ts(prev_commit_ts);
-                }
-
-                DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-                    "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
-                    "write_info:{}",
-                    region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
-
-                return butil::Status::OK();
-              }
-
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                  << ", key: " << Helper::StringToHex(mutation.key())
-                  << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
-
-              // add txn_result for response
-              // setup lock_info
-              *response->add_txn_result()->mutable_locked() = prev_lock_info;
-
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                  << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
-                  << ", lock_info: " << prev_lock_info.ShortDebugString();
-
-              // need response to client
-              continue;
-            }
-          }
-        }
-        // for pessimistic prewrite
-        else {
-          if (!prev_lock_info.primary_lock().empty()) {
-            if (prev_lock_info.lock_ts() == start_ts) {
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                  << ", key: " << Helper::StringToHex(mutation.key())
-                  << " is locked by same start_ts, lock_info: " << prev_lock_info.ShortDebugString();
-
-              // if this is not a PessimisticLock, it is a repeated prewrite, will skip write to raft state machine
-              if (prev_lock_info.lock_type() != pb::store::Op::Lock) {
-                DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                    << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                    << ", pessimistic prewrite meet optimistic lock, this is a repeated prewrite, skip it, key: "
-                    << Helper::StringToHex(mutation.key()) << ", lock_info: " << prev_lock_info.ShortDebugString();
-
-                // this is a repeated prewrite, will skip write to raft state machine
-                is_repeated_prewrite = true;
-              }
-              // do pessimistic check
-              else if (for_update_ts_checks.find(i) != for_update_ts_checks.end()) {
-                if (prev_lock_info.for_update_ts() != for_update_ts_checks.at(i)) {
-                  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                      << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                      << ", key: " << Helper::StringToHex(mutation.key())
-                      << " is locked by same start_ts, but for_update_ts is not equal, lock_info: "
-                      << prev_lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts_checks.at(i);
-
-                  // add txn_result for response
-                  // setup lock_info
-                  *response->add_txn_result()->mutable_locked() = prev_lock_info;
-
-                  // need response to client
-                  continue;
-                }
-              }
-            } else {
-              pb::store::WriteInfo prev_write_info;
-              int64_t prev_commit_ts = 0;
-              bool find_record = false;
-              auto status = txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts,
-                                                            find_record);
-              if (!status.ok()) {
-                DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                                 << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
-                                 << ", start_ts: " << start_ts << ", status: " << status.error_str();
-              }
-
-              if (find_record) {
-                if (use_async_commit) {
-                  response->set_min_commit_ts(prev_commit_ts);
-                }
-
-                if (try_one_pc) {
-                  response->set_one_pc_commit_ts(prev_commit_ts);
-                }
-
-                DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-                    "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
-                    "write_info:{}",
-                    region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
-
-                return butil::Status::OK();
-              }
-
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                  << ", key: " << Helper::StringToHex(mutation.key())
-                  << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
-
-              // add txn_result for response
-              // setup lock_info
-              *response->add_txn_result()->mutable_locked() = prev_lock_info;
-
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                  << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
-                  << ", lock_info: " << prev_lock_info.ShortDebugString();
-
-              // need response to client
-              continue;
-            }
           }
         }
       }
+      // for pessimistic prewrite
+      else {
+        if (!prev_lock_info.primary_lock().empty()) {
+          if (prev_lock_info.lock_ts() == start_ts) {
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                << ", key: " << Helper::StringToHex(mutation.key())
+                << " is locked by same start_ts, lock_info: " << prev_lock_info.ShortDebugString();
 
-      // 2. check if the key is committed or rollbacked after start_ts
-      //    if the key is committed or rollbacked after start_ts, return WriteConflict
-      // 2.1 check rollback
-      // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
-      {
-        PhaseTimer t(total_period_write_time, total_period_write_cf_skip_version, txn_reader, start_ts, mutation.key(),
-                     "check write");
+            // if this is not a PessimisticLock, it is a repeated prewrite, will skip write to raft state machine
+            if (prev_lock_info.lock_type() != pb::store::Op::Lock) {
+              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                  << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                  << ", pessimistic prewrite meet optimistic lock, this is a repeated prewrite, skip it, key: "
+                  << Helper::StringToHex(mutation.key()) << ", lock_info: " << prev_lock_info.ShortDebugString();
 
-        auto ret1 = txn_reader.GetRollbackInfo(start_ts, mutation.key(), write_info);
-        if (!ret1.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                           << ", get rollback info failed, key: " << Helper::StringToHex(mutation.key())
-                           << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+              // this is a repeated prewrite, will skip write to raft state machine
+              is_repeated_prewrite = true;
+            }
+            // do pessimistic check
+            else if (for_update_ts_checks.find(i) != for_update_ts_checks.end()) {
+              if (prev_lock_info.for_update_ts() != for_update_ts_checks.at(i)) {
+                DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                    << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                    << ", key: " << Helper::StringToHex(mutation.key())
+                    << " is locked by same start_ts, but for_update_ts is not equal, lock_info: "
+                    << prev_lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts_checks.at(i);
+
+                // add txn_result for response
+                // setup lock_info
+                *response->add_txn_result()->mutable_locked() = prev_lock_info;
+
+                // need response to client
+                continue;
+              }
+            }
+          } else {
+            pb::store::WriteInfo prev_write_info;
+            int64_t prev_commit_ts = 0;
+            bool find_record = false;
+            auto status =
+                txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+            if (!status.ok()) {
+              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                               << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                               << ", start_ts: " << start_ts << ", status: " << status.error_str();
+            }
+
+            if (find_record) {
+              if (use_async_commit) {
+                response->set_min_commit_ts(prev_commit_ts);
+              }
+
+              if (try_one_pc) {
+                response->set_one_pc_commit_ts(prev_commit_ts);
+              }
+
+              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+                  "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+                  "write_info:{}",
+                  region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+              return butil::Status::OK();
+            }
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                << ", key: " << Helper::StringToHex(mutation.key())
+                << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
+
+            // add txn_result for response
+            // setup lock_info
+            *response->add_txn_result()->mutable_locked() = prev_lock_info;
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+                << ", lock_info: " << prev_lock_info.ShortDebugString();
+
+            // need response to client
+            continue;
+          }
         }
+      }
+    }
 
-        if (write_info.start_ts() == start_ts) {
+    // 2. check if the key is committed or rollbacked after start_ts
+    //    if the key is committed or rollbacked after start_ts, return WriteConflict
+    // 2.1 check rollback
+    // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
+    {
+      PhaseTimer t(write_et, txn_reader, start_ts, mutation.key(), "check write");
+
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, mutation.key(), write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                         << ", get rollback info failed, key: " << Helper::StringToHex(mutation.key())
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
+
+      if (write_info.start_ts() == start_ts) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
+            << ", write_info: " << write_info.ShortDebugString();
+
+        // prewrite meet write_conflict here
+        // add txn_result for response
+        // setup write_conflict ( this may not be necessary, when lock_info is set)
+        auto *txn_result = response->add_txn_result();
+        auto *write_conflict = txn_result->mutable_write_conflict();
+        write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_SelfRolledBack);
+        write_conflict->set_start_ts(start_ts);
+        write_conflict->set_conflict_ts(start_ts);
+        write_conflict->set_key(mutation.key());
+        // write_conflict->set_primary_key(lock_info.primary_lock());
+
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Prewrite,", region->Id()) << ", write_conflict, start_ts: " << start_ts
+            << ", write_info: " << write_info.ShortDebugString();
+
+        break;
+      }
+    }
+
+    // 2.2 check commit
+    // if there is a commit, there will be a key | commit_ts : WriteInfo| in write_cf
+    // for optimistic prewrite, we need to check if commit_ts >= start_ts
+    // for pessimistic prewrite, we need to check if commit_ts >= for_update_ts, but this check is done in lock
+    // phase, so we do not need to check here
+    {
+      PhaseTimer t(commit_et, txn_reader, start_ts, mutation.key(), "check commit");
+      int64_t commit_ts = 0;
+      auto ret2 =
+          txn_reader.GetWriteInfo(0, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info, commit_ts);
+      if (!ret2.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                         << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
+                         << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
+      }
+
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
+          << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts
+          << ", write_info: " << write_info.ShortDebugString();
+
+      if (commit_ts >= start_ts) {
+        if (!need_check_pessimistic_lock) {
+          pb::store::WriteInfo prev_write_info;
+          int64_t prev_commit_ts = 0;
+          bool find_record = false;
+          auto status =
+              txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+          if (!status.ok()) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                             << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                             << ", start_ts: " << start_ts << ", status: " << status.error_str();
+          }
+
+          if (find_record) {
+            if (use_async_commit) {
+              response->set_min_commit_ts(prev_commit_ts);
+            }
+
+            if (try_one_pc) {
+              response->set_one_pc_commit_ts(prev_commit_ts);
+            }
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+                "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+                "write_info:{}",
+                region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+            return butil::Status::OK();
+          }
+
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
-              << ", write_info: " << write_info.ShortDebugString();
+              << "Optimistic Prewrite find this transaction is committed after start_ts,return "
+                 "WriteConflict start_ts: "
+              << start_ts << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
 
           // prewrite meet write_conflict here
           // add txn_result for response
           // setup write_conflict ( this may not be necessary, when lock_info is set)
           auto *txn_result = response->add_txn_result();
           auto *write_conflict = txn_result->mutable_write_conflict();
-          write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_SelfRolledBack);
+          write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_Optimistic);
           write_conflict->set_start_ts(start_ts);
-          write_conflict->set_conflict_ts(start_ts);
+          write_conflict->set_conflict_ts(commit_ts);
           write_conflict->set_key(mutation.key());
           // write_conflict->set_primary_key(lock_info.primary_lock());
 
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Prewrite,", region->Id()) << ", write_conflict, start_ts: " << start_ts
-              << ", write_info: " << write_info.ShortDebugString();
-
-          break;
-        }
-      }
-
-      // 2.2 check commit
-      // if there is a commit, there will be a key | commit_ts : WriteInfo| in write_cf
-      // for optimistic prewrite, we need to check if commit_ts >= start_ts
-      // for pessimistic prewrite, we need to check if commit_ts >= for_update_ts, but this check is done in lock
-      // phase, so we do not need to check here
-      {
-        PhaseTimer t(total_period_commit_time, total_period_commit_cf_skip_version, txn_reader, start_ts,
-                     mutation.key(), "check commit");
-          int64_t commit_ts = 0;
-          auto ret2 = txn_reader.GetWriteInfo(0, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info,
-                                              commit_ts);
-          if (!ret2.ok()) {
-            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                             << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
-                             << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
-          }
-
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Prewrite", region->Id())
-              << ", key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
+              << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", write_conflict, start_ts: " << start_ts
               << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
-
-          if (commit_ts >= start_ts) {
-            if (!need_check_pessimistic_lock) {
-              pb::store::WriteInfo prev_write_info;
-              int64_t prev_commit_ts = 0;
-              bool find_record = false;
-              auto status = txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts,
-                                                            find_record);
-              if (!status.ok()) {
-                DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                                 << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
-                                 << ", start_ts: " << start_ts << ", status: " << status.error_str();
-              }
-
-              if (find_record) {
-                if (use_async_commit) {
-                  response->set_min_commit_ts(prev_commit_ts);
-                }
-
-                if (try_one_pc) {
-                  response->set_one_pc_commit_ts(prev_commit_ts);
-                }
-
-                DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-                    "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
-                    "write_info:{}",
-                    region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
-
-                return butil::Status::OK();
-              }
-
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << "Optimistic Prewrite find this transaction is committed after start_ts,return "
-                     "WriteConflict start_ts: "
-                  << start_ts << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
-
-              // prewrite meet write_conflict here
-              // add txn_result for response
-              // setup write_conflict ( this may not be necessary, when lock_info is set)
-              auto *txn_result = response->add_txn_result();
-              auto *write_conflict = txn_result->mutable_write_conflict();
-              write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_Optimistic);
-              write_conflict->set_start_ts(start_ts);
-              write_conflict->set_conflict_ts(commit_ts);
-              write_conflict->set_key(mutation.key());
-              // write_conflict->set_primary_key(lock_info.primary_lock());
-
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << fmt::format("[txn][region({})] Prewrite", region->Id())
-                  << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
-                  << ", write_info: " << write_info.ShortDebugString();
-              break;
-            } else {
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-                  << "Pessimistic Prewrite find this transaction is committed after start_ts, it's ok. start_ts: "
-                  << start_ts << ", commit_ts: " << commit_ts;
-            }
-          }
-        }
-
-      // 3.check special mutation op.
-      if (mutation.op() == pb::store::Op::PutIfAbsent) {
-        // check if key is exist
-        if (write_info.op() == pb::store::Op::Put) {
-          response->add_keys_already_exist()->set_key(mutation.key());
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", put_if_absent, start_ts: " << start_ts
-              << ", key: " << Helper::StringToHex(mutation.key()) << ", write_info: " << write_info.ShortDebugString();
           break;
-        }
-      } else if (mutation.op() == pb::store::Op::CheckNotExists) {
-        // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key
-        // is exist. So it is more likely to be a get op in prewrite.
-
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] Prewrite", region->Id())
-            << ", key: " << Helper::StringToHex(mutation.key()) << " is CheckNotExists, start_ts: " << start_ts
-            << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
-            << ", prev_write_info is: " << write_info.ShortDebugString();
-        // CheckNotExists should not appear in a pessimistic prewrite, so check this here
-        if (need_check_pessimistic_lock) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                           << ", CheckNotExists should not appear in a pessimistic prewrite, key: "
-                           << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
-                           << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                           << ", mutations_size: " << mutations.size()
-                           << ", prev_write_info is: " << write_info.ShortDebugString();
-
-          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                               "CheckNotExists should not appear in a pessimistic prewrite");
-        }
-
-        // check if key is exist
-        if (write_info.op() == pb::store::Op::Put) {
-          response->add_keys_already_exist()->set_key(mutation.key());
+        } else {
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "Pessimistic Prewrite find this transaction is committed after start_ts, it's ok. start_ts: "
+              << start_ts << ", commit_ts: " << commit_ts;
         }
       }
+    }
 
-      if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+    // 3.check special mutation op.
+    if (mutation.op() == pb::store::Op::PutIfAbsent) {
+      // check if key is exist
+      if (write_info.op() == pb::store::Op::Put) {
+        response->add_keys_already_exist()->set_key(mutation.key());
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] Prewrite,", region->Id())
-            << ", key: " << Helper::StringToHex(mutation.key())
-            << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-            << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
-        // if enable 1pc need to fallback to 2pc
-        try_one_pc = false;
-        use_async_commit = false;
-        continue;
+            << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", put_if_absent, start_ts: " << start_ts
+            << ", key: " << Helper::StringToHex(mutation.key()) << ", write_info: " << write_info.ShortDebugString();
+        break;
+      }
+    } else if (mutation.op() == pb::store::Op::CheckNotExists) {
+      // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key
+      // is exist. So it is more likely to be a get op in prewrite.
+
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
+          << " is CheckNotExists, start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+          << ", mutations_size: " << mutations.size() << ", prev_write_info is: " << write_info.ShortDebugString();
+      // CheckNotExists should not appear in a pessimistic prewrite, so check this here
+      if (need_check_pessimistic_lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                         << ", CheckNotExists should not appear in a pessimistic prewrite, key: "
+                         << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
+                         << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                         << ", mutations_size: " << mutations.size()
+                         << ", prev_write_info is: " << write_info.ShortDebugString();
+
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "CheckNotExists should not appear in a pessimistic prewrite");
       }
 
-      std::string lock_extra_data = lock_extra_datas.find(i) != lock_extra_datas.end() ? lock_extra_datas.at(i) : "";
-      int64_t for_update_ts =
-          for_update_ts_checks.find(i) != for_update_ts_checks.end() ? for_update_ts_checks.at(i) : 0;
-      int64_t temp_min_commit_ts = 0;
-      // 3.1 write data and lock
-      auto ret3 = GenPrewriteDataAndLock(region, mutation, prev_lock_info, write_info, primary_lock, start_ts,
-                                         for_update_ts, lock_ttl, txn_size, lock_extra_data, min_commit_ts,
-                                         max_commit_ts, need_check_pessimistic_lock, try_one_pc, use_async_commit,
-                                         secondaries, kv_puts_data, kv_puts_lock, locks_for_1pc, temp_min_commit_ts);
-      if (!ret3.ok()) {
-        if (ret3.error_code() == pb::error::Errno::EVALUE_EMPTY) {
-          error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
-          error->set_errmsg("value is empty");
-          return ret3;
-        }
+      // check if key is exist
+      if (write_info.op() == pb::store::Op::Put) {
+        response->add_keys_already_exist()->set_key(mutation.key());
+      }
+    }
+
+    if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite,", region->Id())
+          << ", key: " << Helper::StringToHex(mutation.key())
+          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+          << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+      // if enable 1pc need to fallback to 2pc
+      try_one_pc = false;
+      use_async_commit = false;
+      continue;
+    }
+
+    std::string lock_extra_data = lock_extra_datas.find(i) != lock_extra_datas.end() ? lock_extra_datas.at(i) : "";
+    int64_t for_update_ts = for_update_ts_checks.find(i) != for_update_ts_checks.end() ? for_update_ts_checks.at(i) : 0;
+    int64_t temp_min_commit_ts = 0;
+    // 3.1 write data and lock
+    auto ret3 = GenPrewriteDataAndLock(region, mutation, prev_lock_info, write_info, primary_lock, start_ts,
+                                       for_update_ts, lock_ttl, txn_size, lock_extra_data, min_commit_ts, max_commit_ts,
+                                       need_check_pessimistic_lock, try_one_pc, use_async_commit, secondaries,
+                                       kv_puts_data, kv_puts_lock, locks_for_1pc, temp_min_commit_ts);
+    if (!ret3.ok()) {
+      if (ret3.error_code() == pb::error::Errno::EVALUE_EMPTY) {
+        error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
+        error->set_errmsg("value is empty");
         return ret3;
       }
-      if (try_one_pc || use_async_commit) {
-        if (final_min_commit_ts < temp_min_commit_ts) {
-          final_min_commit_ts = temp_min_commit_ts;
-        }
-      } else {
-        final_min_commit_ts = 0;
+      return ret3;
+    }
+    if (try_one_pc || use_async_commit) {
+      if (final_min_commit_ts < temp_min_commit_ts) {
+        final_min_commit_ts = temp_min_commit_ts;
       }
+    } else {
+      final_min_commit_ts = 0;
     }
-
-    tracker->RecordElapsedTime("lock period", total_period_lock_time, total_period_lock_cf_skip_version);
-    tracker->RecordElapsedTime("write period ", total_period_write_time, total_period_write_cf_skip_version);
-    tracker->RecordElapsedTime("commit period", total_period_commit_time, total_period_commit_cf_skip_version);
-
-    if (use_async_commit) {
-      response->set_min_commit_ts(final_min_commit_ts);
-    }
-    if (response->txn_result_size() > 0) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
-          << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
-      return butil::Status::OK();
-    }
-    if (response->keys_already_exist_size() > 0) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Prewrite return already_exist,", region->Id())
-          << ", already_exist_size: " << response->keys_already_exist_size() << ", start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
-      return butil::Status::OK();
-    }
-
-    if (try_one_pc) {
-      auto ret4 = OnePCommit(raft_engine, ctx, region, start_ts, final_min_commit_ts, locks_for_1pc, kv_puts_data);
-      if (!ret4.ok()) {
-        return ret4;
-      }
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Prewrite 1PC commit", region->Id()) << ", start_ts:" << start_ts
-          << " ,final_min_commit_ts:" << final_min_commit_ts;
-      response->set_one_pc_commit_ts(final_min_commit_ts);
-      return ret4;
-    }
-    FallbackTo1PCLocks(kv_puts_lock, locks_for_1pc);
-    return DoPreWrite(raft_engine, ctx, region->Id(), start_ts, mutations.size(), kv_puts_data, kv_puts_lock);
   }
 
-  bvar::LatencyRecorder g_txn_commit_latency("dingo_txn_commit");
+  tracker->RecordElapsedTime(std::move(lock_et));
+  tracker->RecordElapsedTime(std::move(write_et));
+  tracker->RecordElapsedTime(std::move(commit_et));
 
-  butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                        std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
-                                        int64_t commit_ts, const std::vector<std::string> &keys) {
-    BvarLatencyGuard bvar_guard(&g_txn_commit_latency);
+  if (use_async_commit) {
+    response->set_min_commit_ts(final_min_commit_ts);
+  }
+  if (response->txn_result_size() > 0) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
+        << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
+  if (response->keys_already_exist_size() > 0) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite return already_exist,", region->Id())
+        << ", already_exist_size: " << response->keys_already_exist_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
 
+  if (try_one_pc) {
+    auto ret4 = OnePCommit(raft_engine, ctx, region, start_ts, final_min_commit_ts, locks_for_1pc, kv_puts_data);
+    if (!ret4.ok()) {
+      return ret4;
+    }
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite 1PC commit", region->Id()) << ", start_ts:" << start_ts
+        << " ,final_min_commit_ts:" << final_min_commit_ts;
+    response->set_one_pc_commit_ts(final_min_commit_ts);
+    return ret4;
+  }
+  FallbackTo1PCLocks(kv_puts_lock, locks_for_1pc);
+  return DoPreWrite(raft_engine, ctx, region->Id(), start_ts, mutations.size(), kv_puts_data, kv_puts_lock);
+}
+
+bvar::LatencyRecorder g_txn_commit_latency("dingo_txn_commit");
+
+butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                      std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                      int64_t commit_ts, const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_commit_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+      << ", keys_size: " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
+
+  // print keys and index
+  for (int i = 0; i < keys.size(); i++) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
         << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-        << ", keys_size: " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts << ", keys[" << i
+        << "]: " << Helper::StringToHex(keys[i]);
+  }
 
-    // print keys and index
-    for (int i = 0; i < keys.size(); i++) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts << ", keys["
-          << i << "]: " << Helper::StringToHex(keys[i]);
-    }
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_commit_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+                     << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_commit_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit keys.size() > FLAGS_max_commit_count");
+  }
 
-    if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_commit_count)) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                       << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_commit_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit keys.size() > FLAGS_max_commit_count");
-    }
+  if (commit_ts <= start_ts) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
+                     << ", commit_ts is less than start_ts, region_id: " << ctx->RegionId()
+                     << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts is less than start_ts");
+  }
 
-    if (commit_ts <= start_ts) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
-                       << ", commit_ts is less than start_ts, region_id: " << ctx->RegionId()
-                       << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts;
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts is less than start_ts");
-    }
+  // create reader and writer
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
 
-    // create reader and writer
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
 
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
+  auto *response = dynamic_cast<pb::store::TxnCommitResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                    commit_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
 
-    auto *response = dynamic_cast<pb::store::TxnCommitResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                      commit_ts)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-    auto *txn_result = response->mutable_txn_result();
-
-    // for every key, check and do commit, if primary key is failed, the whole commit is failed
-    std::vector<pb::store::LockInfo> lock_infos;
-    for (const auto &key : keys) {
-      pb::store::LockInfo lock_info;
-      auto ret = txn_reader.GetLockInfo(key, lock_info);
-      if (!ret.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                        commit_ts)
-                         << ", get lock info failed, status: " << ret.error_str();
-        error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-        error->set_errmsg(ret.error_str());
-        return ret;
-      }
-
-      // // if lock is not exist, return TxnNotFound
-      // if (lock_info.primary_lock().empty()) {
-      //   DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-      //   start_ts,
-      //                                     commit_ts)
-      //                      << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key) << ",
-      //                      start_ts: " << start_ts;
-
-      //   auto *txn_not_found = txn_result->mutable_txn_not_found();
-      //   txn_not_found->set_start_ts(start_ts);
-
-      //   return butil::Status::OK();
-      // }
-
-      if (lock_info.lock_ts() == start_ts) {
-        // lock_ts match start_ts, check if lock_type is Put/Delete/PutIfAbsent
-        // If this is a pessimistic lock in Lock phase, return LockInfo
-        // If this is not a Put/Delete/PutIfAbsent, return LockInfo
-        if (lock_info.lock_type() == pb::store::Op::Lock) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", meet a pessimistic lock, there must BUG in executor, key: " << Helper::StringToHex(key)
-                           << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-                   lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", meet a invalid lock_type, there must BUG in executor, key: "
-                           << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        }
-
-        // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should
-        // get a new tso from coordinator, then commit again.
-        if (lock_info.min_commit_ts() > 0 && commit_ts < lock_info.min_commit_ts()) {
-          // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
-          auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
-          commit_ts_expired->set_start_ts(start_ts);
-          commit_ts_expired->set_attempted_commit_ts(commit_ts);
-          commit_ts_expired->set_key(key);
-          commit_ts_expired->set_min_commit_ts(lock_info.min_commit_ts());
-
-          return butil::Status::OK();
-        }
-      } else {
-        // check if the key is already committed, if it is committed can skip it
-        pb::store::WriteInfo write_info;
-        int64_t prev_commit_ts = 0;
-        auto ret2 =
-            txn_reader.GetWriteInfo(start_ts, commit_ts, start_ts, key, false, true, true, write_info, prev_commit_ts);
-        if (!ret2.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", get write info failed, key: " << Helper::StringToHex(key)
-                           << ", status: " << ret2.error_str();
-          error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-          error->set_errmsg(ret2.error_str());
-          return ret2;
-        }
-
-        // if prev_commit_ts == commit_ts, means this key of start_ts is already committed, can skip it
-        if (prev_commit_ts == commit_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts, commit_ts)
-              << ", key: " << Helper::StringToHex(key) << " is already committed, prev_commit_ts: " << prev_commit_ts;
-          continue;
-        }
-
-        // check if the key is already rollbacked, if it is rollbacked, return WriteConflict
-        // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
-        auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
-        if (!ret1.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", get rollback info failed, key: " << Helper::StringToHex(key)
-                           << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
-        }
-
-        if (write_info.start_ts() == start_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
-              << ", write_info: " << write_info.ShortDebugString();
-
-          // prewrite meet write_conflict here
-          // add txn_result for response
-          // setup write_conflict ( this may not be necessary, when lock_info is set)
-          auto *write_conflict = txn_result->mutable_write_conflict();
-          write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_SelfRolledBack);
-          write_conflict->set_start_ts(start_ts);
-          write_conflict->set_conflict_ts(start_ts);
-          write_conflict->set_key(key);
-          // write_conflict->set_primary_key(lock_info.primary_lock());
-
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Commit,", region->Id())
-              << ", meet key is rollbacked, return write_conflict, start_ts: " << start_ts
-              << ", write_info: " << write_info.ShortDebugString();
-
-          return butil::Status::OK();
-        }
-
-        // if lock is exists but start_ts is not equal to lock_ts, return locked
-        if (lock_info.lock_ts() > 0) {
-          DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                            start_ts, commit_ts)
-                             << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
-                             << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
-
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        }
-
-        // no committed and no rollbacked, there may be BUG
-        auto *txn_not_found = txn_result->mutable_txn_not_found();
-        txn_not_found->set_start_ts(start_ts);
-        txn_not_found->set_key(key);
-
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                        commit_ts)
-                         << ", no committed and no rollbacked, there may be BUG, key: " << Helper::StringToHex(key)
-                         << ", start_ts: " << start_ts << ", write_info: " << write_info.ShortDebugString();
-
-        return butil::Status::OK();
-      }
-      // now txn is match, prepare to commit
-      lock_infos.push_back(lock_info);
-    }
-
-    auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos, start_ts, commit_ts);
+  // for every key, check and do commit, if primary key is failed, the whole commit is failed
+  std::vector<pb::store::LockInfo> lock_infos;
+  for (const auto &key : keys) {
+    pb::store::LockInfo lock_info;
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, commit_ts: {}, start_ts: {}", region->Id(), commit_ts,
-                                      start_ts)
-                       << ", do txn commit failed, status: " << ret.error_str();
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                      commit_ts)
+                       << ", get lock info failed, status: " << ret.error_str();
       error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
       error->set_errmsg(ret.error_str());
       return ret;
     }
 
-    return butil::Status::OK();
-  }
+    // // if lock is not exist, return TxnNotFound
+    // if (lock_info.primary_lock().empty()) {
+    //   DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+    //   start_ts,
+    //                                     commit_ts)
+    //                      << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key) << ",
+    //                      start_ts: " << start_ts;
 
-  bvar::LatencyRecorder g_txn_do_commit_latency("dingo_txn_do_commit");
+    //   auto *txn_not_found = txn_result->mutable_txn_not_found();
+    //   txn_not_found->set_start_ts(start_ts);
 
-  butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                             std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                             const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
-                                             int64_t commit_ts) {
-    BvarLatencyGuard bvar_guard(&g_txn_do_commit_latency);
+    //   return butil::Status::OK();
+    // }
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {}", region->Id(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-        << ", lock_infos_size: " << lock_infos.size();
+    if (lock_info.lock_ts() == start_ts) {
+      // lock_ts match start_ts, check if lock_type is Put/Delete/PutIfAbsent
+      // If this is a pessimistic lock in Lock phase, return LockInfo
+      // If this is not a Put/Delete/PutIfAbsent, return LockInfo
+      if (lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", meet a pessimistic lock, there must BUG in executor, key: " << Helper::StringToHex(key)
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", meet a invalid lock_type, there must BUG in executor, key: " << Helper::StringToHex(key)
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
 
-    // create reader and writer
-    auto reader = raw_engine->Reader();
+      // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should
+      // get a new tso from coordinator, then commit again.
+      if (lock_info.min_commit_ts() > 0 && commit_ts < lock_info.min_commit_ts()) {
+        // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
+        auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
+        commit_ts_expired->set_start_ts(start_ts);
+        commit_ts_expired->set_attempted_commit_ts(commit_ts);
+        commit_ts_expired->set_key(key);
+        commit_ts_expired->set_min_commit_ts(lock_info.min_commit_ts());
 
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
+        return butil::Status::OK();
+      }
+    } else {
+      // check if the key is already committed, if it is committed can skip it
+      pb::store::WriteInfo write_info;
+      int64_t prev_commit_ts = 0;
+      auto ret2 =
+          txn_reader.GetWriteInfo(start_ts, commit_ts, start_ts, key, false, true, true, write_info, prev_commit_ts);
+      if (!ret2.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", get write info failed, key: " << Helper::StringToHex(key)
+                         << ", status: " << ret2.error_str();
+        error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+        error->set_errmsg(ret2.error_str());
+        return ret2;
+      }
 
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    // for vector index region, commit to vector index
-    auto *vector_add = cf_put_delete->mutable_vector_add();
-    auto *vector_del = cf_put_delete->mutable_vector_del();
-
-    // for document index region, commit to document index
-    auto *document_add = cf_put_delete->mutable_document_add();
-    auto *document_del = cf_put_delete->mutable_document_del();
-
-    // for every key, check and do commit, if primary key is failed, the whole commit is failed
-    for (const auto &lock_info : lock_infos) {
-      // 1.delete lock from lock_cf
-      { kv_deletes_lock.push_back(mvcc::Codec::EncodeKey(lock_info.key(), Constant::kLockVer)); }
-
-      if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
+      // if prev_commit_ts == commit_ts, means this key of start_ts is already committed, can skip it
+      if (prev_commit_ts == commit_ts) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
-                           commit_ts)
-            << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
+            << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts, commit_ts)
+            << ", key: " << Helper::StringToHex(key) << " is already committed, prev_commit_ts: " << prev_commit_ts;
         continue;
       }
 
-      // 2.put data to write_cf
-      std::string data_value;
-      if (!lock_info.short_value().empty()) {
-        data_value = lock_info.short_value();
-      } else if (lock_info.lock_type() == pb::store::Put) {
-        auto ret = reader->KvGet(Constant::kTxnDataCF, mvcc::Codec::EncodeKey(lock_info.key(), start_ts), data_value);
-        if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+      // check if the key is already rollbacked, if it is rollbacked, return WriteConflict
+      // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", get rollback info failed, key: " << Helper::StringToHex(key)
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
+
+      if (write_info.start_ts() == start_ts) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
+            << ", write_info: " << write_info.ShortDebugString();
+
+        // prewrite meet write_conflict here
+        // add txn_result for response
+        // setup write_conflict ( this may not be necessary, when lock_info is set)
+        auto *write_conflict = txn_result->mutable_write_conflict();
+        write_conflict->set_reason(::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_SelfRolledBack);
+        write_conflict->set_start_ts(start_ts);
+        write_conflict->set_conflict_ts(start_ts);
+        write_conflict->set_key(key);
+        // write_conflict->set_primary_key(lock_info.primary_lock());
+
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Commit,", region->Id())
+            << ", meet key is rollbacked, return write_conflict, start_ts: " << start_ts
+            << ", write_info: " << write_info.ShortDebugString();
+
+        return butil::Status::OK();
+      }
+
+      // if lock is exists but start_ts is not equal to lock_ts, return locked
+      if (lock_info.lock_ts() > 0) {
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
                                           start_ts, commit_ts)
-                           << ", get data failed, key: " << lock_info.key() << ", start_ts: " << start_ts
-                           << ", status: " << ret.error_str() << ", lock_info: " << lock_info.ShortDebugString();
-        }
+                           << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
+                           << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
+
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
       }
 
-      {
-        pb::common::KeyValue kv;
-        std::string write_key = mvcc::Codec::EncodeKey(lock_info.key(), commit_ts);
-        kv.set_key(write_key);
+      // no committed and no rollbacked, there may be BUG
+      auto *txn_not_found = txn_result->mutable_txn_not_found();
+      txn_not_found->set_start_ts(start_ts);
+      txn_not_found->set_key(key);
 
-        pb::store::WriteInfo write_info;
-        write_info.set_start_ts(start_ts);
-        write_info.set_op(lock_info.lock_type());
-        if (!lock_info.short_value().empty()) {
-          write_info.set_short_value(data_value);
-        }
-        kv.set_value(write_info.SerializeAsString());
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                      commit_ts)
+                       << ", no committed and no rollbacked, there may be BUG, key: " << Helper::StringToHex(key)
+                       << ", start_ts: " << start_ts << ", write_info: " << write_info.ShortDebugString();
 
-        kv_puts_write.push_back(kv);
-
-        if (region->Type() == pb::common::INDEX_REGION &&
-            region->Definition().index_parameter().has_vector_index_parameter()) {
-          if (lock_info.lock_type() == pb::store::Op::Put) {
-            pb::common::VectorWithId vector_with_id;
-            auto ret = vector_with_id.ParseFromString(data_value);
-            if (!ret) {
-              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                              start_ts, commit_ts)
-                               << ", parse vector_with_id failed, key: " << Helper::StringToHex(lock_info.key())
-                               << ", data_value: " << Helper::StringToHex(data_value)
-                               << ", lock_info: " << lock_info.ShortDebugString();
-              return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
-            }
-
-            *(vector_add->add_vectors()) = vector_with_id;
-          } else if (lock_info.lock_type() == pb::store::Op::Delete) {
-            auto vector_id = VectorCodec::UnPackageVectorId(lock_info.key());
-            if (vector_id == 0) {
-              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                              start_ts, commit_ts)
-                               << ", decode vector_id failed, key: " << Helper::StringToHex(lock_info.key())
-                               << ", lock_info: " << lock_info.ShortDebugString();
-            }
-
-            vector_del->add_ids(vector_id);
-          } else {
-            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                            start_ts, commit_ts)
-                             << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
-                             << ", lock_info: " << lock_info.ShortDebugString();
-          }
-        }
-
-        if (region->Type() == pb::common::DOCUMENT_REGION &&
-            region->Definition().index_parameter().has_document_index_parameter()) {
-          if (lock_info.lock_type() == pb::store::Op::Put) {
-            pb::common::DocumentWithId document_with_id;
-            auto ret = document_with_id.ParseFromString(data_value);
-            if (!ret) {
-              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                              start_ts, commit_ts)
-                               << ", parse document_with_id failed, key: " << Helper::StringToHex(lock_info.key())
-                               << ", data_value: " << Helper::StringToHex(data_value)
-                               << ", lock_info: " << lock_info.ShortDebugString();
-              return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
-            }
-
-            *(document_add->add_documents()) = document_with_id;
-          } else if (lock_info.lock_type() == pb::store::Op::Delete) {
-            auto document_id = DocumentCodec::UnPackageDocumentId(lock_info.key());
-            if (document_id == 0) {
-              DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                              start_ts, commit_ts)
-                               << ", decode document_id failed, key: " << Helper::StringToHex(lock_info.key())
-                               << ", lock_info: " << lock_info.ShortDebugString();
-            }
-
-            document_del->add_ids(document_id);
-          } else {
-            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                            start_ts, commit_ts)
-                             << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
-                             << ", lock_info: " << lock_info.ShortDebugString();
-          }
-        }
-      }
-    }
-
-    if (kv_puts_write.empty() && kv_deletes_lock.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts, commit_ts)
-          << ", kv_puts_write is empty and kv_deletes_lock is empty";
       return butil::Status::OK();
     }
+    // now txn is match, prepare to commit
+    lock_infos.push_back(lock_info);
+  }
 
-    // after all mutations is processed, write into raft engine
-    if (!kv_puts_write.empty()) {
-      auto *write_puts = cf_put_delete->add_puts_with_cf();
-      write_puts->set_cf_name(Constant::kTxnWriteCF);
-      for (auto &kv_put : kv_puts_write) {
-        auto *kv = write_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
-      }
-    }
-
-    if (!kv_deletes_lock.empty()) {
-      auto *lock_dels = cf_put_delete->add_deletes_with_cf();
-      lock_dels->set_cf_name(Constant::kTxnLockCF);
-      for (auto &kv_del : kv_deletes_lock) {
-        lock_dels->add_keys(kv_del);
-      }
-    }
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                      start_ts, commit_ts)
-                       << ", write to raft engine failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
+  auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos, start_ts, commit_ts);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, commit_ts: {}, start_ts: {}", region->Id(), commit_ts,
+                                    start_ts)
+                     << ", do txn commit failed, status: " << ret.error_str();
+    error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    error->set_errmsg(ret.error_str());
     return ret;
   }
 
-  bvar::LatencyRecorder g_txn_check_txn_status_latency("dingo_txn_check_txn_status");
+  return butil::Status::OK();
+}
 
-  butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                                std::shared_ptr<Context> ctx, const std::string &primary_key,
-                                                int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts,
-                                                bool force_sync_commit, bool rollback_if_not_exist) {
-    BvarLatencyGuard bvar_guard(&g_txn_check_txn_status_latency);
+bvar::LatencyRecorder g_txn_do_commit_latency("dingo_txn_do_commit");
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
-                       Helper::StringToHex(primary_key))
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
-        << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts
-        << ", force_sync_commit: " << force_sync_commit << ", rollback_if_not_exist: " << rollback_if_not_exist;
+butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                           std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                           const std::vector<pb::store::LockInfo> &lock_infos, int64_t start_ts,
+                                           int64_t commit_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_commit_latency);
 
-    // we need to do if primay_key is in this region'range in service before apply to raft state machine
-    // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
-    // rollback and return if not expired, return conflict if the lock is not exists, return commited the the lock's
-    // ts is matched, but it is not a primary_key, return PrimaryMismatch
-    // In the read-write conflict scenario, we may need to update the min_commit_ts of the primary_lock to reduce the
-    // read-write confict. The executor will receive MinCommitTSPushed in CheckTxnStatus response, and will add the
-    // lock_ts to Get and Scan requests's context, after this, the read-write conflict will be resolved. And the store
-    // will bypass the lock conflict for the lock_ts. And if the executor commit lock in a commit_ts smaller than the
-    // new min_commit_ts, it will received CommitTsExpired in TxnResultInfo. Executor need to get a new tso from
-    // coordinator, then retry the commit.
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {}", region->Id(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+      << ", lock_infos_size: " << lock_infos.size();
 
-    auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
-                       << ", region is not found, region_id: " << ctx->RegionId();
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
+  // create reader and writer
+  auto reader = raw_engine->Reader();
 
-    // create reader and writer
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id()) << ", init txn_reader failed";
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
 
-    auto *response = dynamic_cast<pb::store::TxnCheckTxnStatusResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", region->Id(), primary_key)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-    auto *txn_result = response->mutable_txn_result();
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
 
-    // get lock info
-    pb::store::LockInfo lock_info;
-    auto ret = txn_reader.GetLockInfo(primary_key, lock_info);
-    if (!ret.ok()) {
-      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, ", region->Id())
-                       << ", get lock info failed, primary_key: " << Helper::StringToHex(primary_key)
-                       << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
-    }
+  // for vector index region, commit to vector index
+  auto *vector_add = cf_put_delete->mutable_vector_add();
+  auto *vector_del = cf_put_delete->mutable_vector_del();
 
-    // if the lock_ts is matched, we will check if we can update the min_commit_ts. The new commit_ts will be the
-    // caller_start_ts.
-    if (lock_info.lock_ts() == lock_ts) {
-      // the lock is exists, check if it is expired, if not expired, return conflict, if expired, do rollback
-      // check if this is a primary key
-      if (lock_info.key() != lock_info.primary_lock()) {
-        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                           << ", primary mismatch, primary_key: " << Helper::StringToHex(primary_key)
-                           << ", lock_ts: " << lock_ts << ", lock_info: " << lock_info.ShortDebugString();
+  // for document index region, commit to document index
+  auto *document_add = cf_put_delete->mutable_document_add();
+  auto *document_del = cf_put_delete->mutable_document_del();
 
-        auto *primary_mismatch = txn_result->mutable_primary_mismatch();
-        *(primary_mismatch->mutable_lock_info()) = lock_info;
-        return butil::Status::OK();
-      }
+  // for every key, check and do commit, if primary key is failed, the whole commit is failed
+  for (const auto &lock_info : lock_infos) {
+    // 1.delete lock from lock_cf
+    { kv_deletes_lock.push_back(mvcc::Codec::EncodeKey(lock_info.key(), Constant::kLockVer)); }
 
-      // for async commit
-      if (lock_info.use_async_commit()) {
-        if (force_sync_commit) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-              << "fallback is set, check_txn_status treats it as a non-async-commit txn"
-              << "primary_key: " << primary_key << ", lock_info: " << lock_info.ShortDebugString()
-              << ", lock_ts: " << lock_ts << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
-        } else {
-          *txn_result->mutable_locked() = lock_info;
-          // async-commit locks can't be resolved until they expire.
-          response->set_lock_ttl(0);
-          return butil::Status::OK();
-        }
-      }
-
-      // for pessimistic lock, we just return lock_info, let executor decide to backoff or unlock
-      if (lock_info.lock_type() == pb::store::Op::Lock) {
-        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                           << ", pessimistic lock, found locked for executor, primary_key: " << primary_key
-                           << ", lock_info: " << lock_info.ShortDebugString() << ", lock_ts: " << lock_ts
-                           << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
-        ;
-        *txn_result->mutable_locked() = lock_info;
-
-        // if the lock is not expired, try to update the min_commit_ts in the next code block, so we cannot return
-        // now.
-
-      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                         << ", invalid lock_type, key: " << lock_info.key() << ", caller_start_ts: " << caller_start_ts
-                         << ", current_ts: " << current_ts << ", lock_info: " << lock_info.ShortDebugString();
-
-        *txn_result->mutable_locked() = lock_info;
-        response->set_action(pb::store::Action::NoAction);
-        response->set_lock_ttl(lock_info.lock_ttl());
-
-        return butil::Status::OK();
-      }
-
-      int64_t current_ms = current_ts >> 18;
-
+    if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-          << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString() << ", current_ms: " << current_ms;
+          << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts, commit_ts)
+          << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
+      continue;
+    }
 
-      if (lock_info.lock_ttl() >= current_ms) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-            << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
-            << ", current_ms: " << current_ms;
+    // 2.put data to write_cf
+    std::string data_value;
+    if (!lock_info.short_value().empty()) {
+      data_value = lock_info.short_value();
+    } else if (lock_info.lock_type() == pb::store::Put) {
+      auto ret = reader->KvGet(Constant::kTxnDataCF, mvcc::Codec::EncodeKey(lock_info.key(), start_ts), data_value);
+      if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                        start_ts, commit_ts)
+                         << ", get data failed, key: " << lock_info.key() << ", start_ts: " << start_ts
+                         << ", status: " << ret.error_str() << ", lock_info: " << lock_info.ShortDebugString();
+      }
+    }
 
-        response->set_lock_ttl(lock_info.lock_ttl());
-        response->set_commit_ts(0);
+    {
+      pb::common::KeyValue kv;
+      std::string write_key = mvcc::Codec::EncodeKey(lock_info.key(), commit_ts);
+      kv.set_key(write_key);
 
-        // check if we need to update the min_commit_ts
-        // for valid lock, we can update min_commit_ts to reduce read-write conflict.
-        if (lock_info.min_commit_ts() < caller_start_ts) {
-          lock_info.set_min_commit_ts(caller_start_ts);
+      pb::store::WriteInfo write_info;
+      write_info.set_start_ts(start_ts);
+      write_info.set_op(lock_info.lock_type());
+      if (!lock_info.short_value().empty()) {
+        write_info.set_short_value(data_value);
+      }
+      kv.set_value(write_info.SerializeAsString());
 
-          auto ret = DoUpdateLock(raft_engine, ctx, lock_info);
-          if (!ret.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                             << ", update lock failed, primary_key: " << Helper::StringToHex(primary_key)
-                             << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
-            error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-            error->set_errmsg(ret.error_str());
-            return ret;
+      kv_puts_write.push_back(kv);
+
+      if (region->Type() == pb::common::INDEX_REGION &&
+          region->Definition().index_parameter().has_vector_index_parameter()) {
+        if (lock_info.lock_type() == pb::store::Op::Put) {
+          pb::common::VectorWithId vector_with_id;
+          auto ret = vector_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                            start_ts, commit_ts)
+                             << ", parse vector_with_id failed, key: " << Helper::StringToHex(lock_info.key())
+                             << ", data_value: " << Helper::StringToHex(data_value)
+                             << ", lock_info: " << lock_info.ShortDebugString();
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
           }
 
-          response->set_action(pb::store::Action::MinCommitTSPushed);
+          *(vector_add->add_vectors()) = vector_with_id;
+        } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+          auto vector_id = VectorCodec::UnPackageVectorId(lock_info.key());
+          if (vector_id == 0) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                            start_ts, commit_ts)
+                             << ", decode vector_id failed, key: " << Helper::StringToHex(lock_info.key())
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
 
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-              << ", update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
-              << ", Action: " << pb::store::Action_Name(pb::store::Action::MinCommitTSPushed);
+          vector_del->add_ids(vector_id);
         } else {
-          response->set_action(pb::store::Action::NoAction);
-
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-              << ", no need to update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
-              << ", Action: " << pb::store::Action_Name(pb::store::Action::NoAction);
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
         }
+      }
 
+      if (region->Type() == pb::common::DOCUMENT_REGION &&
+          region->Definition().index_parameter().has_document_index_parameter()) {
+        if (lock_info.lock_type() == pb::store::Op::Put) {
+          pb::common::DocumentWithId document_with_id;
+          auto ret = document_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                            start_ts, commit_ts)
+                             << ", parse document_with_id failed, key: " << Helper::StringToHex(lock_info.key())
+                             << ", data_value: " << Helper::StringToHex(data_value)
+                             << ", lock_info: " << lock_info.ShortDebugString();
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
+          }
+
+          *(document_add->add_documents()) = document_with_id;
+        } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+          auto document_id = DocumentCodec::UnPackageDocumentId(lock_info.key());
+          if (document_id == 0) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                            start_ts, commit_ts)
+                             << ", decode document_id failed, key: " << Helper::StringToHex(lock_info.key())
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
+
+          document_del->add_ids(document_id);
+        } else {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+      }
+    }
+  }
+
+  if (kv_puts_write.empty() && kv_deletes_lock.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts, commit_ts)
+        << ", kv_puts_write is empty and kv_deletes_lock is empty";
+    return butil::Status::OK();
+  }
+
+  // after all mutations is processed, write into raft engine
+  if (!kv_puts_write.empty()) {
+    auto *write_puts = cf_put_delete->add_puts_with_cf();
+    write_puts->set_cf_name(Constant::kTxnWriteCF);
+    for (auto &kv_put : kv_puts_write) {
+      auto *kv = write_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  if (!kv_deletes_lock.empty()) {
+    auto *lock_dels = cf_put_delete->add_deletes_with_cf();
+    lock_dels->set_cf_name(Constant::kTxnLockCF);
+    for (auto &kv_del : kv_deletes_lock) {
+      lock_dels->add_keys(kv_del);
+    }
+  }
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
+                                    commit_ts)
+                     << ", write to raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+bvar::LatencyRecorder g_txn_check_txn_status_latency("dingo_txn_check_txn_status");
+
+butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                              std::shared_ptr<Context> ctx, const std::string &primary_key,
+                                              int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts,
+                                              bool force_sync_commit, bool rollback_if_not_exist) {
+  BvarLatencyGuard bvar_guard(&g_txn_check_txn_status_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
+                     Helper::StringToHex(primary_key))
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
+      << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts
+      << ", force_sync_commit: " << force_sync_commit << ", rollback_if_not_exist: " << rollback_if_not_exist;
+
+  // we need to do if primay_key is in this region'range in service before apply to raft state machine
+  // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
+  // rollback and return if not expired, return conflict if the lock is not exists, return commited the the lock's
+  // ts is matched, but it is not a primary_key, return PrimaryMismatch
+  // In the read-write conflict scenario, we may need to update the min_commit_ts of the primary_lock to reduce the
+  // read-write confict. The executor will receive MinCommitTSPushed in CheckTxnStatus response, and will add the
+  // lock_ts to Get and Scan requests's context, after this, the read-write conflict will be resolved. And the store
+  // will bypass the lock conflict for the lock_ts. And if the executor commit lock in a commit_ts smaller than the
+  // new min_commit_ts, it will received CommitTsExpired in TxnResultInfo. Executor need to get a new tso from
+  // coordinator, then retry the commit.
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  // create reader and writer
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id()) << ", init txn_reader failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  auto *response = dynamic_cast<pb::store::TxnCheckTxnStatusResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", region->Id(), primary_key)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  // get lock info
+  pb::store::LockInfo lock_info;
+  auto ret = txn_reader.GetLockInfo(primary_key, lock_info);
+  if (!ret.ok()) {
+    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, ", region->Id())
+                     << ", get lock info failed, primary_key: " << Helper::StringToHex(primary_key)
+                     << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
+  }
+
+  // if the lock_ts is matched, we will check if we can update the min_commit_ts. The new commit_ts will be the
+  // caller_start_ts.
+  if (lock_info.lock_ts() == lock_ts) {
+    // the lock is exists, check if it is expired, if not expired, return conflict, if expired, do rollback
+    // check if this is a primary key
+    if (lock_info.key() != lock_info.primary_lock()) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                         << ", primary mismatch, primary_key: " << Helper::StringToHex(primary_key)
+                         << ", lock_ts: " << lock_ts << ", lock_info: " << lock_info.ShortDebugString();
+
+      auto *primary_mismatch = txn_result->mutable_primary_mismatch();
+      *(primary_mismatch->mutable_lock_info()) = lock_info;
+      return butil::Status::OK();
+    }
+
+    // for async commit
+    if (lock_info.use_async_commit()) {
+      if (force_sync_commit) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+            << "fallback is set, check_txn_status treats it as a non-async-commit txn"
+            << "primary_key: " << primary_key << ", lock_info: " << lock_info.ShortDebugString()
+            << ", lock_ts: " << lock_ts << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+      } else {
+        *txn_result->mutable_locked() = lock_info;
+        // async-commit locks can't be resolved until they expire.
+        response->set_lock_ttl(0);
         return butil::Status::OK();
       }
+    }
 
+    // for pessimistic lock, we just return lock_info, let executor decide to backoff or unlock
+    if (lock_info.lock_type() == pb::store::Op::Lock) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                         << ", pessimistic lock, found locked for executor, primary_key: " << primary_key
+                         << ", lock_info: " << lock_info.ShortDebugString() << ", lock_ts: " << lock_ts
+                         << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+      ;
+      *txn_result->mutable_locked() = lock_info;
+
+      // if the lock is not expired, try to update the min_commit_ts in the next code block, so we cannot return
+      // now.
+
+    } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+               lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                       << ", invalid lock_type, key: " << lock_info.key() << ", caller_start_ts: " << caller_start_ts
+                       << ", current_ts: " << current_ts << ", lock_info: " << lock_info.ShortDebugString();
+
+      *txn_result->mutable_locked() = lock_info;
+      response->set_action(pb::store::Action::NoAction);
+      response->set_lock_ttl(lock_info.lock_ttl());
+
+      return butil::Status::OK();
+    }
+
+    int64_t current_ms = current_ts >> 18;
+
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+        << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString() << ", current_ms: " << current_ms;
+
+    if (lock_info.lock_ttl() >= current_ms) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
           << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-          << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
+          << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
           << ", current_ms: " << current_ms;
 
-      // lock is expired, do rollback
-      std::vector<std::string> keys_to_rollback_with_data;
-      std::vector<std::string> keys_to_rollback_without_data;
-      std::vector<std::string> keys_miss_lock_to_rollback;
-      if (lock_info.short_value().empty()) {
-        keys_to_rollback_with_data.push_back(primary_key);
+      response->set_lock_ttl(lock_info.lock_ttl());
+      response->set_commit_ts(0);
+
+      // check if we need to update the min_commit_ts
+      // for valid lock, we can update min_commit_ts to reduce read-write conflict.
+      if (lock_info.min_commit_ts() < caller_start_ts) {
+        lock_info.set_min_commit_ts(caller_start_ts);
+
+        auto ret = DoUpdateLock(raft_engine, ctx, lock_info);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                           << ", update lock failed, primary_key: " << Helper::StringToHex(primary_key)
+                           << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
+          error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+          error->set_errmsg(ret.error_str());
+          return ret;
+        }
+
+        response->set_action(pb::store::Action::MinCommitTSPushed);
+
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+            << ", update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
+            << ", Action: " << pb::store::Action_Name(pb::store::Action::MinCommitTSPushed);
       } else {
-        keys_to_rollback_without_data.push_back(primary_key);
-      }
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                      << ", do rollback, primary_key: " << Helper::StringToHex(primary_key) << ", lock_ts: " << lock_ts
-                      << ", lock_info: " << lock_info.ShortDebugString();
-      auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
-                            keys_miss_lock_to_rollback, lock_ts);
-      if (!ret.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                         << ", rollback failed, primary_key: " << Helper::StringToHex(primary_key)
-                         << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
-        return ret;
+        response->set_action(pb::store::Action::NoAction);
+
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+            << ", no need to update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
+            << ", Action: " << pb::store::Action_Name(pb::store::Action::NoAction);
       }
 
+      return butil::Status::OK();
+    }
+
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+        << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
+        << ", current_ms: " << current_ms;
+
+    // lock is expired, do rollback
+    std::vector<std::string> keys_to_rollback_with_data;
+    std::vector<std::string> keys_to_rollback_without_data;
+    std::vector<std::string> keys_miss_lock_to_rollback;
+    if (lock_info.short_value().empty()) {
+      keys_to_rollback_with_data.push_back(primary_key);
+    } else {
+      keys_to_rollback_without_data.push_back(primary_key);
+    }
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                    << ", do rollback, primary_key: " << Helper::StringToHex(primary_key) << ", lock_ts: " << lock_ts
+                    << ", lock_info: " << lock_info.ShortDebugString();
+    auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                          keys_miss_lock_to_rollback, lock_ts);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                       << ", rollback failed, primary_key: " << Helper::StringToHex(primary_key)
+                       << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
+      return ret;
+    }
+
+    response->set_lock_ttl(0);
+    response->set_commit_ts(0);
+    response->set_action(::dingodb::pb::store::Action::TTLExpireRollback);
+    return butil::Status::OK();
+  } else {
+    // the lock is not exists, check if it is rollbacked or committed
+    // try to get if there is a rollback to lock_ts
+    pb::store::WriteInfo write_info;
+    auto ret1 = txn_reader.GetRollbackInfo(lock_ts, primary_key, write_info);
+    if (!ret1.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, ", region->Id())
+                       << ", get rollback info failed, primary_key: " << Helper::StringToHex(primary_key)
+                       << ", lock_ts: " << lock_ts << ", status: " << ret1.error_str();
+    }
+
+    if (write_info.start_ts() == lock_ts) {
+      // rollback, return rollback
       response->set_lock_ttl(0);
       response->set_commit_ts(0);
-      response->set_action(::dingodb::pb::store::Action::TTLExpireRollback);
+      response->set_action(pb::store::Action::LockNotExistRollback);
       return butil::Status::OK();
-    } else {
-      // the lock is not exists, check if it is rollbacked or committed
-      // try to get if there is a rollback to lock_ts
-      pb::store::WriteInfo write_info;
-      auto ret1 = txn_reader.GetRollbackInfo(lock_ts, primary_key, write_info);
-      if (!ret1.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, ", region->Id())
-                         << ", get rollback info failed, primary_key: " << Helper::StringToHex(primary_key)
-                         << ", lock_ts: " << lock_ts << ", status: " << ret1.error_str();
-      }
+    }
 
-      if (write_info.start_ts() == lock_ts) {
-        // rollback, return rollback
+    // if there is not a rollback to lock_ts, try to get the commit_ts
+    int64_t commit_ts = 0;
+    auto ret2 = txn_reader.GetWriteInfo(lock_ts, Constant::kMaxVer, lock_ts, primary_key, false, true, true, write_info,
+                                        commit_ts);
+    if (!ret2.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                       << ", get write info failed, primary_key: " << Helper::StringToHex(primary_key)
+                       << ", lock_ts: " << lock_ts << ", status: " << ret2.error_str();
+    }
+
+    if (commit_ts == 0) {
+      if (rollback_if_not_exist) {
+        auto ret3 = MarkRollBackOnMissingLock(raw_engine, raft_engine, ctx, primary_key, lock_ts);
+        if (!ret3.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
+                           << ", MarkRollBackOnMissingLock failed";
+          return butil::Status(pb::error::Errno::EINTERNAL, "MarkRollBackOnMissingLock failed");
+        }
         response->set_lock_ttl(0);
         response->set_commit_ts(0);
         response->set_action(pb::store::Action::LockNotExistRollback);
         return butil::Status::OK();
       }
 
+      // it seems there is a lock previously exists, but it is not committed, and there is no rollback, there must
+      // be some error, return TxnNotFound
+      auto *txn_not_found = txn_result->mutable_txn_not_found();
+      txn_not_found->set_primary_key(primary_key);
+      txn_not_found->set_start_ts(lock_ts);
+      DINGO_LOG(ERROR)
+          << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+          << ", cannot found the transaction, maybe some error ocurred, return txn_not_found, primary_key: "
+          << Helper::StringToHex(primary_key) << ", lock_ts: " << lock_ts
+          << ", lock_info: " << lock_info.ShortDebugString();
+      return butil::Status::OK();
+    }
+
+    // commit, return committed
+    response->set_lock_ttl(0);
+    response->set_commit_ts(commit_ts);
+    response->set_action(pb::store::Action::LockNotExistDoNothing);
+    return butil::Status::OK();
+  }
+}
+
+bvar::LatencyRecorder g_txn_batch_rollback_latency("dingo_txn_batch_rollback");
+
+butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                             std::shared_ptr<Context> ctx, int64_t start_ts,
+                                             const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_batch_rollback_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_rollback_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size()
+                     << ", keys.size() > FLAGS_max_rollback_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "rollback keys.size() > FLAGS_max_rollback_count");
+  }
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  // create reader and writer
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+
+  auto *response = dynamic_cast<pb::store::TxnBatchRollbackResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", region->Id(), start_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  std::vector<std::string> keys_to_rollback;
+
+  // if keys is not empty, we only do resolve lock for these keys
+  if (keys.empty()) {
+    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback, ", region->Id()) << ", nothing to do";
+    return butil::Status::OK();
+  }
+
+  std::vector<std::string> keys_to_rollback_with_data;
+  std::vector<std::string> keys_to_rollback_without_data;
+  std::vector<std::string> keys_miss_lock_to_rollback;
+  for (const auto &key : keys) {
+    pb::store::LockInfo lock_info;
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                       << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                       << ", status: " << ret.error_str();
+    }
+
+    // when concurrency prewrite, prewrite secondary key success,but prewrite primary meet write conflict,rollback
+    // transaction,primary key lock not exist. we need record rollback for primary key for speeding up transaction
+    // conflict handling.
+    if (lock_info.primary_lock().empty()) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback", region->Id())
+                      << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
+                      << ", start_ts: " << start_ts;
+
+      // the lock is not exists, check if it is rollbacked or committed
+      // try to get if there is a rollback to lock_ts
+      pb::store::WriteInfo write_info;
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                         << ", get rollback info failed, key: " << Helper::StringToHex(key)
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
+
+      if (write_info.start_ts() == start_ts) {
+        // has been rollbacked.
+        continue;
+      }
+
       // if there is not a rollback to lock_ts, try to get the commit_ts
       int64_t commit_ts = 0;
-      auto ret2 = txn_reader.GetWriteInfo(lock_ts, Constant::kMaxVer, lock_ts, primary_key, false, true, true,
-                                          write_info, commit_ts);
+      auto ret2 =
+          txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, start_ts, key, false, true, true, write_info, commit_ts);
       if (!ret2.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                         << ", get write info failed, primary_key: " << Helper::StringToHex(primary_key)
-                         << ", lock_ts: " << lock_ts << ", status: " << ret2.error_str();
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback,", region->Id())
+                         << ", get write info failed, key: " << Helper::StringToHex(key) << ", lock_ts: " << start_ts
+                         << ", status: " << ret2.error_str();
       }
 
       if (commit_ts == 0) {
-        if (rollback_if_not_exist) {
-          auto ret3 = MarkRollBackOnMissingLock(raw_engine, raft_engine, ctx, primary_key, lock_ts);
-          if (!ret3.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
-                             << ", MarkRollBackOnMissingLock failed";
-            return butil::Status(pb::error::Errno::EINTERNAL, "MarkRollBackOnMissingLock failed");
-          }
-          response->set_lock_ttl(0);
-          response->set_commit_ts(0);
-          response->set_action(pb::store::Action::LockNotExistRollback);
-          return butil::Status::OK();
-        }
-
-        // it seems there is a lock previously exists, but it is not committed, and there is no rollback, there must
-        // be some error, return TxnNotFound
-        auto *txn_not_found = txn_result->mutable_txn_not_found();
-        txn_not_found->set_primary_key(primary_key);
-        txn_not_found->set_start_ts(lock_ts);
-        DINGO_LOG(ERROR)
-            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-            << ", cannot found the transaction, maybe some error ocurred, return txn_not_found, primary_key: "
-            << Helper::StringToHex(primary_key) << ", lock_ts: " << lock_ts
-            << ", lock_info: " << lock_info.ShortDebugString();
-        return butil::Status::OK();
+        keys_miss_lock_to_rollback.push_back(key);
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback,start_ts:{} key:{} MarkRollBackOnMissingLock.",
+                                       region->Id(), start_ts, Helper::StringToHex(key));
       }
+      continue;
+    }
 
-      // commit, return committed
-      response->set_lock_ttl(0);
-      response->set_commit_ts(commit_ts);
-      response->set_action(pb::store::Action::LockNotExistDoNothing);
+    if (lock_info.lock_ts() != start_ts) {
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                         << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
+                         << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+
+      // it's not a legal rollback, return lock_info
+      auto *locked = txn_result->mutable_locked();
+      *locked = lock_info;
       return butil::Status::OK();
+    }
+
+    // if the lock is a pessimistic lock, can't do rollback
+    if (lock_info.lock_type() == pb::store::Op::Lock) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                       << ", pessimistic lock, can't do rollback, key: " << Helper::StringToHex(key)
+                       << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
+
+      // it's not a legal rollback, return lock_info
+      auto *locked = txn_result->mutable_locked();
+      *locked = lock_info;
+      return butil::Status::OK();
+    } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+               lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                       << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
+                       << ", lock_info: " << lock_info.ShortDebugString();
+      *txn_result->mutable_locked() = lock_info;
+      return butil::Status::OK();
+    }
+
+    if (lock_info.short_value().empty()) {
+      keys_to_rollback_with_data.push_back(key);
+    } else {
+      keys_to_rollback_without_data.push_back(key);
     }
   }
 
-  bvar::LatencyRecorder g_txn_batch_rollback_latency("dingo_txn_batch_rollback");
+  // do rollback
+  auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                        keys_miss_lock_to_rollback, start_ts);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                     << ", rollback failed, status: " << ret.error_str();
+    return ret;
+  }
 
-  butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                               std::shared_ptr<Context> ctx, int64_t start_ts,
-                                               const std::vector<std::string> &keys) {
-    BvarLatencyGuard bvar_guard(&g_txn_batch_rollback_latency);
+  return butil::Status::OK();
+}
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+bvar::LatencyRecorder g_txn_do_rollback_latency("dingo_txn_do_rollback");
 
-    if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_rollback_count)) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size()
-                       << ", keys.size() > FLAGS_max_rollback_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "rollback keys.size() > FLAGS_max_rollback_count");
+// DoRollback
+butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
+                                          std::shared_ptr<Context> ctx,
+                                          std::vector<std::string> &keys_to_rollback_with_data,
+                                          std::vector<std::string> &keys_to_rollback_without_data,
+                                          std::vector<std::string> &keys_miss_lock_to_rollback, int64_t start_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << "[txn]Rollback start_ts: " << start_ts << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
+      << ", keys_count_without_data: " << keys_to_rollback_without_data.size()
+      << ", keys_miss_lock_to_rollback:" << keys_miss_lock_to_rollback.size();
+
+  if (keys_to_rollback_without_data.empty() && keys_to_rollback_with_data.empty() &&
+      keys_miss_lock_to_rollback.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
+    return butil::Status::OK();
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+  std::vector<std::string> kv_deletes_data;
+
+  for (const auto &key : keys_to_rollback_without_data) {
+    // delete lock
+    kv_deletes_lock.emplace_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
+
+    // add write
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Rollback);
+
+    pb::common::KeyValue kv;
+    kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
+    kv.set_value(write_info.SerializeAsString());
+    kv_puts_write.emplace_back(kv);
+  }
+
+  for (const auto &key : keys_to_rollback_with_data) {
+    // delete lock
+    kv_deletes_lock.emplace_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
+
+    // delete data
+    kv_deletes_data.emplace_back(mvcc::Codec::EncodeKey(key, start_ts));
+
+    // add write
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Rollback);
+
+    pb::common::KeyValue kv;
+    kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
+    kv.set_value(write_info.SerializeAsString());
+    kv_puts_write.emplace_back(kv);
+  }
+
+  for (const auto &key : keys_miss_lock_to_rollback) {
+    // add write
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Rollback);
+
+    pb::common::KeyValue kv;
+    kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
+    kv.set_value(write_info.SerializeAsString());
+    kv_puts_write.emplace_back(kv);
+  }
+
+  if (kv_puts_write.empty() && kv_deletes_lock.empty() && kv_deletes_data.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
+    return butil::Status::OK();
+  }
+
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  if (!kv_puts_write.empty()) {
+    auto *write_puts = cf_put_delete->add_puts_with_cf();
+    write_puts->set_cf_name(Constant::kTxnWriteCF);
+    for (auto &kv_put : kv_puts_write) {
+      auto *kv = write_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  if (!kv_deletes_lock.empty()) {
+    auto *lock_dels = cf_put_delete->add_deletes_with_cf();
+    lock_dels->set_cf_name(Constant::kTxnLockCF);
+    for (auto &key_del : kv_deletes_lock) {
+      lock_dels->add_keys(key_del);
+    }
+  }
+
+  if (!kv_deletes_data.empty()) {
+    auto *data_dels = cf_put_delete->add_deletes_with_cf();
+    data_dels->set_cf_name(Constant::kTxnDataCF);
+    for (auto &key_del : kv_deletes_data) {
+      data_dels->add_keys(key_del);
+    }
+  }
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << "[txn]Rollback failed, start_ts: " << start_ts << ", error_code: " << ret.error_code()
+                     << ", error_msg: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+// MarkRollBackOnMissingLock
+butil::Status TxnEngineHelper::MarkRollBackOnMissingLock(RawEnginePtr /*raw_engine*/,
+                                                         std::shared_ptr<Engine> raft_engine,
+                                                         std::shared_ptr<Context> ctx, std::string primary_key,
+                                                         int64_t start_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]MarkRollBackOnMissingLock start_ts: " << start_ts
+                                                        << ", primary_key: " << Helper::StringToHex(primary_key);
+
+  // add write
+  pb::store::WriteInfo write_info;
+  write_info.set_start_ts(start_ts);
+  write_info.set_op(::dingodb::pb::store::Op::Rollback);
+
+  pb::common::KeyValue kv_put;
+  kv_put.set_key(mvcc::Codec::EncodeKey(primary_key, start_ts));
+  kv_put.set_value(write_info.SerializeAsString());
+
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  auto *write_puts = cf_put_delete->add_puts_with_cf();
+  write_puts->set_cf_name(Constant::kTxnWriteCF);
+  auto *kv = write_puts->add_kvs();
+  kv->set_key(kv_put.key());
+  kv->set_value(kv_put.value());
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << "[txn]MarkRollBackOnMissingLock failed, start_ts: " << start_ts
+                     << ", error_code: " << ret.error_code() << ", error_msg: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+bvar::LatencyRecorder g_txn_check_secondary_locks_latency("dingo_txn_check_secondary_locks");
+
+/// Check secondary locks of an async commit transaction.
+///
+/// If all prewritten locks exist, the lock information is returned.
+/// Otherwise, it returns the commit timestamp of the transaction.
+butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                      std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                      int64_t start_ts, const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_check_secondary_locks_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size()
+                     << ", keys.size() > FLAGS_max_resolve_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "resolve keys.size() > FLAGS_max_resolve_count");
+  }
+
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+
+  auto *response = dynamic_cast<pb::store::TxnCheckSecondaryLocksResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", region->Id(), start_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  for (const auto &key : keys) {
+    pb::store::LockInfo lock_info;
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks", region->Id())
+                       << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                       << ", status: " << ret.error_str();
     }
 
-    auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
-                       << ", region is not found, region_id: " << ctx->RegionId();
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
+    if (lock_info.lock_ts() == start_ts) {
+      if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+          lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_Ts: {}", region->Id(), start_ts)
+                         << ", meet a invalid lock_type, there must BUG in executor, key: " << Helper::StringToHex(key)
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+      response->add_locks()->Swap(&lock_info);
+      continue;
+    } else {
+      // the lock is not exists, check if it is rollbacked or committed
+      // try to get if there is a rollback to lock_ts
+      pb::store::WriteInfo write_info;
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks, ", region->Id())
+                         << ", get rollback info failed, primary_key: " << Helper::StringToHex(key)
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
 
-    // create reader and writer
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
+      if (write_info.start_ts() == start_ts) {
+        // rollback, return rollback
+        response->set_commit_ts(0);
+        return butil::Status::OK();
+      }
 
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
+      // if there is not a rollback to lock_ts, try to get the commit_ts
+      int64_t commit_ts = 0;
+      auto ret2 =
+          txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, start_ts, key, false, true, true, write_info, commit_ts);
+      if (!ret2.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
+                         << ", get write info failed, secondary_key: " << Helper::StringToHex(key)
+                         << ", lock_ts: " << start_ts << ", status: " << ret2.error_str();
+      }
 
-    auto *response = dynamic_cast<pb::store::TxnBatchRollbackResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", region->Id(), start_ts)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-    auto *txn_result = response->mutable_txn_result();
+      if (commit_ts == 0) {
+        auto ret3 = MarkRollBackOnMissingLock(raw_engine, raft_engine, ctx, key, start_ts);
+        if (!ret3.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
+                           << ", MarkRollBackOnMissingLock failed";
+          return butil::Status(pb::error::Errno::EINTERNAL, "MarkRollBackOnMissingLock failed");
+        }
 
-    std::vector<std::string> keys_to_rollback;
-
-    // if keys is not empty, we only do resolve lock for these keys
-    if (keys.empty()) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback, ", region->Id()) << ", nothing to do";
+        auto *txn_not_found = txn_result->mutable_txn_not_found();
+        txn_not_found->set_primary_key(key);
+        txn_not_found->set_start_ts(start_ts);
+        DINGO_LOG(WARNING)
+            << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
+            << ", cannot found the transaction, mark rollback on missing lock, return txn_not_found, secondary_key: "
+            << Helper::StringToHex(key) << ", start_ts: " << start_ts
+            << ", lock_info: " << lock_info.ShortDebugString();
+        return butil::Status::OK();
+      }
+      // commit, return committed
+      response->set_commit_ts(commit_ts);
       return butil::Status::OK();
     }
+  }
+  return butil::Status::OK();
+}
 
+bvar::LatencyRecorder g_txn_resolve_lock_latency("dingo_txn_resolve_lock");
+
+butil::Status TxnEngineHelper::BatchResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                const std::map<int64_t, int64_t> &txn_infos,
+                                                pb::store::TxnResultInfo *txn_result) {
+  if (txn_infos.empty()) return butil::Status::OK();
+
+  for (const auto &[start_ts, commit_ts] : txn_infos) {
+    std::vector<std::string> keys_to_rollback;
+
+    std::vector<pb::store::LockInfo> lock_infos_to_commit;
     std::vector<std::string> keys_to_rollback_with_data;
     std::vector<std::string> keys_to_rollback_without_data;
     std::vector<std::string> keys_miss_lock_to_rollback;
+
+    auto stream = Stream::New(FLAGS_stream_message_max_limit_size);
+    std::vector<pb::store::LockInfo> tmp_lock_infos;
+    bool has_more = false;
+    std::string end_key{};
+    auto ret = ScanLockInfo(stream, raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos,
+                            has_more, end_key);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
+                       << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+    }
+
+    for (const auto &lock_info : tmp_lock_infos) {
+      // if the lock is a pessimistic lock, can't do resolvelock
+      if (lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock,", region->Id())
+                         << ", pessimistic lock, can't do resolvelock, key: " << lock_info.key()
+                         << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock,", region->Id())
+                         << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+
+      // prepare to do rollback or commit
+      const std::string &key = lock_info.key();
+      if (commit_ts > 0) {
+        // do commit
+        lock_infos_to_commit.push_back(lock_info);
+      } else {
+        if (lock_info.short_value().empty()) {
+          keys_to_rollback_with_data.push_back(key);
+        } else {
+          keys_to_rollback_without_data.push_back(key);
+        }
+      }
+    }
+
+    if (!lock_infos_to_commit.empty()) {
+      auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
+                         << ", do txn commit failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+        return ret;
+      }
+    }
+
+    if (!keys_to_rollback_with_data.empty() || !keys_to_rollback_without_data.empty()) {
+      for (auto const &key : keys_to_rollback_with_data) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
+                        << ", do rollback with data, start_ts: " << start_ts;
+      }
+      for (auto const &key : keys_to_rollback_without_data) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
+                        << ", do rollback without data, start_ts: " << start_ts;
+      }
+      auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                            keys_miss_lock_to_rollback, start_ts);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
+                         << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+        return ret;
+      }
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                           std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                                           const std::vector<std::string> &keys,
+                                           const std::map<int64_t, int64_t> &txn_infos) {
+  BvarLatencyGuard bvar_guard(&g_txn_resolve_lock_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+      << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+                     << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_resolve_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "resolve keys.size() > FLAGS_max_resolve_count");
+  }
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  // if commit_ts = 0, do rollback else do commit
+  // scan lock_cf to search if transaction with start_ts is exists, if exists, do rollback or commit
+  // if not exists, do nothing
+  // create reader and writer
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+
+  auto *response = dynamic_cast<pb::store::TxnResolveLockResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", region->Id(), start_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  std::vector<std::string> keys_to_rollback;
+
+  std::vector<pb::store::LockInfo> lock_infos_to_commit;
+  std::vector<std::string> keys_to_rollback_with_data;
+  std::vector<std::string> keys_to_rollback_without_data;
+  std::vector<std::string> keys_miss_lock_to_rollback;
+
+  // if keys is not empty, we only do resolve lock for these keys
+  if (!keys.empty()) {
+    if (commit_ts < 0) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                       << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                       << ", commit_ts: " << commit_ts;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts < 0");
+    }
+
+    if (commit_ts > 0 && commit_ts <= start_ts) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                       << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                       << ", commit_ts: " << commit_ts;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
+    }
+
     for (const auto &key : keys) {
       pb::store::LockInfo lock_info;
       auto ret = txn_reader.GetLockInfo(key, lock_info);
       if (!ret.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                          << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
                          << ", status: " << ret.error_str();
       }
 
-      // when concurrency prewrite, prewrite secondary key success,but prewrite primary meet write conflict,rollback
-      // transaction,primary key lock not exist. we need record rollback for primary key for speeding up transaction
-      // conflict handling.
+      // if lock is not exist, nothing to do
       if (lock_info.primary_lock().empty()) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback", region->Id())
-                        << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
-                        << ", start_ts: " << start_ts;
-
-        // the lock is not exists, check if it is rollbacked or committed
-        // try to get if there is a rollback to lock_ts
-        pb::store::WriteInfo write_info;
-        auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
-        if (!ret1.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
-                           << ", get rollback info failed, key: " << Helper::StringToHex(key)
-                           << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
-        }
-
-        if (write_info.start_ts() == start_ts) {
-          // has been rollbacked.
-          continue;
-        }
-
-        // if there is not a rollback to lock_ts, try to get the commit_ts
-        int64_t commit_ts = 0;
-        auto ret2 = txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, start_ts, key, false, true, true, write_info,
-                                            commit_ts);
-        if (!ret2.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback,", region->Id())
-                           << ", get write info failed, key: " << Helper::StringToHex(key) << ", lock_ts: " << start_ts
-                           << ", status: " << ret2.error_str();
-        }
-
-        if (commit_ts == 0) {
-          keys_miss_lock_to_rollback.push_back(key);
-          DINGO_LOG(INFO) << fmt::format(
-              "[txn][region({})] BatchRollback,start_ts:{} key:{} MarkRollBackOnMissingLock.", region->Id(), start_ts,
-              Helper::StringToHex(key));
-        }
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                           << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
+                           << ", start_ts: " << start_ts;
+        // txn_result->mutable_txn_not_found()->set_start_ts(start_ts);
         continue;
       }
 
       if (lock_info.lock_ts() != start_ts) {
-        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                            << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
                            << Helper::StringToHex(key) << ", start_ts: " << start_ts
                            << ", lock_info: " << lock_info.ShortDebugString();
-
-        // it's not a legal rollback, return lock_info
-        auto *locked = txn_result->mutable_locked();
-        *locked = lock_info;
-        return butil::Status::OK();
+        // txn_result->mutable_txn_not_found()->set_start_ts(start_ts);
+        continue;
       }
 
-      // if the lock is a pessimistic lock, can't do rollback
+      // if the lock is a pessimistic lock, can't do resolvelock
       if (lock_info.lock_type() == pb::store::Op::Lock) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
-                         << ", pessimistic lock, can't do rollback, key: " << Helper::StringToHex(key)
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
+                         << ", pessimistic lock, can't do resolvelock, key: " << Helper::StringToHex(key)
                          << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
-
-        // it's not a legal rollback, return lock_info
-        auto *locked = txn_result->mutable_locked();
-        *locked = lock_info;
+        *txn_result->mutable_locked() = lock_info;
         return butil::Status::OK();
       } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
                  lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
@@ -4005,436 +4543,23 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
         return butil::Status::OK();
       }
 
-      if (lock_info.short_value().empty()) {
-        keys_to_rollback_with_data.push_back(key);
+      // prepare to do rollback or commit
+      if (commit_ts > 0) {
+        // do commit
+        lock_infos_to_commit.push_back(lock_info);
       } else {
-        keys_to_rollback_without_data.push_back(key);
-      }
-    }
-
-    // do rollback
-    auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
-                          keys_miss_lock_to_rollback, start_ts);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
-                       << ", rollback failed, status: " << ret.error_str();
-      return ret;
-    }
-
-    return butil::Status::OK();
-  }
-
-  bvar::LatencyRecorder g_txn_do_rollback_latency("dingo_txn_do_rollback");
-
-  // DoRollback
-  butil::Status TxnEngineHelper::DoRollback(
-      RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      std::vector<std::string> & keys_to_rollback_with_data, std::vector<std::string> & keys_to_rollback_without_data,
-      std::vector<std::string> & keys_miss_lock_to_rollback, int64_t start_ts) {
-    BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "[txn]Rollback start_ts: " << start_ts << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
-        << ", keys_count_without_data: " << keys_to_rollback_without_data.size()
-        << ", keys_miss_lock_to_rollback:" << keys_miss_lock_to_rollback.size();
-
-    if (keys_to_rollback_without_data.empty() && keys_to_rollback_with_data.empty() &&
-        keys_miss_lock_to_rollback.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
-      return butil::Status::OK();
-    }
-
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
-    std::vector<std::string> kv_deletes_data;
-
-    for (const auto &key : keys_to_rollback_without_data) {
-      // delete lock
-      kv_deletes_lock.emplace_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
-
-      // add write
-      pb::store::WriteInfo write_info;
-      write_info.set_start_ts(start_ts);
-      write_info.set_op(::dingodb::pb::store::Op::Rollback);
-
-      pb::common::KeyValue kv;
-      kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
-      kv.set_value(write_info.SerializeAsString());
-      kv_puts_write.emplace_back(kv);
-    }
-
-    for (const auto &key : keys_to_rollback_with_data) {
-      // delete lock
-      kv_deletes_lock.emplace_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
-
-      // delete data
-      kv_deletes_data.emplace_back(mvcc::Codec::EncodeKey(key, start_ts));
-
-      // add write
-      pb::store::WriteInfo write_info;
-      write_info.set_start_ts(start_ts);
-      write_info.set_op(::dingodb::pb::store::Op::Rollback);
-
-      pb::common::KeyValue kv;
-      kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
-      kv.set_value(write_info.SerializeAsString());
-      kv_puts_write.emplace_back(kv);
-    }
-
-    for (const auto &key : keys_miss_lock_to_rollback) {
-      // add write
-      pb::store::WriteInfo write_info;
-      write_info.set_start_ts(start_ts);
-      write_info.set_op(::dingodb::pb::store::Op::Rollback);
-
-      pb::common::KeyValue kv;
-      kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
-      kv.set_value(write_info.SerializeAsString());
-      kv_puts_write.emplace_back(kv);
-    }
-
-    if (kv_puts_write.empty() && kv_deletes_lock.empty() && kv_deletes_data.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
-      return butil::Status::OK();
-    }
-
-    // after all mutations is processed, write into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    if (!kv_puts_write.empty()) {
-      auto *write_puts = cf_put_delete->add_puts_with_cf();
-      write_puts->set_cf_name(Constant::kTxnWriteCF);
-      for (auto &kv_put : kv_puts_write) {
-        auto *kv = write_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
-      }
-    }
-
-    if (!kv_deletes_lock.empty()) {
-      auto *lock_dels = cf_put_delete->add_deletes_with_cf();
-      lock_dels->set_cf_name(Constant::kTxnLockCF);
-      for (auto &key_del : kv_deletes_lock) {
-        lock_dels->add_keys(key_del);
-      }
-    }
-
-    if (!kv_deletes_data.empty()) {
-      auto *data_dels = cf_put_delete->add_deletes_with_cf();
-      data_dels->set_cf_name(Constant::kTxnDataCF);
-      for (auto &key_del : kv_deletes_data) {
-        data_dels->add_keys(key_del);
-      }
-    }
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << "[txn]Rollback failed, start_ts: " << start_ts << ", error_code: " << ret.error_code()
-                       << ", error_msg: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
-  }
-
-  // MarkRollBackOnMissingLock
-  butil::Status TxnEngineHelper::MarkRollBackOnMissingLock(
-      RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      std::string primary_key, int64_t start_ts) {
-    BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]MarkRollBackOnMissingLock start_ts: " << start_ts
-                                                          << ", primary_key: " << Helper::StringToHex(primary_key);
-
-    // add write
-    pb::store::WriteInfo write_info;
-    write_info.set_start_ts(start_ts);
-    write_info.set_op(::dingodb::pb::store::Op::Rollback);
-
-    pb::common::KeyValue kv_put;
-    kv_put.set_key(mvcc::Codec::EncodeKey(primary_key, start_ts));
-    kv_put.set_value(write_info.SerializeAsString());
-
-    // after all mutations is processed, write into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    auto *write_puts = cf_put_delete->add_puts_with_cf();
-    write_puts->set_cf_name(Constant::kTxnWriteCF);
-    auto *kv = write_puts->add_kvs();
-    kv->set_key(kv_put.key());
-    kv->set_value(kv_put.value());
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << "[txn]MarkRollBackOnMissingLock failed, start_ts: " << start_ts
-                       << ", error_code: " << ret.error_code() << ", error_msg: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
-  }
-
-  bvar::LatencyRecorder g_txn_check_secondary_locks_latency("dingo_txn_check_secondary_locks");
-
-  /// Check secondary locks of an async commit transaction.
-  ///
-  /// If all prewritten locks exist, the lock information is returned.
-  /// Otherwise, it returns the commit timestamp of the transaction.
-  butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                                        std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                                        int64_t start_ts, const std::vector<std::string> &keys) {
-    BvarLatencyGuard bvar_guard(&g_txn_check_secondary_locks_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
-
-    if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size()
-                       << ", keys.size() > FLAGS_max_resolve_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "resolve keys.size() > FLAGS_max_resolve_count");
-    }
-
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks", region->Id())
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
-
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
-
-    auto *response = dynamic_cast<pb::store::TxnCheckSecondaryLocksResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", region->Id(), start_ts)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-    auto *txn_result = response->mutable_txn_result();
-
-    for (const auto &key : keys) {
-      pb::store::LockInfo lock_info;
-      auto ret = txn_reader.GetLockInfo(key, lock_info);
-      if (!ret.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks", region->Id())
-                         << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
-                         << ", status: " << ret.error_str();
-      }
-
-      if (lock_info.lock_ts() == start_ts) {
-        if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-            lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_Ts: {}", region->Id(), start_ts)
-                           << ", meet a invalid lock_type, there must BUG in executor, key: "
-                           << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        }
-        response->add_locks()->Swap(&lock_info);
-        continue;
-      } else {
-        // the lock is not exists, check if it is rollbacked or committed
-        // try to get if there is a rollback to lock_ts
-        pb::store::WriteInfo write_info;
-        auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
-        if (!ret1.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks, ", region->Id())
-                           << ", get rollback info failed, primary_key: " << Helper::StringToHex(key)
-                           << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
-        }
-
-        if (write_info.start_ts() == start_ts) {
-          // rollback, return rollback
-          response->set_commit_ts(0);
-          return butil::Status::OK();
-        }
-
-        // if there is not a rollback to lock_ts, try to get the commit_ts
-        int64_t commit_ts = 0;
-        auto ret2 = txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, start_ts, key, false, true, true, write_info,
-                                            commit_ts);
-        if (!ret2.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
-                           << ", get write info failed, secondary_key: " << Helper::StringToHex(key)
-                           << ", lock_ts: " << start_ts << ", status: " << ret2.error_str();
-        }
-
-        if (commit_ts == 0) {
-          auto ret3 = MarkRollBackOnMissingLock(raw_engine, raft_engine, ctx, key, start_ts);
-          if (!ret3.ok()) {
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
-                             << ", MarkRollBackOnMissingLock failed";
-            return butil::Status(pb::error::Errno::EINTERNAL, "MarkRollBackOnMissingLock failed");
-          }
-
-          auto *txn_not_found = txn_result->mutable_txn_not_found();
-          txn_not_found->set_primary_key(key);
-          txn_not_found->set_start_ts(start_ts);
-          DINGO_LOG(WARNING)
-              << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
-              << ", cannot found the transaction, mark rollback on missing lock, return txn_not_found, secondary_key: "
-              << Helper::StringToHex(key) << ", start_ts: " << start_ts
-              << ", lock_info: " << lock_info.ShortDebugString();
-          return butil::Status::OK();
-        }
-        // commit, return committed
-        response->set_commit_ts(commit_ts);
-        return butil::Status::OK();
-      }
-    }
-    return butil::Status::OK();
-  }
-
-  bvar::LatencyRecorder g_txn_resolve_lock_latency("dingo_txn_resolve_lock");
-
-  butil::Status TxnEngineHelper::BatchResolveLock(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      store::RegionPtr region, const std::map<int64_t, int64_t> &txn_infos, pb::store::TxnResultInfo *txn_result) {
-    if (txn_infos.empty()) return butil::Status::OK();
-
-    for (const auto &[start_ts, commit_ts] : txn_infos) {
-      std::vector<std::string> keys_to_rollback;
-
-      std::vector<pb::store::LockInfo> lock_infos_to_commit;
-      std::vector<std::string> keys_to_rollback_with_data;
-      std::vector<std::string> keys_to_rollback_without_data;
-      std::vector<std::string> keys_miss_lock_to_rollback;
-
-      auto stream = Stream::New(FLAGS_stream_message_max_limit_size);
-      std::vector<pb::store::LockInfo> tmp_lock_infos;
-      bool has_more = false;
-      std::string end_key{};
-      auto ret = ScanLockInfo(stream, raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos,
-                              has_more, end_key);
-      if (!ret.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
-                         << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-      }
-
-      for (const auto &lock_info : tmp_lock_infos) {
-        // if the lock is a pessimistic lock, can't do resolvelock
-        if (lock_info.lock_type() == pb::store::Op::Lock) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock,", region->Id())
-                           << ", pessimistic lock, can't do resolvelock, key: " << lock_info.key()
-                           << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-                   lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock,", region->Id())
-                           << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
-                           << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        }
-
-        // prepare to do rollback or commit
-        const std::string &key = lock_info.key();
-        if (commit_ts > 0) {
-          // do commit
-          lock_infos_to_commit.push_back(lock_info);
+        // do rollback
+        if (lock_info.short_value().empty()) {
+          keys_to_rollback_with_data.push_back(key);
         } else {
-          if (lock_info.short_value().empty()) {
-            keys_to_rollback_with_data.push_back(key);
-          } else {
-            keys_to_rollback_without_data.push_back(key);
-          }
-        }
-      }
-
-      if (!lock_infos_to_commit.empty()) {
-        auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
-        if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
-                           << ", do txn commit failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-          return ret;
-        }
-      }
-
-      if (!keys_to_rollback_with_data.empty() || !keys_to_rollback_without_data.empty()) {
-        for (auto const &key : keys_to_rollback_with_data) {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
-                          << ", do rollback with data, start_ts: " << start_ts;
-        }
-        for (auto const &key : keys_to_rollback_without_data) {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
-                          << ", do rollback without data, start_ts: " << start_ts;
-        }
-        auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
-                              keys_miss_lock_to_rollback, start_ts);
-        if (!ret.ok()) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
-                           << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-          return ret;
+          keys_to_rollback_without_data.push_back(key);
         }
       }
     }
-    return butil::Status::OK();
   }
-
-  butil::Status TxnEngineHelper::ResolveLock(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, int64_t start_ts,
-      int64_t commit_ts, const std::vector<std::string> &keys, const std::map<int64_t, int64_t> &txn_infos) {
-    BvarLatencyGuard bvar_guard(&g_txn_resolve_lock_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-        << ", keys_size: " << keys.size();
-
-    if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
-                       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                       << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_resolve_count";
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "resolve keys.size() > FLAGS_max_resolve_count");
-    }
-
-    auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                       << ", region is not found, region_id: " << ctx->RegionId();
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
-
-    // if commit_ts = 0, do rollback else do commit
-    // scan lock_cf to search if transaction with start_ts is exists, if exists, do rollback or commit
-    // if not exists, do nothing
-    // create reader and writer
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
-
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    std::vector<std::string> kv_deletes_lock;
-
-    auto *response = dynamic_cast<pb::store::TxnResolveLockResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", region->Id(), start_ts)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-    auto *txn_result = response->mutable_txn_result();
-
-    std::vector<std::string> keys_to_rollback;
-
-    std::vector<pb::store::LockInfo> lock_infos_to_commit;
-    std::vector<std::string> keys_to_rollback_with_data;
-    std::vector<std::string> keys_to_rollback_without_data;
-    std::vector<std::string> keys_miss_lock_to_rollback;
-
-    // if keys is not empty, we only do resolve lock for these keys
-    if (!keys.empty()) {
+  // scan for keys to rollback
+  else {
+    for (const auto &[start_ts, commit_ts] : txn_infos) {
       if (commit_ts < 0) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                          << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
@@ -4448,1428 +4573,1359 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
                          << ", commit_ts: " << commit_ts;
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
       }
-
-      for (const auto &key : keys) {
-        pb::store::LockInfo lock_info;
-        auto ret = txn_reader.GetLockInfo(key, lock_info);
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                           << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
-                           << ", status: " << ret.error_str();
-        }
-
-        // if lock is not exist, nothing to do
-        if (lock_info.primary_lock().empty()) {
-          DINGO_LOG(WARNING) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                             << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
-                             << ", start_ts: " << start_ts;
-          // txn_result->mutable_txn_not_found()->set_start_ts(start_ts);
-          continue;
-        }
-
-        if (lock_info.lock_ts() != start_ts) {
-          DINGO_LOG(WARNING) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                             << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
-                             << Helper::StringToHex(key) << ", start_ts: " << start_ts
-                             << ", lock_info: " << lock_info.ShortDebugString();
-          // txn_result->mutable_txn_not_found()->set_start_ts(start_ts);
-          continue;
-        }
-
-        // if the lock is a pessimistic lock, can't do resolvelock
-        if (lock_info.lock_type() == pb::store::Op::Lock) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
-                           << ", pessimistic lock, can't do resolvelock, key: " << Helper::StringToHex(key)
-                           << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-                   lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
-                           << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
-                           << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        }
-
-        // prepare to do rollback or commit
-        if (commit_ts > 0) {
-          // do commit
-          lock_infos_to_commit.push_back(lock_info);
-        } else {
-          // do rollback
-          if (lock_info.short_value().empty()) {
-            keys_to_rollback_with_data.push_back(key);
-          } else {
-            keys_to_rollback_without_data.push_back(key);
-          }
-        }
-      }
     }
-    // scan for keys to rollback
-    else {
-      for (const auto &[start_ts, commit_ts] : txn_infos) {
-        if (commit_ts < 0) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                           << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
-                           << ", commit_ts: " << commit_ts;
-          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts < 0");
-        }
+    return BatchResolveLock(raw_engine, raft_engine, ctx, region, txn_infos, txn_result);
 
-        if (commit_ts > 0 && commit_ts <= start_ts) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                           << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
-                           << ", commit_ts: " << commit_ts;
-          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
-        }
-      }
-      return BatchResolveLock(raw_engine, raft_engine, ctx, region, txn_infos, txn_result);
+  }  // end scan lock
 
-    }  // end scan lock
-
-    if (!lock_infos_to_commit.empty()) {
-      auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
-      if (!ret.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
-                         << ", do txn commit failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-        return ret;
-      }
+  if (!lock_infos_to_commit.empty()) {
+    auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
+                       << ", do txn commit failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+      return ret;
     }
+  }
 
-    if (!keys_to_rollback_with_data.empty() || !keys_to_rollback_without_data.empty()) {
-      for (auto const &key : keys_to_rollback_with_data) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
-                        << ", do rollback with data, start_ts: " << start_ts;
-      }
-      for (auto const &key : keys_to_rollback_without_data) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
-                        << ", do rollback without data, start_ts: " << start_ts;
-      }
-      auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
-                            keys_miss_lock_to_rollback, start_ts);
-      if (!ret.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
-                         << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-        return ret;
-      }
+  if (!keys_to_rollback_with_data.empty() || !keys_to_rollback_without_data.empty()) {
+    for (auto const &key : keys_to_rollback_with_data) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
+                      << ", do rollback with data, start_ts: " << start_ts;
     }
+    for (auto const &key : keys_to_rollback_without_data) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
+                      << ", do rollback without data, start_ts: " << start_ts;
+    }
+    auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                          keys_miss_lock_to_rollback, start_ts);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
+                       << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+      return ret;
+    }
+  }
 
+  return butil::Status::OK();
+}
+
+bvar::LatencyRecorder g_txn_hearbeat_latency("dingo_txn_heartbeat");
+
+butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                         std::shared_ptr<Context> ctx, const std::string &primary_lock,
+                                         int64_t start_ts, int64_t advise_lock_ttl) {
+  BvarLatencyGuard bvar_guard(&g_txn_hearbeat_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(),
+                     Helper::StringToHex(primary_lock))
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", start_ts: " << start_ts
+      << ", advise_lock_ttl: " << advise_lock_ttl;
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  auto *response = dynamic_cast<pb::store::TxnHeartBeatResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                    Helper::StringToHex(primary_lock))
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  pb::store::LockInfo lock_info;
+  auto ret = txn_reader.GetLockInfo(primary_lock, lock_info);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                    Helper::StringToHex(primary_lock))
+                     << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+    return ret;
+  }
+
+  if (lock_info.primary_lock().empty()) {
+    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                      Helper::StringToHex(primary_lock))
+                       << ", txn_not_found with lock_info empty, primary_lock: " << Helper::StringToHex(primary_lock)
+                       << ", start_ts: " << start_ts;
+
+    auto *txn_not_found = txn_result->mutable_txn_not_found();
+    txn_not_found->set_start_ts(start_ts);
     return butil::Status::OK();
   }
 
-  bvar::LatencyRecorder g_txn_hearbeat_latency("dingo_txn_heartbeat");
-
-  butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                           std::shared_ptr<Context> ctx, const std::string &primary_lock,
-                                           int64_t start_ts, int64_t advise_lock_ttl) {
-    BvarLatencyGuard bvar_guard(&g_txn_hearbeat_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(),
-                       Helper::StringToHex(primary_lock))
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", start_ts: " << start_ts
-        << ", advise_lock_ttl: " << advise_lock_ttl;
-
-    auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat", region->Id())
-                       << ", region is not found, region_id: " << ctx->RegionId();
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
-
-    auto *response = dynamic_cast<pb::store::TxnHeartBeatResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+  if (lock_info.lock_ts() != start_ts) {
+    DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
                                       Helper::StringToHex(primary_lock))
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-    auto *txn_result = response->mutable_txn_result();
+                       << ", txn_not_found with lock_info.lock_ts not equal to start_ts, primary_lock: "
+                       << Helper::StringToHex(primary_lock) << ", start_ts: " << start_ts
+                       << ", lock_info: " << lock_info.ShortDebugString();
 
-    TxnReader txn_reader(raw_engine);
-    auto ret_init = txn_reader.Init();
-    if (!ret_init.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat", region->Id())
-                       << ", init txn_reader failed, status: " << ret_init.error_str();
-      return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
-    }
-
-    pb::store::LockInfo lock_info;
-    auto ret = txn_reader.GetLockInfo(primary_lock, lock_info);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
-                                      Helper::StringToHex(primary_lock))
-                       << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-      return ret;
-    }
-
-    if (lock_info.primary_lock().empty()) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
-                                        Helper::StringToHex(primary_lock))
-                         << ", txn_not_found with lock_info empty, primary_lock: " << Helper::StringToHex(primary_lock)
-                         << ", start_ts: " << start_ts;
-
-      auto *txn_not_found = txn_result->mutable_txn_not_found();
-      txn_not_found->set_start_ts(start_ts);
-      return butil::Status::OK();
-    }
-
-    if (lock_info.lock_ts() != start_ts) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
-                                        Helper::StringToHex(primary_lock))
-                         << ", txn_not_found with lock_info.lock_ts not equal to start_ts, primary_lock: "
-                         << Helper::StringToHex(primary_lock) << ", start_ts: " << start_ts
-                         << ", lock_info: " << lock_info.ShortDebugString();
-
-      auto *txn_not_found = txn_result->mutable_txn_not_found();
-      txn_not_found->set_start_ts(start_ts);
-      return butil::Status::OK();
-    }
-
-    if (lock_info.lock_ttl() >= advise_lock_ttl) {
-      DINGO_LOG(WARNING)
-          << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
-                         Helper::StringToHex(primary_lock))
-          << ", lock_info.lock_ttl greater than advise_lock_ttl, no need to update lock_ttl, lock_info.lock_ttl: "
-          << lock_info.lock_ttl() << ", advise_lock_ttl: " << advise_lock_ttl
-          << ", lock_info: " << lock_info.ShortDebugString();
-      response->set_lock_ttl(lock_info.lock_ttl());
-      return butil::Status::OK();
-    }
-
-    // update lock_info
-    lock_info.set_lock_ttl(advise_lock_ttl);
-
-    // after all mutations is processed, write into raft engine
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-    auto *lock_puts = cf_put_delete->add_puts_with_cf();
-    lock_puts->set_cf_name(Constant::kTxnLockCF);
-    auto *kv_lock = lock_puts->add_kvs();
-    kv_lock->set_key(mvcc::Codec::EncodeKey(primary_lock, Constant::kLockVer));
-    kv_lock->set_value(lock_info.SerializeAsString());
-
-    if (txn_raft_request.ByteSizeLong() == 0) {
-      return butil::Status::OK();
-    }
-
-    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
-                                      Helper::StringToHex(primary_lock))
-                       << ", write failed, start_ts: " << start_ts << ", status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    // return new lock_ttl
-    response->set_lock_ttl(advise_lock_ttl);
-
-    return ret;
+    auto *txn_not_found = txn_result->mutable_txn_not_found();
+    txn_not_found->set_start_ts(start_ts);
+    return butil::Status::OK();
   }
 
-  bvar::LatencyRecorder g_txn_delete_range_latency("dingo_txn_delete_range");
-
-  butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
-                                             std::shared_ptr<Context> ctx, const std::string &start_key,
-                                             const std::string &end_key) {
-    BvarLatencyGuard bvar_guard(&g_txn_delete_range_latency);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] DeleteRange, start_key: {}", ctx->RegionId(), Helper::StringToHex(start_key))
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", end_key: " << end_key;
-
-    auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange", region->Id())
-                       << ", region is not found, region_id: " << ctx->RegionId();
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
-
-    auto *response = dynamic_cast<pb::store::TxnDeleteRangeResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", region->Id(),
-                                      Helper::StringToHex(start_key))
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-    auto *error = response->mutable_error();
-
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *delete_range_request = txn_raft_request.mutable_mvcc_delete_range();
-    delete_range_request->set_start_key(start_key);
-    delete_range_request->set_end_key(end_key);
-
-    if (txn_raft_request.ByteSizeLong() == 0) {
-      return butil::Status::OK();
-    }
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", region->Id(),
-                                      Helper::StringToHex(start_key))
-                       << ", write failed, status: " << ret.error_str();
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-
-    return ret;
+  if (lock_info.lock_ttl() >= advise_lock_ttl) {
+    DINGO_LOG(WARNING)
+        << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), Helper::StringToHex(primary_lock))
+        << ", lock_info.lock_ttl greater than advise_lock_ttl, no need to update lock_ttl, lock_info.lock_ttl: "
+        << lock_info.lock_ttl() << ", advise_lock_ttl: " << advise_lock_ttl
+        << ", lock_info: " << lock_info.ShortDebugString();
+    response->set_lock_ttl(lock_info.lock_ttl());
+    return butil::Status::OK();
   }
 
-  butil::Status TxnEngineHelper::Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                    std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-        << fmt::format("[txn_gc][region({})] Gc, safe_point_ts: {}", ctx->RegionId(), safe_point_ts)
-        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
+  // update lock_info
+  lock_info.set_lock_ttl(advise_lock_ttl);
 
-    store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn_gc][region({})] Gc", region->Id())
-                       << ", region is not found, region_id: " << ctx->RegionId();
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-    }
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  auto *lock_puts = cf_put_delete->add_puts_with_cf();
+  lock_puts->set_cf_name(Constant::kTxnLockCF);
+  auto *kv_lock = lock_puts->add_kvs();
+  kv_lock->set_key(mvcc::Codec::EncodeKey(primary_lock, Constant::kLockVer));
+  kv_lock->set_value(lock_info.SerializeAsString());
 
-    auto *response = dynamic_cast<pb::store::TxnGcResponse *>(ctx->Response());
-    if (response == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[txn_gc][region({})] Gc, safe_point_ts: {}", region->Id(), safe_point_ts)
-                       << ", response is nullptr";
-      return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
-    }
-
-    [[maybe_unused]] auto *error = response->mutable_error();
-
-    std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-    std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
-
-    auto range = region->Range(false);
-
-    auto definition = region->Definition();
-    int64_t tenant_id = definition.tenant_id();
-
-    auto gc_safe_point = gc_safe_point_manager->FindSafePoint(tenant_id);
-
-    return DoGc(raw_engine, raft_engine, ctx, safe_point_ts, gc_safe_point, range.start_key(), range.end_key());
+  if (txn_raft_request.ByteSizeLong() == 0) {
+    return butil::Status::OK();
   }
 
-  butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                      std::shared_ptr<Context> ctx, int64_t safe_point_ts,
-                                      std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
-                                      const std::string &region_end_key) {
-    store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      std::string s = fmt::format("[txn_gc][tenant({})][region({})]  region not found.", gc_safe_point->GetTenantId(),
-                                  ctx->RegionId());
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
-    }
+  ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                    Helper::StringToHex(primary_lock))
+                     << ", write failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
 
-    pb::common::RegionType type = region->Type();
+  // return new lock_ttl
+  response->set_lock_ttl(advise_lock_ttl);
 
-    bool is_txn = region->IsTxn();
+  return ret;
+}
 
-    if (type == pb::common::RegionType::STORE_REGION && is_txn) {
-      return DoGcForStoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                             region_end_key);
-    } else if (type == pb::common::RegionType::STORE_REGION && !is_txn) {
-      return DoGcForStoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                                region_end_key);
-    } else if (type == pb::common::RegionType::INDEX_REGION && is_txn) {
-      return DoGcForIndexTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                             region_end_key);
-    } else if (type == pb::common::RegionType::INDEX_REGION && !is_txn) {
-      return DoGcForIndexNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                                region_end_key);
-    } else if (type == pb::common::RegionType::DOCUMENT_REGION && is_txn) {
-      return DoGcForDocumentTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                                region_end_key);
-    } else if (type == pb::common::RegionType::DOCUMENT_REGION && !is_txn) {
-      return DoGcForDocumentNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                                   region_end_key);
-    }
+bvar::LatencyRecorder g_txn_delete_range_latency("dingo_txn_delete_range");
 
-    std::string s = fmt::format(
-        "[txn_gc][tenant({})][region({})][type({})] Gc invalid region type and txn,  safe_point_ts: {} txn : {}",
-        gc_safe_point->GetTenantId(), region->Id(), pb::common::RegionType_Name(type), safe_point_ts,
-        (is_txn ? "true" : "false"));
+butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
+                                           std::shared_ptr<Context> ctx, const std::string &start_key,
+                                           const std::string &end_key) {
+  BvarLatencyGuard bvar_guard(&g_txn_delete_range_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] DeleteRange, start_key: {}", ctx->RegionId(), Helper::StringToHex(start_key))
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", end_key: " << end_key;
+
+  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  auto *response = dynamic_cast<pb::store::TxnDeleteRangeResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", region->Id(),
+                                    Helper::StringToHex(start_key))
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *delete_range_request = txn_raft_request.mutable_mvcc_delete_range();
+  delete_range_request->set_start_key(start_key);
+  delete_range_request->set_end_key(end_key);
+
+  if (txn_raft_request.ByteSizeLong() == 0) {
+    return butil::Status::OK();
+  }
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", region->Id(),
+                                    Helper::StringToHex(start_key))
+                     << ", write failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+butil::Status TxnEngineHelper::Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                  std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc][region({})] Gc, safe_point_ts: {}", ctx->RegionId(), safe_point_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
+
+  store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn_gc][region({})] Gc", region->Id())
+                     << ", region is not found, region_id: " << ctx->RegionId();
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
+  }
+
+  auto *response = dynamic_cast<pb::store::TxnGcResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn_gc][region({})] Gc, safe_point_ts: {}", region->Id(), safe_point_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+
+  [[maybe_unused]] auto *error = response->mutable_error();
+
+  std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+  std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
+
+  auto range = region->Range(false);
+
+  auto definition = region->Definition();
+  int64_t tenant_id = definition.tenant_id();
+
+  auto gc_safe_point = gc_safe_point_manager->FindSafePoint(tenant_id);
+
+  return DoGc(raw_engine, raft_engine, ctx, safe_point_ts, gc_safe_point, range.start_key(), range.end_key());
+}
+
+butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                    std::shared_ptr<Context> ctx, int64_t safe_point_ts,
+                                    std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
+                                    const std::string &region_end_key) {
+  store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    std::string s = fmt::format("[txn_gc][tenant({})][region({})]  region not found.", gc_safe_point->GetTenantId(),
+                                ctx->RegionId());
     DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
   }
 
-  butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                             std::shared_ptr<Context> ctx, pb::common::RegionType type,
-                                             int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-                                             const std::string &region_start_key, const std::string &region_end_key) {
-    int64_t start_time_ms = Helper::TimestampMs();
-    int64_t end_time_ms = 0;
-    int64_t total_delete_count = 0;
-    int64_t total_iter_count = 0;
-    int64_t region_id = ctx->RegionId();
+  pb::common::RegionType type = region->Type();
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-        "[txn_gc][statics][tenant({})][region({})][type({})][txn] start region start_key: {} end_key: {} "
-        "safe_point_ts : {}",
+  bool is_txn = region->IsTxn();
+
+  if (type == pb::common::RegionType::STORE_REGION && is_txn) {
+    return DoGcForStoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                           region_end_key);
+  } else if (type == pb::common::RegionType::STORE_REGION && !is_txn) {
+    return DoGcForStoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                              region_end_key);
+  } else if (type == pb::common::RegionType::INDEX_REGION && is_txn) {
+    return DoGcForIndexTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                           region_end_key);
+  } else if (type == pb::common::RegionType::INDEX_REGION && !is_txn) {
+    return DoGcForIndexNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                              region_end_key);
+  } else if (type == pb::common::RegionType::DOCUMENT_REGION && is_txn) {
+    return DoGcForDocumentTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                              region_end_key);
+  } else if (type == pb::common::RegionType::DOCUMENT_REGION && !is_txn) {
+    return DoGcForDocumentNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                                 region_end_key);
+  }
+
+  std::string s = fmt::format(
+      "[txn_gc][tenant({})][region({})][type({})] Gc invalid region type and txn,  safe_point_ts: {} txn : {}",
+      gc_safe_point->GetTenantId(), region->Id(), pb::common::RegionType_Name(type), safe_point_ts,
+      (is_txn ? "true" : "false"));
+  DINGO_LOG(ERROR) << s;
+  return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+}
+
+butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                           std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                           int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                           const std::string &region_start_key, const std::string &region_end_key) {
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_delete_count = 0;
+  int64_t total_iter_count = 0;
+  int64_t region_id = ctx->RegionId();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+      "[txn_gc][statics][tenant({})][region({})][type({})][txn] start region start_key: {} end_key: {} "
+      "safe_point_ts : {}",
+      gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), safe_point_ts);
+
+  std::vector<std::string> kv_deletes_lock;
+  std::vector<std::string> kv_deletes_data;
+  std::vector<std::string> kv_deletes_write;
+
+  std::string lock_start_key;
+  std::string lock_end_key;
+
+  std::string last_lock_start_key;
+  std::string last_lock_end_key;
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions write_iter_options;
+  write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+
+  auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
+  if (nullptr == write_iter) {
+    std::string s = fmt::format(
+        "[txn_gc][write][tenant({})][region({})][type({})][txn] NewIterator failed.  start_key: {} end_key: {} ",
         gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-        Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts);
+        Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
 
-    std::vector<std::string> kv_deletes_lock;
-    std::vector<std::string> kv_deletes_data;
-    std::vector<std::string> kv_deletes_write;
+  write_iter->Seek(write_iter_options.lower_bound);
 
-    std::string lock_start_key;
-    std::string lock_end_key;
+  // this var is too long. this is important var. do not cut down it.
+  bool is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
+  // this var is too long. this is important var. do not cut down it.
+  bool is_first_put_key_if_write_ts_le_safe_point_ts = true;
 
-    std::string last_lock_start_key;
-    std::string last_lock_end_key;
+  std::string write_key;
+  std::string last_write_key;
 
-    RawEngine::ReaderPtr reader = raw_engine->Reader();
-    std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+  while (write_iter->Valid()) {
+    total_iter_count++;
+    std::string_view write_iter_key = write_iter->Key();
+    std::string_view write_iter_value = write_iter->Value();
 
-    IteratorOptions write_iter_options;
-    write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
-    write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+    int64_t write_ts = 0;
 
-    auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
-    if (nullptr == write_iter) {
+    auto ret = mvcc::Codec::DecodeKey(write_iter_key, write_key, write_ts);
+    if (!ret) {
       std::string s = fmt::format(
-          "[txn_gc][write][tenant({})][region({})][type({})][txn] NewIterator failed.  start_key: {} end_key: {} ",
+          "[txn_gc][write][tenant({})][region({})][type({})][txn] decode txn key failed, write_iter->key : {} ",
           gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-          Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
+          Helper::StringToHex(write_iter_key));
+      DINGO_LOG(FATAL) << s;
     }
 
-    write_iter->Seek(write_iter_options.lower_bound);
+    pb::store::WriteInfo write_info;
+    bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
+    if (!parse_success) {
+      std::string s = fmt::format(
+          "[txn_gc][write][tenant({})][region({})][type({})][txn] ParseFromArray failed, write_iter->key : {}  "
+          "write_key : {}  write_ts : {}, write_iter->value : {} ",
+          gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
+          Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
+          Helper::StringToHex(write_iter_value));
+      DINGO_LOG(FATAL) << s;
+    }
 
-    // this var is too long. this is important var. do not cut down it.
-    bool is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
-    // this var is too long. this is important var. do not cut down it.
-    bool is_first_put_key_if_write_ts_le_safe_point_ts = true;
+    // reset for first put
+    if (last_write_key != write_key) {
+      is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
+      last_write_key = write_key;
+      is_first_put_key_if_write_ts_le_safe_point_ts = true;
+    }
 
-    std::string write_key;
-    std::string last_write_key;
-
-    while (write_iter->Valid()) {
-      total_iter_count++;
-      std::string_view write_iter_key = write_iter->Key();
-      std::string_view write_iter_value = write_iter->Value();
-
-      int64_t write_ts = 0;
-
-      auto ret = mvcc::Codec::DecodeKey(write_iter_key, write_key, write_ts);
-      if (!ret) {
-        std::string s = fmt::format(
-            "[txn_gc][write][tenant({})][region({})][type({})][txn] decode txn key failed, write_iter->key : {} ",
-            gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-            Helper::StringToHex(write_iter_key));
-        DINGO_LOG(FATAL) << s;
+    // update lock_start_key
+    if (lock_start_key != write_key) {
+      if (lock_start_key == last_lock_start_key || lock_start_key.empty()) {
+        lock_start_key = write_key;
       }
+    }
 
-      pb::store::WriteInfo write_info;
-      bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
-      if (!parse_success) {
-        std::string s = fmt::format(
-            "[txn_gc][write][tenant({})][region({})][type({})][txn] ParseFromArray failed, write_iter->key : {}  "
-            "write_key : {}  write_ts : {}, write_iter->value : {} ",
-            gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-            Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
-            Helper::StringToHex(write_iter_value));
-        DINGO_LOG(FATAL) << s;
-      }
+    pb::store::Op op = write_info.op();
 
-      // reset for first put
-      if (last_write_key != write_key) {
-        is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
-        last_write_key = write_key;
-        is_first_put_key_if_write_ts_le_safe_point_ts = true;
-      }
-
-      // update lock_start_key
-      if (lock_start_key != write_key) {
-        if (lock_start_key == last_lock_start_key || lock_start_key.empty()) {
-          lock_start_key = write_key;
+    // write_ts > safe_point_ts key value
+    if (write_ts > safe_point_ts) {
+      if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
+        if (pb::store::Op::Put == op || pb::store::Op::Delete == op) {
+          is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = true;
         }
-      }
-
-      pb::store::Op op = write_info.op();
-
-      // write_ts > safe_point_ts key value
-      if (write_ts > safe_point_ts) {
-        if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
-          if (pb::store::Op::Put == op || pb::store::Op::Delete == op) {
-            is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = true;
-          }
-        }
-        write_iter->Next();
-        continue;
-      }
-
-      // handle write_ts <= safe_point_ts key value
-      switch (op) {
-        case pb::store::Put: {
-          // caution!!!
-          // if write_ts > safe_point_ts. not exist delete or put key.
-          // if write_ts <= safe_point_ts. first is put key. this first put key can not be delete !!!
-          if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
-            if (is_first_put_key_if_write_ts_le_safe_point_ts) {
-              // others put key can be delete. clear this flag.
-              is_first_put_key_if_write_ts_le_safe_point_ts = false;
-              write_iter->Next();
-              continue;
-            }
-          }
-          kv_deletes_write.emplace_back(write_iter_key);
-          if (write_info.short_value().empty()) {
-            // try get key from data column family. if not exist , do not delete.
-            std::string data_key = mvcc::Codec::EncodeKey(write_key, write_info.start_ts());
-            std::string data_value;
-            auto status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
-            if (status.ok()) {
-              kv_deletes_data.emplace_back(data_key);
-            } else {
-              if (pb::error::Errno::EKEY_NOT_FOUND == status.error_code()) {
-                std::string s = fmt::format(
-                    "[txn_gc][data][tenant({})][region({})][type({})][txn] key not found.  maybe key already deleted "
-                    "or txn error. ignore. key: {} raw_key : {}  start_ts : {} status : {} write_info: {}",
-                    gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-                    Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
-                    status.error_cstr(), write_info.ShortDebugString());
-                DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << s;
-              } else {  // other error
-                std::string s = fmt::format(
-                    "[txn_gc][data][tenant({})][region({})][type({})][txn] get key failed. key: {} raw_key : {}  "
-                    "start_ts : {} status : {} write_info: {}",
-                    gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-                    Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
-                    status.error_cstr(), write_info.ShortDebugString());
-                DINGO_LOG(ERROR) << s;
-              }
-            }
-          }
-          break;
-        }
-        case pb::store::Delete: {
-          // caution!!!
-          // if write_ts > safe_point_ts. not exist delete or put key.
-          // if write_ts <= safe_point_ts. first is delete key. this first put key actually can be delete.
-          if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
-            if (is_first_put_key_if_write_ts_le_safe_point_ts) {
-              is_first_put_key_if_write_ts_le_safe_point_ts = false;
-            }
-          }
-          kv_deletes_write.emplace_back(write_iter_key);
-          break;
-        }
-
-        case pb::store::Rollback: {
-          kv_deletes_write.emplace_back(write_iter_key);
-          break;
-        }
-        case pb::store::Lock:
-          [[fallthrough]];
-        case pb::store::PutIfAbsent:
-          [[fallthrough]];
-        case pb::store::None:
-          [[fallthrough]];
-        case pb::store::Op_INT_MIN_SENTINEL_DO_NOT_USE_:
-          [[fallthrough]];
-        case pb::store::Op_INT_MAX_SENTINEL_DO_NOT_USE_:
-          [[fallthrough]];
-        default: {
-          std::string s = fmt::format(
-              "[txn_gc][write][tenant({})][region({})][type({})][txn] invalid pb::store::Op type : {} type string : "
-              "{} , write_iter->key : {}  write_key : {}  write_ts : {} write_iter->value : {} ignore. ",
-              gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), static_cast<int>(op),
-              pb::store::Op_Name(op), Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
-              write_info.ShortDebugString());
-          DINGO_LOG(ERROR) << s;
-          break;
-        }
-      }
-
-      if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
-        auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
-        if (internal_gc_stop) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-              "[txn_gc][tenant({})][region({})][type({})][txn] gc_stop set stop.  start_key : {} end_key : {}. return",
-              gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
-              Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
-          goto _interrupt1;
-        }
-
-        if (safe_point_ts < internal_safe_point_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-              "[txn_gc][tenant({})][region({})][type({})][txn] current safe_point_ts : {}. newest safe_point_ts : {}. "
-              "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
-              gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
-              internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
-        }
-
-        total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
-        DoFinalWorkForTxnGc(raft_engine, ctx, reader, snapshot, write_key, gc_safe_point->GetTenantId(), type,
-                            safe_point_ts, kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key,
-                            lock_end_key, last_lock_start_key, last_lock_end_key);
       }
       write_iter->Next();
+      continue;
     }
 
-  _interrupt1:
+    // handle write_ts <= safe_point_ts key value
+    switch (op) {
+      case pb::store::Put: {
+        // caution!!!
+        // if write_ts > safe_point_ts. not exist delete or put key.
+        // if write_ts <= safe_point_ts. first is put key. this first put key can not be delete !!!
+        if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_write_ts_le_safe_point_ts) {
+            // others put key can be delete. clear this flag.
+            is_first_put_key_if_write_ts_le_safe_point_ts = false;
+            write_iter->Next();
+            continue;
+          }
+        }
+        kv_deletes_write.emplace_back(write_iter_key);
+        if (write_info.short_value().empty()) {
+          // try get key from data column family. if not exist , do not delete.
+          std::string data_key = mvcc::Codec::EncodeKey(write_key, write_info.start_ts());
+          std::string data_value;
+          auto status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
+          if (status.ok()) {
+            kv_deletes_data.emplace_back(data_key);
+          } else {
+            if (pb::error::Errno::EKEY_NOT_FOUND == status.error_code()) {
+              std::string s = fmt::format(
+                  "[txn_gc][data][tenant({})][region({})][type({})][txn] key not found.  maybe key already deleted "
+                  "or txn error. ignore. key: {} raw_key : {}  start_ts : {} status : {} write_info: {}",
+                  gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
+                  Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
+                  status.error_cstr(), write_info.ShortDebugString());
+              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << s;
+            } else {  // other error
+              std::string s = fmt::format(
+                  "[txn_gc][data][tenant({})][region({})][type({})][txn] get key failed. key: {} raw_key : {}  "
+                  "start_ts : {} status : {} write_info: {}",
+                  gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
+                  Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
+                  status.error_cstr(), write_info.ShortDebugString());
+              DINGO_LOG(ERROR) << s;
+            }
+          }
+        }
+        break;
+      }
+      case pb::store::Delete: {
+        // caution!!!
+        // if write_ts > safe_point_ts. not exist delete or put key.
+        // if write_ts <= safe_point_ts. first is delete key. this first put key actually can be delete.
+        if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_write_ts_le_safe_point_ts) {
+            is_first_put_key_if_write_ts_le_safe_point_ts = false;
+          }
+        }
+        kv_deletes_write.emplace_back(write_iter_key);
+        break;
+      }
 
-    auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
-    if (internal_gc_stop) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-          << fmt::format("[txn_gc][tenant({})][region({})][type({})][txn] set internal_gc_stop stop, return",
-                         gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type));
-      goto _interrupt2;
+      case pb::store::Rollback: {
+        kv_deletes_write.emplace_back(write_iter_key);
+        break;
+      }
+      case pb::store::Lock:
+        [[fallthrough]];
+      case pb::store::PutIfAbsent:
+        [[fallthrough]];
+      case pb::store::None:
+        [[fallthrough]];
+      case pb::store::Op_INT_MIN_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      case pb::store::Op_INT_MAX_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      default: {
+        std::string s = fmt::format(
+            "[txn_gc][write][tenant({})][region({})][type({})][txn] invalid pb::store::Op type : {} type string : "
+            "{} , write_iter->key : {}  write_key : {}  write_ts : {} write_iter->value : {} ignore. ",
+            gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), static_cast<int>(op),
+            pb::store::Op_Name(op), Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
+            write_info.ShortDebugString());
+        DINGO_LOG(ERROR) << s;
+        break;
+      }
     }
 
-    if (safe_point_ts < internal_safe_point_ts) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-          "[txn_gc][tenant({})][region({})][type({})][txn] current safe_point_ts : {}. newest safe_point_ts : {}. "
-          "Don't worry, we'll deal with it next time. ignore.",
-          gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
-          internal_safe_point_ts);
+    if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
+      auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+      if (internal_gc_stop) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+            "[txn_gc][tenant({})][region({})][type({})][txn] gc_stop set stop.  start_key : {} end_key : {}. return",
+            gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
+            Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+        goto _interrupt1;
+      }
+
+      if (safe_point_ts < internal_safe_point_ts) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+            "[txn_gc][tenant({})][region({})][type({})][txn] current safe_point_ts : {}. newest safe_point_ts : {}. "
+            "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
+            gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
+            internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+      }
+
+      total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
+      DoFinalWorkForTxnGc(raft_engine, ctx, reader, snapshot, write_key, gc_safe_point->GetTenantId(), type,
+                          safe_point_ts, kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key,
+                          lock_end_key, last_lock_start_key, last_lock_end_key);
     }
-
-    total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
-    DoFinalWorkForTxnGc(raft_engine, ctx, reader, snapshot, write_key, gc_safe_point->GetTenantId(), type,
-                        safe_point_ts, kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key, lock_end_key,
-                        last_lock_start_key, last_lock_end_key);
-
-  _interrupt2:
-    end_time_ms = Helper::TimestampMs();
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-        "[txn_gc][statics][tenant({})][region({})][type({})][txn] end region start_key: {} end_key: {} safe_point_ts "
-        ": {} time consuming : {} ms total_delete_count : {} total_iter_count : {} ",
-        gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-        Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts,
-        (end_time_ms - start_time_ms), total_delete_count, total_iter_count);
-
-    return butil::Status();
+    write_iter->Next();
   }
 
-  butil::Status TxnEngineHelper::DoGcCoreNonTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
-    if (region == nullptr) {
-      std::string s = fmt::format("[txn_gc][tenant({})][region({})][nontxn]  region not found.",
-                                  gc_safe_point->GetTenantId(), ctx->RegionId());
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
-    }
+_interrupt1:
 
-    int64_t start_time_ms = Helper::TimestampMs();
-    int64_t end_time_ms = 0;
-    int64_t total_delete_count = 0;
-    int64_t total_iter_count = 0;
-    int64_t region_id = ctx->RegionId();
+  auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+  if (internal_gc_stop) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+        << fmt::format("[txn_gc][tenant({})][region({})][type({})][txn] set internal_gc_stop stop, return",
+                       gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type));
+    goto _interrupt2;
+  }
 
+  if (safe_point_ts < internal_safe_point_ts) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-        "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] start region start_key: {} end_key: {} "
-        "safe_point_ts : {}",
+        "[txn_gc][tenant({})][region({})][type({})][txn] current safe_point_ts : {}. newest safe_point_ts : {}. "
+        "Don't worry, we'll deal with it next time. ignore.",
+        gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
+        internal_safe_point_ts);
+  }
+
+  total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
+  DoFinalWorkForTxnGc(raft_engine, ctx, reader, snapshot, write_key, gc_safe_point->GetTenantId(), type, safe_point_ts,
+                      kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key, lock_end_key,
+                      last_lock_start_key, last_lock_end_key);
+
+_interrupt2:
+  end_time_ms = Helper::TimestampMs();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+      "[txn_gc][statics][tenant({})][region({})][type({})][txn] end region start_key: {} end_key: {} safe_point_ts "
+      ": {} time consuming : {} ms total_delete_count : {} total_iter_count : {} ",
+      gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), safe_point_ts, (end_time_ms - start_time_ms), total_delete_count,
+      total_iter_count);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                              std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                              int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                              const std::string &region_start_key, const std::string &region_end_key) {
+  store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
+  if (region == nullptr) {
+    std::string s = fmt::format("[txn_gc][tenant({})][region({})][nontxn]  region not found.",
+                                gc_safe_point->GetTenantId(), ctx->RegionId());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
+  }
+
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_delete_count = 0;
+  int64_t total_iter_count = 0;
+  int64_t region_id = ctx->RegionId();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+      "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] start region start_key: {} end_key: {} "
+      "safe_point_ts : {}",
+      gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), safe_point_ts);
+
+  std::vector<std::string> kv_deletes_default;
+  std::vector<std::string> kv_deletes_scalar;
+  std::vector<std::string> kv_deletes_table;
+  std::vector<std::string> kv_deletes_scalar_speedup;
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  std::vector<std::string> kv_deletes_use_document;
+  bool enable_scalar_speed_up_with_document_wrap = false;
+  if (type == pb::common::RegionType::INDEX_REGION) {
+    const pb::common::RegionDefinition &definition = region->Definition();
+    bool enable_scalar_speed_up_with_document =
+        definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document();
+    if (enable_scalar_speed_up_with_document && region->DocumentIndexWrapper()) {
+      enable_scalar_speed_up_with_document_wrap = true;
+    }
+  }
+#endif
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions default_iter_options;
+  default_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  default_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+
+  const std::string &cf_name =
+      (type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF);
+
+  auto default_iter = reader->NewIterator(cf_name, snapshot, default_iter_options);
+  if (nullptr == default_iter) {
+    std::string s = fmt::format(
+        "[txn_gc][write][tenant({})][region({})][type({})][nontxn] NewIterator failed.  start_key: {} end_key: {} ",
         gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-        Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts);
+        Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
 
-    std::vector<std::string> kv_deletes_default;
-    std::vector<std::string> kv_deletes_scalar;
-    std::vector<std::string> kv_deletes_table;
-    std::vector<std::string> kv_deletes_scalar_speedup;
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-    std::vector<std::string> kv_deletes_use_document;
-    bool enable_scalar_speed_up_with_document_wrap = false;
-    if (type == pb::common::RegionType::INDEX_REGION) {
-      const pb::common::RegionDefinition &definition = region->Definition();
-      bool enable_scalar_speed_up_with_document =
-          definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document();
-      if (enable_scalar_speed_up_with_document && region->DocumentIndexWrapper()) {
-        enable_scalar_speed_up_with_document_wrap = true;
-      }
-    }
-#endif
+  default_iter->Seek(default_iter_options.lower_bound);
 
-    RawEngine::ReaderPtr reader = raw_engine->Reader();
-    std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+  // this var is too long. this is important var. do not cut down it.
+  bool is_exist_default_key_if_ts_gt_safe_point_ts = false;
+  // this var is too long. this is important var. do not cut down it.
+  bool is_first_put_key_if_ts_le_safe_point_ts = true;
 
-    IteratorOptions default_iter_options;
-    default_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
-    default_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+  std::string default_key;
+  std::string last_default_key;
 
-    const std::string &cf_name =
-        (type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF);
-
-    auto default_iter = reader->NewIterator(cf_name, snapshot, default_iter_options);
-    if (nullptr == default_iter) {
-      std::string s = fmt::format(
-          "[txn_gc][write][tenant({})][region({})][type({})][nontxn] NewIterator failed.  start_key: {} end_key: {} ",
-          gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-          Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
-    }
-
-    default_iter->Seek(default_iter_options.lower_bound);
-
-    // this var is too long. this is important var. do not cut down it.
-    bool is_exist_default_key_if_ts_gt_safe_point_ts = false;
-    // this var is too long. this is important var. do not cut down it.
-    bool is_first_put_key_if_ts_le_safe_point_ts = true;
-
-    std::string default_key;
-    std::string last_default_key;
-
-    char prefix = '\0';
-    int64_t region_part_id = 0;
-    if (type == pb::common::RegionType::INDEX_REGION) {
-      prefix = region->GetKeyPrefix();
-      region_part_id = region->PartitionId();
-    }
+  char prefix = '\0';
+  int64_t region_part_id = 0;
+  if (type == pb::common::RegionType::INDEX_REGION) {
+    prefix = region->GetKeyPrefix();
+    region_part_id = region->PartitionId();
+  }
 
 #if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-    auto lambda_emplace_back_function =
-        [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar, &kv_deletes_table,
-         &kv_deletes_scalar_speedup, &kv_deletes_use_document, enable_scalar_speed_up_with_document_wrap](
+  auto lambda_emplace_back_function =
+      [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar, &kv_deletes_table,
+       &kv_deletes_scalar_speedup, &kv_deletes_use_document, enable_scalar_speed_up_with_document_wrap](
 #else
-    auto lambda_emplace_back_function =
-        [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar, &kv_deletes_table,
-         &kv_deletes_scalar_speedup](
+  auto lambda_emplace_back_function =
+      [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar, &kv_deletes_table,
+       &kv_deletes_scalar_speedup](
 #endif
-            pb::common::RegionType type, std::string_view default_iter_key, int64_t vector_id, int64_t default_ts) {
-          kv_deletes_default.emplace_back(std::string(default_iter_key));
-          if (type == pb::common::RegionType::INDEX_REGION) {
-            kv_deletes_scalar.emplace_back(std::string(default_iter_key));
-            kv_deletes_table.emplace_back(std::string(default_iter_key));
-            pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-            for (const auto &fields : scalar_schema.fields()) {
-              if (fields.enable_speed_up()) {
-                std::string encode_key_with_ts =
-                    VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
-                kv_deletes_scalar_speedup.emplace_back(std::move(encode_key_with_ts));
-              }
+          pb::common::RegionType type, std::string_view default_iter_key, int64_t vector_id, int64_t default_ts) {
+        kv_deletes_default.emplace_back(std::string(default_iter_key));
+        if (type == pb::common::RegionType::INDEX_REGION) {
+          kv_deletes_scalar.emplace_back(std::string(default_iter_key));
+          kv_deletes_table.emplace_back(std::string(default_iter_key));
+          pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+          for (const auto &fields : scalar_schema.fields()) {
+            if (fields.enable_speed_up()) {
+              std::string encode_key_with_ts =
+                  VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
+              kv_deletes_scalar_speedup.emplace_back(std::move(encode_key_with_ts));
             }
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-            if (enable_scalar_speed_up_with_document_wrap) {
-              kv_deletes_use_document.emplace_back(default_iter_key);
-            }
-#endif
           }
-        };
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+          if (enable_scalar_speed_up_with_document_wrap) {
+            kv_deletes_use_document.emplace_back(default_iter_key);
+          }
+#endif
+        }
+      };
 
-    while (default_iter->Valid()) {
-      total_iter_count++;
-      std::string_view default_iter_key = default_iter->Key();
-      std::string_view default_iter_value = default_iter->Value();
-      int64_t default_ts = 0;
+  while (default_iter->Valid()) {
+    total_iter_count++;
+    std::string_view default_iter_key = default_iter->Key();
+    std::string_view default_iter_value = default_iter->Value();
+    int64_t default_ts = 0;
 
-      auto ret = mvcc::Codec::DecodeKey(default_iter_key, default_key, default_ts);
-      if (!ret) {
-        std::string s =
-            fmt::format("[txn_gc][decode][tenant({})][region({})][type({})][nontxn] decode key failed, key : {} ",
-                        gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-                        Helper::StringToHex(default_iter_key));
+    auto ret = mvcc::Codec::DecodeKey(default_iter_key, default_key, default_ts);
+    if (!ret) {
+      std::string s =
+          fmt::format("[txn_gc][decode][tenant({})][region({})][type({})][nontxn] decode key failed, key : {} ",
+                      gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
+                      Helper::StringToHex(default_iter_key));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    int64_t vector_id = 0;
+    int64_t partition_id = 0;
+
+    if (type == pb::common::RegionType::INDEX_REGION) {
+      VectorCodec::DecodeFromEncodeKeyWithTs(std::string(default_iter_key), partition_id, vector_id);
+      if (region_part_id != partition_id) {
+        std::string s = fmt::format(
+            "[txn_gc][decode][tenant({})][region({})][type({})][nontxn] decode  region_part_id({}) != "
+            "partition_id({}), "
+            "key : {} ",
+            gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), region_part_id, partition_id,
+            Helper::StringToHex(default_iter_key));
         DINGO_LOG(FATAL) << s;
       }
+    }
 
-      int64_t vector_id = 0;
-      int64_t partition_id = 0;
-
-      if (type == pb::common::RegionType::INDEX_REGION) {
-        VectorCodec::DecodeFromEncodeKeyWithTs(std::string(default_iter_key), partition_id, vector_id);
-        if (region_part_id != partition_id) {
-          std::string s = fmt::format(
-              "[txn_gc][decode][tenant({})][region({})][type({})][nontxn] decode  region_part_id({}) != "
-              "partition_id({}), "
-              "key : {} ",
-              gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), region_part_id, partition_id,
-              Helper::StringToHex(default_iter_key));
-          DINGO_LOG(FATAL) << s;
-        }
-      }
-
-      if (last_default_key != default_key) {
-        last_default_key = default_key;
-        is_exist_default_key_if_ts_gt_safe_point_ts = false;
-        is_first_put_key_if_ts_le_safe_point_ts = true;
-
-        if (default_ts > safe_point_ts) {
-          is_exist_default_key_if_ts_gt_safe_point_ts = true;
-          is_first_put_key_if_ts_le_safe_point_ts = false;
-        }
-      }
+    if (last_default_key != default_key) {
+      last_default_key = default_key;
+      is_exist_default_key_if_ts_gt_safe_point_ts = false;
+      is_first_put_key_if_ts_le_safe_point_ts = true;
 
       if (default_ts > safe_point_ts) {
-        default_iter->Next();
-        continue;
+        is_exist_default_key_if_ts_gt_safe_point_ts = true;
+        is_first_put_key_if_ts_le_safe_point_ts = false;
       }
+    }
 
-      mvcc::ValueFlag value_flag = mvcc::Codec::GetValueFlag(default_iter_value);
-      switch (value_flag) {
-        case mvcc::ValueFlag::kPut: {
-          if (!is_exist_default_key_if_ts_gt_safe_point_ts) {
-            if (is_first_put_key_if_ts_le_safe_point_ts) {
-              is_first_put_key_if_ts_le_safe_point_ts = false;
-              is_exist_default_key_if_ts_gt_safe_point_ts = true;
+    if (default_ts > safe_point_ts) {
+      default_iter->Next();
+      continue;
+    }
+
+    mvcc::ValueFlag value_flag = mvcc::Codec::GetValueFlag(default_iter_value);
+    switch (value_flag) {
+      case mvcc::ValueFlag::kPut: {
+        if (!is_exist_default_key_if_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_ts_le_safe_point_ts) {
+            is_first_put_key_if_ts_le_safe_point_ts = false;
+            is_exist_default_key_if_ts_gt_safe_point_ts = true;
+            default_iter->Next();
+            continue;
+          }
+        }
+
+        lambda_emplace_back_function(type, default_iter_key, vector_id, default_ts);
+        break;
+      }
+      case mvcc::ValueFlag::kPutTTL: {
+        // note: The first occurrence of the expired key has been deleted.
+        if (!is_exist_default_key_if_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_ts_le_safe_point_ts) {
+            is_first_put_key_if_ts_le_safe_point_ts = false;
+            is_exist_default_key_if_ts_gt_safe_point_ts = true;
+            int64_t ttl = mvcc::Codec::GetValueTTL(default_iter_value);
+            if (start_time_ms <= ttl) {
+              // ttl not expired
               default_iter->Next();
               continue;
             }
           }
-
-          lambda_emplace_back_function(type, default_iter_key, vector_id, default_ts);
-          break;
         }
-        case mvcc::ValueFlag::kPutTTL: {
-          // note: The first occurrence of the expired key has been deleted.
-          if (!is_exist_default_key_if_ts_gt_safe_point_ts) {
-            if (is_first_put_key_if_ts_le_safe_point_ts) {
-              is_first_put_key_if_ts_le_safe_point_ts = false;
-              is_exist_default_key_if_ts_gt_safe_point_ts = true;
-              int64_t ttl = mvcc::Codec::GetValueTTL(default_iter_value);
-              if (start_time_ms <= ttl) {
-                // ttl not expired
-                default_iter->Next();
-                continue;
-              }
-            }
+        lambda_emplace_back_function(type, default_iter_key, vector_id, default_ts);
+        break;
+      }
+
+      case mvcc::ValueFlag::kDelete: {
+        if (!is_exist_default_key_if_ts_gt_safe_point_ts) {
+          if (is_first_put_key_if_ts_le_safe_point_ts) {
+            is_first_put_key_if_ts_le_safe_point_ts = false;
+            is_exist_default_key_if_ts_gt_safe_point_ts = true;
           }
-          lambda_emplace_back_function(type, default_iter_key, vector_id, default_ts);
-          break;
         }
+        lambda_emplace_back_function(type, default_iter_key, vector_id, default_ts);
+        break;
+      }
 
-        case mvcc::ValueFlag::kDelete: {
-          if (!is_exist_default_key_if_ts_gt_safe_point_ts) {
-            if (is_first_put_key_if_ts_le_safe_point_ts) {
-              is_first_put_key_if_ts_le_safe_point_ts = false;
-              is_exist_default_key_if_ts_gt_safe_point_ts = true;
-            }
-          }
-          lambda_emplace_back_function(type, default_iter_key, vector_id, default_ts);
-          break;
-        }
+      default: {
+        std::string s =
+            fmt::format("[txn_gc][tenant({})][region({})][type({})][nontxn] invalid mvcc value flag : {}, value : {} ",
+                        gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
+                        static_cast<int>(value_flag), Helper::StringToHex(default_iter_value));
+        DINGO_LOG(FATAL) << s;
+      }
+    }
 
-        default: {
-          std::string s = fmt::format(
-              "[txn_gc][tenant({})][region({})][type({})][nontxn] invalid mvcc value flag : {}, value : {} ",
-              gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), static_cast<int>(value_flag),
-              Helper::StringToHex(default_iter_value));
-          DINGO_LOG(FATAL) << s;
-        }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if ((kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+         kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size()) >= FLAGS_gc_delete_batch_count) {
+#else
+    if ((kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+         kv_deletes_scalar_speedup.size()) >= FLAGS_gc_delete_batch_count) {
+#endif
+      auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+      if (internal_gc_stop) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+            "[txn_gc][tenant({})][region({})][type({})][nontxn] gc_stop set stop.  start_key : {} end_key : {}. "
+            "return",
+            gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
+            Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+        goto _interrupt1;
+      }
+
+      if (safe_point_ts < internal_safe_point_ts) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+            "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts "
+            ": "
+            "{}. "
+            "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
+            gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
+            internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
       }
 
 #if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-      if ((kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
-           kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size()) >= FLAGS_gc_delete_batch_count) {
+      total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+                            kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size();
+      DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default,
+                             kv_deletes_scalar, kv_deletes_table, kv_deletes_scalar_speedup, kv_deletes_use_document);
 #else
-      if ((kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
-           kv_deletes_scalar_speedup.size()) >= FLAGS_gc_delete_batch_count) {
+      total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+                            kv_deletes_scalar_speedup.size();
+      DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default,
+                             kv_deletes_scalar, kv_deletes_table, kv_deletes_scalar_speedup);
 #endif
-        auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
-        if (internal_gc_stop) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-              "[txn_gc][tenant({})][region({})][type({})][nontxn] gc_stop set stop.  start_key : {} end_key : {}. "
-              "return",
-              gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
-              Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
-          goto _interrupt1;
-        }
-
-        if (safe_point_ts < internal_safe_point_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-              "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts "
-              ": "
-              "{}. "
-              "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
-              gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
-              internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
-        }
-
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-        total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
-                              kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size();
-        DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default,
-                               kv_deletes_scalar, kv_deletes_table, kv_deletes_scalar_speedup, kv_deletes_use_document);
-#else
-        total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
-                              kv_deletes_scalar_speedup.size();
-        DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default,
-                               kv_deletes_scalar, kv_deletes_table, kv_deletes_scalar_speedup);
-#endif
-      }
-
-      default_iter->Next();
     }
 
-  _interrupt1:
+    default_iter->Next();
+  }
 
-    auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
-    if (internal_gc_stop) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-          << fmt::format("[txn_gc][tenant({})][region({})][type({})][nontxn] set internal_gc_stop stop, return",
-                         gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type));
+_interrupt1:
 
-      goto _interrupt2;
-    }
+  auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
+  if (internal_gc_stop) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+        << fmt::format("[txn_gc][tenant({})][region({})][type({})][nontxn] set internal_gc_stop stop, return",
+                       gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type));
 
-    if (safe_point_ts < internal_safe_point_ts) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-          "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : "
-          "{}. "
-          "Don't worry, we'll deal with it next time. ignore.",
-          gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
-          internal_safe_point_ts);
-    }
+    goto _interrupt2;
+  }
 
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-    total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
-                          kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size();
-    DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default, kv_deletes_scalar,
-                           kv_deletes_table, kv_deletes_scalar_speedup, kv_deletes_use_document);
-#else
-    total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
-                          kv_deletes_scalar_speedup.size();
-    DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default, kv_deletes_scalar,
-                           kv_deletes_table, kv_deletes_scalar_speedup);
-
-#endif
-
-  _interrupt2:
-    end_time_ms = Helper::TimestampMs();
-
+  if (safe_point_ts < internal_safe_point_ts) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-        "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
-        "safe_point_ts "
-        ": {} time  consuming : {} ms total_delete_count : {} total_iter_count : {}",
-        gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
-        Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts,
-        (end_time_ms - start_time_ms), total_delete_count, total_iter_count);
-
-    return butil::Status();
+        "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : "
+        "{}. "
+        "Don't worry, we'll deal with it next time. ignore.",
+        gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
+        internal_safe_point_ts);
   }
 
-  butil::Status TxnEngineHelper::DoGcForStoreTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    return DoGcCoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                       region_end_key);
-  }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+                        kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size();
+  DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default, kv_deletes_scalar,
+                         kv_deletes_table, kv_deletes_scalar_speedup, kv_deletes_use_document);
+#else
+  total_delete_count +=
+      kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() + kv_deletes_scalar_speedup.size();
+  DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default, kv_deletes_scalar,
+                         kv_deletes_table, kv_deletes_scalar_speedup);
 
-  butil::Status TxnEngineHelper::DoGcForStoreNonTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    return DoGcCoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                          region_end_key);
-  }
+#endif
 
-  butil::Status TxnEngineHelper::DoGcForIndexTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    return DoGcCoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                       region_end_key);
-  }
-  butil::Status TxnEngineHelper::DoGcForIndexNonTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    return DoGcCoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                          region_end_key);
-  }
+_interrupt2:
+  end_time_ms = Helper::TimestampMs();
 
-  butil::Status TxnEngineHelper::DoGcForDocumentTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    return DoGcCoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                       region_end_key);
-  }
-  butil::Status TxnEngineHelper::DoGcForDocumentNonTxn(
-      RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      pb::common::RegionType type, int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
-      const std::string &region_start_key, const std::string &region_end_key) {
-    return DoGcCoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
-                          region_end_key);
-  }
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+      "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
+      "safe_point_ts "
+      ": {} time  consuming : {} ms total_delete_count : {} total_iter_count : {}",
+      gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), safe_point_ts, (end_time_ms - start_time_ms), total_delete_count,
+      total_iter_count);
 
-  bvar::LatencyRecorder g_txn_check_lock_for_gc_latency("dingo_txn_check_lock_for_gc");
+  return butil::Status();
+}
 
-  butil::Status TxnEngineHelper::CheckLockForTxnGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
-                                                   const std::string &start_key, const std::string &end_key,
-                                                   int64_t safe_point_ts, int64_t region_id, int64_t tenant_id,
-                                                   pb::common::RegionType type) {
-    BvarLatencyGuard bvar_guard(&g_txn_check_lock_for_gc_latency);
+butil::Status TxnEngineHelper::DoGcForStoreTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                               std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                               int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                               const std::string &region_start_key, const std::string &region_end_key) {
+  return DoGcCoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                     region_end_key);
+}
 
-    auto lambda_get_raw_key_function = [](std::string_view lock_iter_key) {
-      std::string lock_key;
-      int64_t ts = 0;
-      mvcc::Codec::DecodeKey(lock_iter_key, lock_key, ts);
-      return lock_key;
-    };
+butil::Status TxnEngineHelper::DoGcForStoreNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                  std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                                  int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                                  const std::string &region_start_key,
+                                                  const std::string &region_end_key) {
+  return DoGcCoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                        region_end_key);
+}
 
-    int64_t total_count = 0;
-    int64_t failed_count = 0;
+butil::Status TxnEngineHelper::DoGcForIndexTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                               std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                               int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                               const std::string &region_start_key, const std::string &region_end_key) {
+  return DoGcCoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                     region_end_key);
+}
+butil::Status TxnEngineHelper::DoGcForIndexNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                  std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                                  int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                                  const std::string &region_start_key,
+                                                  const std::string &region_end_key) {
+  return DoGcCoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                        region_end_key);
+}
 
-    auto lambda_add_error_statics_function = [&total_count, &failed_count]() {
-      failed_count++;
-      total_count++;
-    };
+butil::Status TxnEngineHelper::DoGcForDocumentTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                  std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                                  int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                                  const std::string &region_start_key,
+                                                  const std::string &region_end_key) {
+  return DoGcCoreTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                     region_end_key);
+}
+butil::Status TxnEngineHelper::DoGcForDocumentNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                     std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                                     int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                                     const std::string &region_start_key,
+                                                     const std::string &region_end_key) {
+  return DoGcCoreNonTxn(raw_engine, raft_engine, ctx, type, safe_point_ts, gc_safe_point, region_start_key,
+                        region_end_key);
+}
 
-    IteratorOptions lock_iter_options;
-    lock_iter_options.lower_bound = mvcc::Codec::EncodeKey(start_key, Constant::kLockVer);
-    lock_iter_options.upper_bound = mvcc::Codec::EncodeKey(end_key, 0);
+bvar::LatencyRecorder g_txn_check_lock_for_gc_latency("dingo_txn_check_lock_for_gc");
 
-    std::shared_ptr<dingodb::Iterator> lock_iter =
-        reader->NewIterator(Constant::kTxnLockCF, snapshot, lock_iter_options);
-    if (nullptr == lock_iter) {
-      std::string s = fmt::format(
-          "[txn_gc][lock][tenant({})][region({})][type({})][txn] NewIterator failed, start_key: {} end_key : {} "
-          "safe_point_ts : {}",
-          tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(start_key),
-          Helper::StringToHex(end_key), safe_point_ts);
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
-    }
+butil::Status TxnEngineHelper::CheckLockForTxnGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                                 const std::string &start_key, const std::string &end_key,
+                                                 int64_t safe_point_ts, int64_t region_id, int64_t tenant_id,
+                                                 pb::common::RegionType type) {
+  BvarLatencyGuard bvar_guard(&g_txn_check_lock_for_gc_latency);
 
-    lock_iter->Seek(lock_iter_options.lower_bound);
+  auto lambda_get_raw_key_function = [](std::string_view lock_iter_key) {
+    std::string lock_key;
+    int64_t ts = 0;
+    mvcc::Codec::DecodeKey(lock_iter_key, lock_key, ts);
+    return lock_key;
+  };
 
-    while (lock_iter->Valid()) {
-      std::string_view lock_iter_key = lock_iter->Key();
-      std::string_view lock_iter_value = lock_iter->Value();
+  int64_t total_count = 0;
+  int64_t failed_count = 0;
 
-      if (lock_iter_value.empty()) {
-        std::string s = fmt::format(
-            "[txn_gc][lock][tenant({})][region({})][type({})][txn] lock info empty. lock_iter_key: {} lock_key : {} "
-            "safe_point_ts : {}",
-            tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(lock_iter_key),
-            Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts);
-        DINGO_LOG(ERROR) << s;
-        lambda_add_error_statics_function();
-        lock_iter->Next();
-        continue;
-      }
+  auto lambda_add_error_statics_function = [&total_count, &failed_count]() {
+    failed_count++;
+    total_count++;
+  };
 
-      pb::store::LockInfo lock_info;
-      bool parse_success = lock_info.ParseFromString(std::string(lock_iter_value));
-      if (!parse_success) {
-        std::string s = fmt::format(
-            "[txn_gc][lock][tenant({})][region({})][type({})][txn] parse lock info failed, lock_iter_key : {} "
-            "lock_key: "
-            "{} , lock_value : {} safe_point_ts : {}",
-            tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(lock_iter_key),
-            Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), Helper::StringToHex(lock_iter_value),
-            safe_point_ts);
-        DINGO_LOG(ERROR) << s;
-        lambda_add_error_statics_function();
-        lock_iter->Next();
-        continue;
-      }
+  IteratorOptions lock_iter_options;
+  lock_iter_options.lower_bound = mvcc::Codec::EncodeKey(start_key, Constant::kLockVer);
+  lock_iter_options.upper_bound = mvcc::Codec::EncodeKey(end_key, 0);
 
-      int64_t lock_ts = lock_info.lock_ts();
-      if (lock_ts <= safe_point_ts) {
-        std::string s = fmt::format(
-            "[txn_gc][lock][tenant({})][region({})][type({})][txn] find lock error. exist lock_ts : {} <= "
-            "safe_point_ts "
-            ": {}, lock_iter_key : {} lock_key: {}  , safe_point_ts : {} lock_value : {}",
-            tenant_id, region_id, pb::common::RegionType_Name(type), lock_ts, safe_point_ts,
-            Helper::StringToHex(lock_iter_key), Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)),
-            safe_point_ts, lock_info.ShortDebugString());
-        DINGO_LOG(ERROR) << s;
-        lambda_add_error_statics_function();
-        lock_iter->Next();
-        continue;
-      }
-
-      lock_iter->Next();
-      total_count++;
-    }
-
+  std::shared_ptr<dingodb::Iterator> lock_iter = reader->NewIterator(Constant::kTxnLockCF, snapshot, lock_iter_options);
+  if (nullptr == lock_iter) {
     std::string s = fmt::format(
-        "[txn_gc][lock][tenant({})][region({})][type({})][txn] scan lock column family. start_key : {} end_key : {} "
-        "safe_point_ts : {} total : {} success : {} failed : {}",
+        "[txn_gc][lock][tenant({})][region({})][type({})][txn] NewIterator failed, start_key: {} end_key : {} "
+        "safe_point_ts : {}",
         tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(start_key),
-        Helper::StringToHex(end_key), safe_point_ts, total_count, (total_count - failed_count), failed_count);
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << s;
-
-    return butil::Status();
+        Helper::StringToHex(end_key), safe_point_ts);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
-  bvar::LatencyRecorder g_txn_raft_engine_write_for_gc_latency("dingo_txn_raft_engine_write_for_gc");
+  lock_iter->Seek(lock_iter_options.lower_bound);
 
-  butil::Status TxnEngineHelper::RaftEngineWriteForTxnGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      const std::vector<std::string> &kv_deletes_lock, const std::vector<std::string> &kv_deletes_data,
-      const std::vector<std::string> &kv_deletes_write, int64_t tenant_id, pb::common::RegionType type) {
-    BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
+  while (lock_iter->Valid()) {
+    std::string_view lock_iter_key = lock_iter->Key();
+    std::string_view lock_iter_value = lock_iter->Value();
 
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    pb::raft::DeletesWithCf *write_dels = nullptr;
-    if (!kv_deletes_write.empty()) {
-      write_dels = cf_put_delete->add_deletes_with_cf();
-      write_dels->set_cf_name(Constant::kTxnWriteCF);
-      for (const auto &key_del : kv_deletes_write) {
-        write_dels->add_keys(key_del);
-      }
-    }
-
-    pb::raft::DeletesWithCf *lock_dels = nullptr;
-    if (!kv_deletes_lock.empty()) {
-      lock_dels = cf_put_delete->add_deletes_with_cf();
-      lock_dels->set_cf_name(Constant::kTxnLockCF);
-      for (const auto &key_del : kv_deletes_lock) {
-        lock_dels->add_keys(key_del);
-      }
-    }
-
-    pb::raft::DeletesWithCf *data_dels = nullptr;
-    if (!kv_deletes_data.empty()) {
-      data_dels = cf_put_delete->add_deletes_with_cf();
-      data_dels->set_cf_name(Constant::kTxnDataCF);
-      for (const auto &key_del : kv_deletes_data) {
-        data_dels->add_keys(key_del);
-      }
-    }
-
-    if (nullptr == write_dels && nullptr == lock_dels && nullptr == data_dels) {
-      return butil::Status::OK();
-    }
-
-    if (txn_raft_request.ByteSizeLong() == 0) {
-      return butil::Status::OK();
-    }
-#if defined(ENABLE_GC_MOCK)
-    if (!kv_deletes_write.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnWriteCF, {}, kv_deletes_write);
-    if (!kv_deletes_lock.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnLockCF, {}, kv_deletes_lock);
-    if (!kv_deletes_data.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnDataCF, {}, kv_deletes_data);
-    return butil::Status::OK();
-#else
-    if (nullptr == raft_engine) {
-      return butil::Status::OK();
-    }
-
-    return RaftEngineWrite(raft_engine, ctx, txn_raft_request, tenant_id, type, "RaftEngineWriteForTxnGc");
-#endif
-  }
-
-  butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnStoreAndDocumentGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      const std::vector<std::string> &kv_deletes_default, int64_t tenant_id, pb::common::RegionType type) {
-    BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
-
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    pb::raft::DeletesWithCf *default_dels = nullptr;
-    if (!kv_deletes_default.empty()) {
-      default_dels = cf_put_delete->add_deletes_with_cf();
-      default_dels->set_cf_name(Constant::kStoreDataCF);
-      for (const auto &key_del : kv_deletes_default) {
-        default_dels->add_keys(key_del);
-      }
-    }
-
-    if (nullptr == default_dels) {
-      return butil::Status::OK();
-    }
-
-    if (txn_raft_request.ByteSizeLong() == 0) {
-      return butil::Status::OK();
-    }
-#if defined(ENABLE_GC_MOCK)
-    if (!kv_deletes_default.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kStoreDataCF, {}, kv_deletes_default);
-
-    return butil::Status::OK();
-#else
-
-    if (nullptr == raft_engine) {
-      return butil::Status::OK();
-    }
-
-    return RaftEngineWrite(raft_engine, ctx, txn_raft_request, tenant_id, type,
-                           "RaftEngineWriteForNonTxnStoreAndDocumentGc");
-#endif
-  }
-
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-  butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      const std::vector<std::string> &kv_deletes_default, const std::vector<std::string> &kv_deletes_scalar,
-      const std::vector<std::string> &kv_deletes_table, const std::vector<std::string> &kv_deletes_scalar_speedup,
-      const std::vector<std::string> &kv_deletes_use_document, int64_t tenant_id, pb::common::RegionType type) {
-#else
-  butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-      const std::vector<std::string> &kv_deletes_default, const std::vector<std::string> &kv_deletes_scalar,
-      const std::vector<std::string> &kv_deletes_table, const std::vector<std::string> &kv_deletes_scalar_speedup,
-      int64_t tenant_id, pb::common::RegionType type) {
-#endif
-    BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
-
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-    pb::raft::DeletesWithCf *default_dels = nullptr;
-    if (!kv_deletes_default.empty()) {
-      default_dels = cf_put_delete->add_deletes_with_cf();
-      default_dels->set_cf_name(Constant::kVectorDataCF);
-      for (const auto &key_del : kv_deletes_default) {
-        default_dels->add_keys(key_del);
-      }
-    }
-
-    pb::raft::DeletesWithCf *scalar_dels = nullptr;
-    if (!kv_deletes_scalar.empty()) {
-      scalar_dels = cf_put_delete->add_deletes_with_cf();
-      scalar_dels->set_cf_name(Constant::kVectorScalarCF);
-      for (const auto &key_del : kv_deletes_scalar) {
-        scalar_dels->add_keys(key_del);
-      }
-    }
-
-    pb::raft::DeletesWithCf *table_dels = nullptr;
-    if (!kv_deletes_table.empty()) {
-      table_dels = cf_put_delete->add_deletes_with_cf();
-      table_dels->set_cf_name(Constant::kVectorTableCF);
-      for (const auto &key_del : kv_deletes_table) {
-        table_dels->add_keys(key_del);
-      }
-    }
-
-    pb::raft::DeletesWithCf *scalar_speedup_dels = nullptr;
-    if (!kv_deletes_scalar_speedup.empty()) {
-      scalar_speedup_dels = cf_put_delete->add_deletes_with_cf();
-      scalar_speedup_dels->set_cf_name(Constant::kVectorScalarKeySpeedUpCF);
-      for (const auto &key_del : kv_deletes_scalar_speedup) {
-        scalar_speedup_dels->add_keys(key_del);
-      }
-    }
-
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-    pb::raft::DeletesWithCf *use_document_dels = nullptr;
-    if (!kv_deletes_use_document.empty()) {
-      use_document_dels = cf_put_delete->add_deletes_with_cf();
-      use_document_dels->set_cf_name(Constant::kVectorScalarUseDocumentCF);
-      for (const auto &key_del : kv_deletes_use_document) {
-        use_document_dels->add_keys(key_del);
-      }
-    }
-#endif
-
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-    if (nullptr == default_dels && nullptr == scalar_dels && nullptr == table_dels && nullptr == scalar_speedup_dels &&
-        nullptr == use_document_dels) {
-      return butil::Status::OK();
-    }
-#else
-    if (nullptr == default_dels && nullptr == scalar_dels && nullptr == table_dels && nullptr == scalar_speedup_dels) {
-      return butil::Status::OK();
-    }
-#endif
-
-    if (txn_raft_request.ByteSizeLong() == 0) {
-      return butil::Status::OK();
-    }
-
-#if defined(ENABLE_GC_MOCK)
-    if (!kv_deletes_default.empty())
-      ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorDataCF, {}, kv_deletes_default);
-    if (!kv_deletes_scalar.empty())
-      ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorScalarCF, {}, kv_deletes_scalar);
-    if (!kv_deletes_table.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorTableCF, {}, kv_deletes_table);
-    if (!kv_deletes_scalar_speedup.empty())
-      ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorScalarKeySpeedUpCF, {}, kv_deletes_scalar_speedup);
-    return butil::Status::OK();
-#else
-    if (nullptr == raft_engine) {
-      return butil::Status::OK();
-    }
-
-    return RaftEngineWrite(raft_engine, ctx, txn_raft_request, tenant_id, type, "RaftEngineWriteForNonTxnIndexGc");
-#endif
-  }
-
-  butil::Status TxnEngineHelper::RaftEngineWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-                                                 pb::raft::TxnRaftRequest & txn_raft_request, int64_t tenant_id,
-                                                 pb::common::RegionType type, const std::string &name) {
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      std::string s = fmt::format("[txn_gc][tenant({})][region({})][type({})][nontxn] {}, write failed, status: {}",
-                                  tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), name, ret.error_str());
+    if (lock_iter_value.empty()) {
+      std::string s = fmt::format(
+          "[txn_gc][lock][tenant({})][region({})][type({})][txn] lock info empty. lock_iter_key: {} lock_key : {} "
+          "safe_point_ts : {}",
+          tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(lock_iter_key),
+          Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts);
       DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, s);
+      lambda_add_error_statics_function();
+      lock_iter->Next();
+      continue;
     }
 
-    return ret;
+    pb::store::LockInfo lock_info;
+    bool parse_success = lock_info.ParseFromString(std::string(lock_iter_value));
+    if (!parse_success) {
+      std::string s = fmt::format(
+          "[txn_gc][lock][tenant({})][region({})][type({})][txn] parse lock info failed, lock_iter_key : {} "
+          "lock_key: "
+          "{} , lock_value : {} safe_point_ts : {}",
+          tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(lock_iter_key),
+          Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), Helper::StringToHex(lock_iter_value),
+          safe_point_ts);
+      DINGO_LOG(ERROR) << s;
+      lambda_add_error_statics_function();
+      lock_iter->Next();
+      continue;
+    }
+
+    int64_t lock_ts = lock_info.lock_ts();
+    if (lock_ts <= safe_point_ts) {
+      std::string s = fmt::format(
+          "[txn_gc][lock][tenant({})][region({})][type({})][txn] find lock error. exist lock_ts : {} <= "
+          "safe_point_ts "
+          ": {}, lock_iter_key : {} lock_key: {}  , safe_point_ts : {} lock_value : {}",
+          tenant_id, region_id, pb::common::RegionType_Name(type), lock_ts, safe_point_ts,
+          Helper::StringToHex(lock_iter_key), Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)),
+          safe_point_ts, lock_info.ShortDebugString());
+      DINGO_LOG(ERROR) << s;
+      lambda_add_error_statics_function();
+      lock_iter->Next();
+      continue;
+    }
+
+    lock_iter->Next();
+    total_count++;
   }
 
-  bvar::LatencyRecorder g_txn_do_final_work_for_gc_latency("dingo_txn_do_final_work_for_gc");
+  std::string s = fmt::format(
+      "[txn_gc][lock][tenant({})][region({})][type({})][txn] scan lock column family. start_key : {} end_key : {} "
+      "safe_point_ts : {} total : {} success : {} failed : {}",
+      tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(start_key),
+      Helper::StringToHex(end_key), safe_point_ts, total_count, (total_count - failed_count), failed_count);
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << s;
 
-  butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, RawEngine::ReaderPtr reader,
-      std::shared_ptr<Snapshot> snapshot, const std::string &write_key, int64_t tenant_id, pb::common::RegionType type,
-      int64_t safe_point_ts, std::vector<std::string> &kv_deletes_lock, std::vector<std::string> &kv_deletes_data,
-      std::vector<std::string> &kv_deletes_write, std::string &lock_start_key, std::string &lock_end_key,
-      std::string &last_lock_start_key, std::string &last_lock_end_key) {
-    BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
+  return butil::Status();
+}
 
-    butil::Status status;
-    lock_end_key = write_key;
-    // optimization . already checked Ignore.
-    if (lock_start_key != last_lock_start_key && lock_end_key != last_lock_end_key) {
-      status = CheckLockForTxnGc(reader, snapshot, lock_start_key, lock_end_key, safe_point_ts, ctx->RegionId(),
-                                 tenant_id, type);
-      if (!status.ok()) {
-        std::string s = fmt::format(
-            "[txn_gc][lock][tenant({})][region({})][type({})][txn] CheckLockForTxnGc failed. lock_start_key : {} "
-            "lock_end_key : {} safe_point_ts : {}. ignore.",
-            tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), Helper::StringToHex(lock_start_key),
-            Helper::StringToHex(lock_end_key), safe_point_ts);
-        DINGO_LOG(ERROR) << s + status.error_str();
-      }
+bvar::LatencyRecorder g_txn_raft_engine_write_for_gc_latency("dingo_txn_raft_engine_write_for_gc");
+
+butil::Status TxnEngineHelper::RaftEngineWriteForTxnGc(std::shared_ptr<Engine> raft_engine,
+                                                       std::shared_ptr<Context> ctx,
+                                                       const std::vector<std::string> &kv_deletes_lock,
+                                                       const std::vector<std::string> &kv_deletes_data,
+                                                       const std::vector<std::string> &kv_deletes_write,
+                                                       int64_t tenant_id, pb::common::RegionType type) {
+  BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
+
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  pb::raft::DeletesWithCf *write_dels = nullptr;
+  if (!kv_deletes_write.empty()) {
+    write_dels = cf_put_delete->add_deletes_with_cf();
+    write_dels->set_cf_name(Constant::kTxnWriteCF);
+    for (const auto &key_del : kv_deletes_write) {
+      write_dels->add_keys(key_del);
     }
+  }
 
-    status =
-        RaftEngineWriteForTxnGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write, tenant_id, type);
+  pb::raft::DeletesWithCf *lock_dels = nullptr;
+  if (!kv_deletes_lock.empty()) {
+    lock_dels = cf_put_delete->add_deletes_with_cf();
+    lock_dels->set_cf_name(Constant::kTxnLockCF);
+    for (const auto &key_del : kv_deletes_lock) {
+      lock_dels->add_keys(key_del);
+    }
+  }
+
+  pb::raft::DeletesWithCf *data_dels = nullptr;
+  if (!kv_deletes_data.empty()) {
+    data_dels = cf_put_delete->add_deletes_with_cf();
+    data_dels->set_cf_name(Constant::kTxnDataCF);
+    for (const auto &key_del : kv_deletes_data) {
+      data_dels->add_keys(key_del);
+    }
+  }
+
+  if (nullptr == write_dels && nullptr == lock_dels && nullptr == data_dels) {
+    return butil::Status::OK();
+  }
+
+  if (txn_raft_request.ByteSizeLong() == 0) {
+    return butil::Status::OK();
+  }
+#if defined(ENABLE_GC_MOCK)
+  if (!kv_deletes_write.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnWriteCF, {}, kv_deletes_write);
+  if (!kv_deletes_lock.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnLockCF, {}, kv_deletes_lock);
+  if (!kv_deletes_data.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnDataCF, {}, kv_deletes_data);
+  return butil::Status::OK();
+#else
+  if (nullptr == raft_engine) {
+    return butil::Status::OK();
+  }
+
+  return RaftEngineWrite(raft_engine, ctx, txn_raft_request, tenant_id, type, "RaftEngineWriteForTxnGc");
+#endif
+}
+
+butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnStoreAndDocumentGc(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+    const std::vector<std::string> &kv_deletes_default, int64_t tenant_id, pb::common::RegionType type) {
+  BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
+
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  pb::raft::DeletesWithCf *default_dels = nullptr;
+  if (!kv_deletes_default.empty()) {
+    default_dels = cf_put_delete->add_deletes_with_cf();
+    default_dels->set_cf_name(Constant::kStoreDataCF);
+    for (const auto &key_del : kv_deletes_default) {
+      default_dels->add_keys(key_del);
+    }
+  }
+
+  if (nullptr == default_dels) {
+    return butil::Status::OK();
+  }
+
+  if (txn_raft_request.ByteSizeLong() == 0) {
+    return butil::Status::OK();
+  }
+#if defined(ENABLE_GC_MOCK)
+  if (!kv_deletes_default.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kStoreDataCF, {}, kv_deletes_default);
+
+  return butil::Status::OK();
+#else
+
+  if (nullptr == raft_engine) {
+    return butil::Status::OK();
+  }
+
+  return RaftEngineWrite(raft_engine, ctx, txn_raft_request, tenant_id, type,
+                         "RaftEngineWriteForNonTxnStoreAndDocumentGc");
+#endif
+}
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+    const std::vector<std::string> &kv_deletes_default, const std::vector<std::string> &kv_deletes_scalar,
+    const std::vector<std::string> &kv_deletes_table, const std::vector<std::string> &kv_deletes_scalar_speedup,
+    const std::vector<std::string> &kv_deletes_use_document, int64_t tenant_id, pb::common::RegionType type) {
+#else
+butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+    const std::vector<std::string> &kv_deletes_default, const std::vector<std::string> &kv_deletes_scalar,
+    const std::vector<std::string> &kv_deletes_table, const std::vector<std::string> &kv_deletes_scalar_speedup,
+    int64_t tenant_id, pb::common::RegionType type) {
+#endif
+  BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
+
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  pb::raft::DeletesWithCf *default_dels = nullptr;
+  if (!kv_deletes_default.empty()) {
+    default_dels = cf_put_delete->add_deletes_with_cf();
+    default_dels->set_cf_name(Constant::kVectorDataCF);
+    for (const auto &key_del : kv_deletes_default) {
+      default_dels->add_keys(key_del);
+    }
+  }
+
+  pb::raft::DeletesWithCf *scalar_dels = nullptr;
+  if (!kv_deletes_scalar.empty()) {
+    scalar_dels = cf_put_delete->add_deletes_with_cf();
+    scalar_dels->set_cf_name(Constant::kVectorScalarCF);
+    for (const auto &key_del : kv_deletes_scalar) {
+      scalar_dels->add_keys(key_del);
+    }
+  }
+
+  pb::raft::DeletesWithCf *table_dels = nullptr;
+  if (!kv_deletes_table.empty()) {
+    table_dels = cf_put_delete->add_deletes_with_cf();
+    table_dels->set_cf_name(Constant::kVectorTableCF);
+    for (const auto &key_del : kv_deletes_table) {
+      table_dels->add_keys(key_del);
+    }
+  }
+
+  pb::raft::DeletesWithCf *scalar_speedup_dels = nullptr;
+  if (!kv_deletes_scalar_speedup.empty()) {
+    scalar_speedup_dels = cf_put_delete->add_deletes_with_cf();
+    scalar_speedup_dels->set_cf_name(Constant::kVectorScalarKeySpeedUpCF);
+    for (const auto &key_del : kv_deletes_scalar_speedup) {
+      scalar_speedup_dels->add_keys(key_del);
+    }
+  }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  pb::raft::DeletesWithCf *use_document_dels = nullptr;
+  if (!kv_deletes_use_document.empty()) {
+    use_document_dels = cf_put_delete->add_deletes_with_cf();
+    use_document_dels->set_cf_name(Constant::kVectorScalarUseDocumentCF);
+    for (const auto &key_del : kv_deletes_use_document) {
+      use_document_dels->add_keys(key_del);
+    }
+  }
+#endif
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (nullptr == default_dels && nullptr == scalar_dels && nullptr == table_dels && nullptr == scalar_speedup_dels &&
+      nullptr == use_document_dels) {
+    return butil::Status::OK();
+  }
+#else
+  if (nullptr == default_dels && nullptr == scalar_dels && nullptr == table_dels && nullptr == scalar_speedup_dels) {
+    return butil::Status::OK();
+  }
+#endif
+
+  if (txn_raft_request.ByteSizeLong() == 0) {
+    return butil::Status::OK();
+  }
+
+#if defined(ENABLE_GC_MOCK)
+  if (!kv_deletes_default.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorDataCF, {}, kv_deletes_default);
+  if (!kv_deletes_scalar.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorScalarCF, {}, kv_deletes_scalar);
+  if (!kv_deletes_table.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorTableCF, {}, kv_deletes_table);
+  if (!kv_deletes_scalar_speedup.empty())
+    ctx->Writer()->KvBatchPutAndDelete(Constant::kVectorScalarKeySpeedUpCF, {}, kv_deletes_scalar_speedup);
+  return butil::Status::OK();
+#else
+  if (nullptr == raft_engine) {
+    return butil::Status::OK();
+  }
+
+  return RaftEngineWrite(raft_engine, ctx, txn_raft_request, tenant_id, type, "RaftEngineWriteForNonTxnIndexGc");
+#endif
+}
+
+butil::Status TxnEngineHelper::RaftEngineWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                               pb::raft::TxnRaftRequest &txn_raft_request, int64_t tenant_id,
+                                               pb::common::RegionType type, const std::string &name) {
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    std::string s = fmt::format("[txn_gc][tenant({})][region({})][type({})][nontxn] {}, write failed, status: {}",
+                                tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), name, ret.error_str());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, s);
+  }
+
+  return ret;
+}
+
+bvar::LatencyRecorder g_txn_do_final_work_for_gc_latency("dingo_txn_do_final_work_for_gc");
+
+butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, RawEngine::ReaderPtr reader,
+    std::shared_ptr<Snapshot> snapshot, const std::string &write_key, int64_t tenant_id, pb::common::RegionType type,
+    int64_t safe_point_ts, std::vector<std::string> &kv_deletes_lock, std::vector<std::string> &kv_deletes_data,
+    std::vector<std::string> &kv_deletes_write, std::string &lock_start_key, std::string &lock_end_key,
+    std::string &last_lock_start_key, std::string &last_lock_end_key) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
+
+  butil::Status status;
+  lock_end_key = write_key;
+  // optimization . already checked Ignore.
+  if (lock_start_key != last_lock_start_key && lock_end_key != last_lock_end_key) {
+    status = CheckLockForTxnGc(reader, snapshot, lock_start_key, lock_end_key, safe_point_ts, ctx->RegionId(),
+                               tenant_id, type);
     if (!status.ok()) {
       std::string s = fmt::format(
-          "[txn_gc][write][tenant({})][region({})][type({})][txn] RaftEngineWriteForTxnGc failed. kv_deletes_lock size "
-          ": "
-          "{} kv_deletes_data size : {} kv_deletes_write : {} safe_point_ts : {}. ignore.",
-          tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_lock.size(), kv_deletes_data.size(),
-          kv_deletes_write.size(), safe_point_ts);
+          "[txn_gc][lock][tenant({})][region({})][type({})][txn] CheckLockForTxnGc failed. lock_start_key : {} "
+          "lock_end_key : {} safe_point_ts : {}. ignore.",
+          tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), Helper::StringToHex(lock_start_key),
+          Helper::StringToHex(lock_end_key), safe_point_ts);
       DINGO_LOG(ERROR) << s + status.error_str();
     }
-
-    last_lock_start_key = lock_start_key;
-    last_lock_end_key = lock_end_key;
-    lock_start_key = lock_end_key;
-    lock_end_key = "";
-    kv_deletes_lock.resize(0);
-    kv_deletes_data.resize(0);
-    kv_deletes_write.resize(0);
-
-    return butil::Status();
   }
 
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-  butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, int64_t tenant_id, pb::common::RegionType type,
-      std::vector<std::string> & kv_deletes_default, std::vector<std::string> & kv_deletes_scalar,
-      std::vector<std::string> & kv_deletes_table, std::vector<std::string> & kv_deletes_scalar_speedup,
-      std::vector<std::string> & kv_deletes_use_document) {
-#else
-  butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(
-      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, int64_t tenant_id, pb::common::RegionType type,
-      std::vector<std::string> & kv_deletes_default, std::vector<std::string> & kv_deletes_scalar,
-      std::vector<std::string> & kv_deletes_table, std::vector<std::string> & kv_deletes_scalar_speedup) {
-#endif
-    BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
-
-    butil::Status status;
-
-    if (type == pb::common::RegionType::INDEX_REGION) {
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-      status =
-          RaftEngineWriteForNonTxnIndexGc(raft_engine, ctx, kv_deletes_default, kv_deletes_scalar, kv_deletes_table,
-                                          kv_deletes_scalar_speedup, kv_deletes_use_document, tenant_id, type);
-      if (!status.ok()) {
-        std::string s = fmt::format(
-            "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnIndexGc failed. "
-            "kv_deletes_default size : {}  kv_deletes_scalar size : {}  kv_deletes_table size : {} "
-            "kv_deletes_scalar_speedup size : {}  kv_deletes_use_document size : {}. "
-            "ignore.",
-            tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size(),
-            kv_deletes_scalar.size(), kv_deletes_table.size(), kv_deletes_scalar_speedup.size(),
-            kv_deletes_use_document.size());
-        DINGO_LOG(ERROR) << s + status.error_str();
-      }
-#else
-      status = RaftEngineWriteForNonTxnIndexGc(raft_engine, ctx, kv_deletes_default, kv_deletes_scalar,
-                                               kv_deletes_table, kv_deletes_scalar_speedup, tenant_id, type);
-      if (!status.ok()) {
-        std::string s = fmt::format(
-            "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnIndexGc failed. "
-            "kv_deletes_default size : {}  kv_deletes_scalar size : {}  kv_deletes_table size : {} "
-            "kv_deletes_scalar_speedup size : {}. "
-            "ignore.",
-            tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size(),
-            kv_deletes_scalar.size(), kv_deletes_table.size(), kv_deletes_scalar_speedup.size());
-        DINGO_LOG(ERROR) << s + status.error_str();
-      }
-#endif
-
-    } else {
-      status = RaftEngineWriteForNonTxnStoreAndDocumentGc(raft_engine, ctx, kv_deletes_default, tenant_id, type);
-      if (!status.ok()) {
-        std::string s = fmt::format(
-            "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnStoreAndDocumentGc "
-            "failed. kv_deletes_default size : {}. ignore.",
-            tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size());
-        DINGO_LOG(ERROR) << s + status.error_str();
-      }
-    }
-
-    kv_deletes_default.resize(0);
-    kv_deletes_scalar.resize(0);
-    kv_deletes_table.resize(0);
-    kv_deletes_scalar_speedup.resize(0);
-#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-    kv_deletes_use_document.resize(0);
-#endif
-
-    return butil::Status();
+  status =
+      RaftEngineWriteForTxnGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write, tenant_id, type);
+  if (!status.ok()) {
+    std::string s = fmt::format(
+        "[txn_gc][write][tenant({})][region({})][type({})][txn] RaftEngineWriteForTxnGc failed. kv_deletes_lock size "
+        ": "
+        "{} kv_deletes_data size : {} kv_deletes_write : {} safe_point_ts : {}. ignore.",
+        tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_lock.size(), kv_deletes_data.size(),
+        kv_deletes_write.size(), safe_point_ts);
+    DINGO_LOG(ERROR) << s + status.error_str();
   }
 
-  void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
-    static std::atomic<bool> g_regular_update_safe_point_ts_handler_running(false);
+  last_lock_start_key = lock_start_key;
+  last_lock_end_key = lock_end_key;
+  lock_start_key = lock_end_key;
+  lock_end_key = "";
+  kv_deletes_lock.resize(0);
+  kv_deletes_data.resize(0);
+  kv_deletes_write.resize(0);
 
-    if (g_regular_update_safe_point_ts_handler_running.load(std::memory_order_relaxed)) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-          << "RegularUpdateSafePointTsHandler... g_regular_update_safe_point_ts_handler_running is true, return";
-      return;
-    }
+  return butil::Status();
+}
 
-    AtomicGuard guard(g_regular_update_safe_point_ts_handler_running);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                                      int64_t tenant_id, pb::common::RegionType type,
+                                                      std::vector<std::string> &kv_deletes_default,
+                                                      std::vector<std::string> &kv_deletes_scalar,
+                                                      std::vector<std::string> &kv_deletes_table,
+                                                      std::vector<std::string> &kv_deletes_scalar_speedup,
+                                                      std::vector<std::string> &kv_deletes_use_document) {
+#else
+butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                                      int64_t tenant_id, pb::common::RegionType type,
+                                                      std::vector<std::string> &kv_deletes_default,
+                                                      std::vector<std::string> &kv_deletes_scalar,
+                                                      std::vector<std::string> &kv_deletes_table,
+                                                      std::vector<std::string> &kv_deletes_scalar_speedup) {
+#endif
+  BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
 
-    int64_t start_time = 0;
+  butil::Status status;
 
-    std::shared_ptr<CoordinatorInteraction> coordinator_interaction = Server::GetInstance().GetCoordinatorInteraction();
-    std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-
-    pb::coordinator::GetGCSafePointRequest request;
-
-    request.mutable_request_info()->set_request_id(Server::GetInstance().Id());
-    request.set_get_all_tenant(true);
-
-    start_time = Helper::TimestampMs();
-    pb::coordinator::GetGCSafePointResponse response;
-    butil::Status status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
+  if (type == pb::common::RegionType::INDEX_REGION) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    status = RaftEngineWriteForNonTxnIndexGc(raft_engine, ctx, kv_deletes_default, kv_deletes_scalar, kv_deletes_table,
+                                             kv_deletes_scalar_speedup, kv_deletes_use_document, tenant_id, type);
     if (!status.ok()) {
-      DINGO_LOG(WARNING) << fmt::format("[GetGCSafePoint]  failed, error: {} {}",
-                                        pb::error::Errno_Name(status.error_code()), status.error_str());
-      return;
+      std::string s = fmt::format(
+          "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnIndexGc failed. "
+          "kv_deletes_default size : {}  kv_deletes_scalar size : {}  kv_deletes_table size : {} "
+          "kv_deletes_scalar_speedup size : {}  kv_deletes_use_document size : {}. "
+          "ignore.",
+          tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size(),
+          kv_deletes_scalar.size(), kv_deletes_table.size(), kv_deletes_scalar_speedup.size(),
+          kv_deletes_use_document.size());
+      DINGO_LOG(ERROR) << s + status.error_str();
     }
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-        << fmt::format("[GetGCSafePoint] response size({}) elapsed time({} ms) response : {}", response.ByteSizeLong(),
-                       Helper::TimestampMs() - start_time, response.ShortDebugString());
-
-    std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
-
-    bool gc_stop = response.gc_stop();
-    int64_t safe_point_ts = response.safe_point();
-
-    std::map<int64_t, int64_t> safe_point_ts_group;
-
-    safe_point_ts_group.emplace(Constant::kDefaultTenantId, safe_point_ts);
-
-    for (auto [tenant_id, internal_safe_point_ts] : response.tenant_safe_points()) {
-      safe_point_ts_group.emplace(tenant_id, internal_safe_point_ts);
+#else
+    status = RaftEngineWriteForNonTxnIndexGc(raft_engine, ctx, kv_deletes_default, kv_deletes_scalar, kv_deletes_table,
+                                             kv_deletes_scalar_speedup, tenant_id, type);
+    if (!status.ok()) {
+      std::string s = fmt::format(
+          "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnIndexGc failed. "
+          "kv_deletes_default size : {}  kv_deletes_scalar size : {}  kv_deletes_table size : {} "
+          "kv_deletes_scalar_speedup size : {}. "
+          "ignore.",
+          tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size(),
+          kv_deletes_scalar.size(), kv_deletes_table.size(), kv_deletes_scalar_speedup.size());
+      DINGO_LOG(ERROR) << s + status.error_str();
     }
+#endif
 
-    gc_safe_point_manager->SetGcFlagAndSafePointTs(safe_point_ts_group, gc_stop);
+  } else {
+    status = RaftEngineWriteForNonTxnStoreAndDocumentGc(raft_engine, ctx, kv_deletes_default, tenant_id, type);
+    if (!status.ok()) {
+      std::string s = fmt::format(
+          "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnStoreAndDocumentGc "
+          "failed. kv_deletes_default size : {}. ignore.",
+          tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size());
+      DINGO_LOG(ERROR) << s + status.error_str();
+    }
   }
+
+  kv_deletes_default.resize(0);
+  kv_deletes_scalar.resize(0);
+  kv_deletes_table.resize(0);
+  kv_deletes_scalar_speedup.resize(0);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  kv_deletes_use_document.resize(0);
+#endif
+
+  return butil::Status();
+}
+
+void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
+  static std::atomic<bool> g_regular_update_safe_point_ts_handler_running(false);
+
+  if (g_regular_update_safe_point_ts_handler_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+        << "RegularUpdateSafePointTsHandler... g_regular_update_safe_point_ts_handler_running is true, return";
+    return;
+  }
+
+  AtomicGuard guard(g_regular_update_safe_point_ts_handler_running);
+
+  int64_t start_time = 0;
+
+  std::shared_ptr<CoordinatorInteraction> coordinator_interaction = Server::GetInstance().GetCoordinatorInteraction();
+  std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+
+  pb::coordinator::GetGCSafePointRequest request;
+
+  request.mutable_request_info()->set_request_id(Server::GetInstance().Id());
+  request.set_get_all_tenant(true);
+
+  start_time = Helper::TimestampMs();
+  pb::coordinator::GetGCSafePointResponse response;
+  butil::Status status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("[GetGCSafePoint]  failed, error: {} {}",
+                                      pb::error::Errno_Name(status.error_code()), status.error_str());
+    return;
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[GetGCSafePoint] response size({}) elapsed time({} ms) response : {}", response.ByteSizeLong(),
+                     Helper::TimestampMs() - start_time, response.ShortDebugString());
+
+  std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
+
+  bool gc_stop = response.gc_stop();
+  int64_t safe_point_ts = response.safe_point();
+
+  std::map<int64_t, int64_t> safe_point_ts_group;
+
+  safe_point_ts_group.emplace(Constant::kDefaultTenantId, safe_point_ts);
+
+  for (auto [tenant_id, internal_safe_point_ts] : response.tenant_safe_points()) {
+    safe_point_ts_group.emplace(tenant_id, internal_safe_point_ts);
+  }
+
+  gc_safe_point_manager->SetGcFlagAndSafePointTs(safe_point_ts_group, gc_stop);
+}
 
 // readme .
 // This macro handles the last safe_point_ts state.
@@ -5885,1221 +5941,1214 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
 #endif
 #undef ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS
 
-  void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
-    static std::atomic<bool> g_regular_do_gc_handler_running(false);
+void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
+  static std::atomic<bool> g_regular_do_gc_handler_running(false);
 
-    if (g_regular_do_gc_handler_running.load(std::memory_order_relaxed)) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-          << "RegularUpdateSafePointTsHandler... g_regular_do_gc_handler_running is true, return";
-      return;
-    }
-
-    AtomicGuard guard(g_regular_do_gc_handler_running);
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task start.");
-
-    std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-
-    std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
-
-    std::map<int64_t, std::pair<bool, int64_t>> safe_point_ts_group;
-    safe_point_ts_group = gc_safe_point_manager->GetAllGcFlagAndSafePointTs();
-
-    bool all_gc_stop = true;
-    for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
-      if (!safe_point_ts_pair.first) {
-        all_gc_stop = false;
-      }
-    }
-
-    if (all_gc_stop) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] set gc_flag stop, return.");
-      for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][safe_point_ts({})] set gc_flag stop, return.", tenant_id, safe_point_ts_pair.second);
-      }
-      return;
-    }
-
+  if (g_regular_do_gc_handler_running.load(std::memory_order_relaxed)) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-        << fmt::format("[txn_gc] tenant size : {}", safe_point_ts_group.size());
+        << "RegularUpdateSafePointTsHandler... g_regular_do_gc_handler_running is true, return";
+    return;
+  }
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-        << fmt::format("[txn_gc] =====================================");
+  AtomicGuard guard(g_regular_do_gc_handler_running);
 
-    for (auto iter = safe_point_ts_group.begin(); iter != safe_point_ts_group.end();) {
-      if (iter->second.second <= 0) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][safe_point_ts({})] <= 0, ignore. return.", iter->first, iter->second.second);
-        gc_safe_point_manager->RemoveSafePoint(iter->first);
-        iter = safe_point_ts_group.erase(iter);
-      } else {
-        ++iter;
-      }
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task start.");
+
+  std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+
+  std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
+
+  std::map<int64_t, std::pair<bool, int64_t>> safe_point_ts_group;
+  safe_point_ts_group = gc_safe_point_manager->GetAllGcFlagAndSafePointTs();
+
+  bool all_gc_stop = true;
+  for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
+    if (!safe_point_ts_pair.first) {
+      all_gc_stop = false;
     }
+  }
 
+  if (all_gc_stop) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] set gc_flag stop, return.");
     for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-          "[txn_gc][tenant({})][safe_point_ts({})] gc task start.", tenant_id, safe_point_ts_pair.second);
-      gc_safe_point_manager->SetGcStop(tenant_id, false);
+          "[txn_gc][tenant({})][safe_point_ts({})] set gc_flag stop, return.", tenant_id, safe_point_ts_pair.second);
     }
+    return;
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc] tenant size : {}", safe_point_ts_group.size());
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc] =====================================");
+
+  for (auto iter = safe_point_ts_group.begin(); iter != safe_point_ts_group.end();) {
+    if (iter->second.second <= 0) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+          "[txn_gc][tenant({})][safe_point_ts({})] <= 0, ignore. return.", iter->first, iter->second.second);
+      gc_safe_point_manager->RemoveSafePoint(iter->first);
+      iter = safe_point_ts_group.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+
+  for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-        << fmt::format("[txn_gc] =====================================");
+        << fmt::format("[txn_gc][tenant({})][safe_point_ts({})] gc task start.", tenant_id, safe_point_ts_pair.second);
+    gc_safe_point_manager->SetGcStop(tenant_id, false);
+  }
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc] =====================================");
 
 #if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
-    for (auto iter = safe_point_ts_group.begin(); iter != safe_point_ts_group.end();) {
-      auto gc_safe_point = gc_safe_point_manager->FindSafePoint(iter->first);
-      int64_t last_accomplished_safe_point_ts = gc_safe_point->GetLastAccomplishedSafePointTs();
-      if (last_accomplished_safe_point_ts >= safe_point_ts_pair.second) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-            << fmt::format("[txn_gc][tenant({})][safe_point_ts({})] already accomplished. ignore", iter->first,
-                           safe_point_ts_pair.second);
-        gc_safe_point_manager->RemoveSafePoint(iter->first);
-        iter = safe_point_ts_group.erase(iter);
-      } else {
-        ++iter;
-      }
+  for (auto iter = safe_point_ts_group.begin(); iter != safe_point_ts_group.end();) {
+    auto gc_safe_point = gc_safe_point_manager->FindSafePoint(iter->first);
+    int64_t last_accomplished_safe_point_ts = gc_safe_point->GetLastAccomplishedSafePointTs();
+    if (last_accomplished_safe_point_ts >= safe_point_ts_pair.second) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+          << fmt::format("[txn_gc][tenant({})][safe_point_ts({})] already accomplished. ignore", iter->first,
+                         safe_point_ts_pair.second);
+      gc_safe_point_manager->RemoveSafePoint(iter->first);
+      iter = safe_point_ts_group.erase(iter);
+    } else {
+      ++iter;
     }
+  }
 #endif
 
-    if (safe_point_ts_group.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] tenant_ids empty, return.");
-      return;
-    }
+  if (safe_point_ts_group.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] tenant_ids empty, return.");
+    return;
+  }
 
-    std::vector<store::RegionPtr> region_ptrs = Server::GetInstance().GetAllAliveRegion();
+  std::vector<store::RegionPtr> region_ptrs = Server::GetInstance().GetAllAliveRegion();
 
-    std::vector<store::RegionPtr> leader_region_ptrs;
-    leader_region_ptrs.reserve(region_ptrs.size());
+  std::vector<store::RegionPtr> leader_region_ptrs;
+  leader_region_ptrs.reserve(region_ptrs.size());
 
-    std::shared_ptr<Storage> storage = Server::GetInstance().GetStorage();
+  std::shared_ptr<Storage> storage = Server::GetInstance().GetStorage();
 
-    for (auto &region_ptr : region_ptrs) {
-      butil::Status status;
-      status = storage->ValidateLeader(region_ptr);
+  for (auto &region_ptr : region_ptrs) {
+    butil::Status status;
+    status = storage->ValidateLeader(region_ptr);
 
-      if (status.ok()) {
-        // if (region_ptr->LeaderId() == self_id) {
-        if (pb::common::StoreRegionState::NORMAL == region_ptr->State()) {
-          auto definition = region_ptr->Definition();
-          int64_t tenant_id = definition.tenant_id();
-          if (safe_point_ts_group.find(tenant_id) != safe_point_ts_group.end()) {
-            leader_region_ptrs.push_back(region_ptr);
-          }
-        }
-      }
-    }
-
-    sort(leader_region_ptrs.begin(), leader_region_ptrs.end(),
-         [](const store::RegionPtr &lhs, const store::RegionPtr &rhs) {
-           return mvcc::Codec::EncodeBytes(lhs->Range().start_key()) <
-                  mvcc::Codec::EncodeBytes(rhs->Range().start_key());
-         });
-
-    for (auto &region_ptr : leader_region_ptrs) {
-      if (FLAGS_dingo_log_switch_txn_gc_detail) {
+    if (status.ok()) {
+      // if (region_ptr->LeaderId() == self_id) {
+      if (pb::common::StoreRegionState::NORMAL == region_ptr->State()) {
         auto definition = region_ptr->Definition();
         int64_t tenant_id = definition.tenant_id();
-        DINGO_LOG(INFO) << fmt::format("[txn_gc][tenant({})][region({})]  start_key : {} end_key : {}", tenant_id,
-                                       region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
-                                       Helper::StringToHex(region_ptr->Range().end_key()));
+        if (safe_point_ts_group.find(tenant_id) != safe_point_ts_group.end()) {
+          leader_region_ptrs.push_back(region_ptr);
+        }
       }
     }
+  }
 
-    // Caution !!!
-    // We will not use a snapshot globally because it will affect other region compaction.
-    for (const auto &region_ptr : leader_region_ptrs) {
-      butil::Status status;
+  sort(leader_region_ptrs.begin(), leader_region_ptrs.end(),
+       [](const store::RegionPtr &lhs, const store::RegionPtr &rhs) {
+         return mvcc::Codec::EncodeBytes(lhs->Range().start_key()) < mvcc::Codec::EncodeBytes(rhs->Range().start_key());
+       });
 
+  for (auto &region_ptr : leader_region_ptrs) {
+    if (FLAGS_dingo_log_switch_txn_gc_detail) {
       auto definition = region_ptr->Definition();
       int64_t tenant_id = definition.tenant_id();
+      DINGO_LOG(INFO) << fmt::format("[txn_gc][tenant({})][region({})]  start_key : {} end_key : {}", tenant_id,
+                                     region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
+                                     Helper::StringToHex(region_ptr->Range().end_key()));
+    }
+  }
 
-      status = storage->ValidateLeader(region_ptr);
-      if (!status.ok()) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-            << fmt::format("[txn_gc][tenant({})][region({})]  is not leader yet. start_key : {} end_key : {}. ignore.",
-                           tenant_id, region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
-                           Helper::StringToHex(region_ptr->Range().end_key()));
-        continue;
-      } else {
-        if (pb::common::StoreRegionState::NORMAL != region_ptr->State()) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-              "[txn_gc][tenant({})][region({})] is leader. but state is not normal : {}.  start_key : {} end_key : {}. "
-              " "
-              "ignore.",
-              tenant_id, region_ptr->Id(), static_cast<int>(region_ptr->State()),
-              Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
-          continue;
-        }
-      }
+  // Caution !!!
+  // We will not use a snapshot globally because it will affect other region compaction.
+  for (const auto &region_ptr : leader_region_ptrs) {
+    butil::Status status;
 
-      auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point_manager->GetGcFlagAndSafePointTs(tenant_id);
-      auto gc_safe_point = gc_safe_point_manager->FindSafePoint(tenant_id);
+    auto definition = region_ptr->Definition();
+    int64_t tenant_id = definition.tenant_id();
 
-      if (internal_gc_stop) {
+    status = storage->ValidateLeader(region_ptr);
+    if (!status.ok()) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+          << fmt::format("[txn_gc][tenant({})][region({})]  is not leader yet. start_key : {} end_key : {}. ignore.",
+                         tenant_id, region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
+                         Helper::StringToHex(region_ptr->Range().end_key()));
+      continue;
+    } else {
+      if (pb::common::StoreRegionState::NORMAL != region_ptr->State()) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][region({})] set internal_gc_stop stop,  start_key : {} end_key : {} ignore.",
-            tenant_id, region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
-            Helper::StringToHex(region_ptr->Range().end_key()));
-        gc_safe_point->SetGcStop(true);
+            "[txn_gc][tenant({})][region({})] is leader. but state is not normal : {}.  start_key : {} end_key : {}. "
+            " "
+            "ignore.",
+            tenant_id, region_ptr->Id(), static_cast<int>(region_ptr->State()),
+            Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
         continue;
       }
+    }
 
-      auto safe_point_ts = safe_point_ts_group[tenant_id].second;
+    auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point_manager->GetGcFlagAndSafePointTs(tenant_id);
+    auto gc_safe_point = gc_safe_point_manager->FindSafePoint(tenant_id);
 
-      if (safe_point_ts < internal_safe_point_ts) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, "
-            "we'll "
-            "deal with it next time. ignore.",
-            tenant_id, region_ptr->Id(), safe_point_ts, internal_safe_point_ts);
-      }
+    if (internal_gc_stop) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+          "[txn_gc][tenant({})][region({})] set internal_gc_stop stop,  start_key : {} end_key : {} ignore.", tenant_id,
+          region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
+          Helper::StringToHex(region_ptr->Range().end_key()));
+      gc_safe_point->SetGcStop(true);
+      continue;
+    }
 
-      dingodb::pb::store::TxnGcRequest request;
-      dingodb::pb::store::TxnGcResponse response;
+    auto safe_point_ts = safe_point_ts_group[tenant_id].second;
 
-      std::shared_ptr<Context> ctx = std::make_shared<Context>(nullptr, nullptr, &request, &response);
-      ctx->SetRegionId(region_ptr->Id());
-      ctx->SetCfName(Constant::kStoreDataCF);
-      ctx->SetRegionEpoch(region_ptr->Epoch());
-      ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);
-      ctx->SetRawEngineType(region_ptr->GetRawEngineType());
-      ctx->SetStoreEngineType(region_ptr->GetStoreEngineType());
+    if (safe_point_ts < internal_safe_point_ts) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
+          "[txn_gc][tenant({})][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, "
+          "we'll "
+          "deal with it next time. ignore.",
+          tenant_id, region_ptr->Id(), safe_point_ts, internal_safe_point_ts);
+    }
 
-      auto writer = storage->GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
+    dingodb::pb::store::TxnGcRequest request;
+    dingodb::pb::store::TxnGcResponse response;
 
-      status = writer->TxnGc(ctx, safe_point_ts);
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(nullptr, nullptr, &request, &response);
+    ctx->SetRegionId(region_ptr->Id());
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetRegionEpoch(region_ptr->Epoch());
+    ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);
+    ctx->SetRawEngineType(region_ptr->GetRawEngineType());
+    ctx->SetStoreEngineType(region_ptr->GetStoreEngineType());
 
-      if (gc_safe_point->GetGcStop()) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
-            << fmt::format("[txn_gc][tenant({})][region({})]  gc_stop stopped,  start_key : {} end_key : {}. ignore.",
-                           tenant_id, ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
-                           Helper::StringToHex(region_ptr->Range().end_key()));
-        continue;
-      }
+    auto writer = storage->GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
+
+    status = writer->TxnGc(ctx, safe_point_ts);
+
+    if (gc_safe_point->GetGcStop()) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+          << fmt::format("[txn_gc][tenant({})][region({})]  gc_stop stopped,  start_key : {} end_key : {}. ignore.",
+                         tenant_id, ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
+                         Helper::StringToHex(region_ptr->Range().end_key()));
+      continue;
+    }
 
 #if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
-      gc_safe_point->SetLastAccomplishedSafePointTs(safe_point_ts);
+    gc_safe_point->SetLastAccomplishedSafePointTs(safe_point_ts);
 #endif
-    }
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task end.");
   }
 
-  // backup & restore
-  butil::Status TxnEngineHelper::BackupData(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, std::string backup_ts, int64_t backup_tso,
-      const std::string &storage_path, const pb::common::StorageBackend &storage_backend,
-      const pb::common::CompressionType &compression_type, int32_t compression_level,
-      dingodb::pb::store::BackupDataResponse *response) {
-    butil::Status status;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task end.");
+}
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[backupdata][region({})][type({})] backup data. backup_ts : {}  backup_tso : {} storage_path : {} "
-        "storage_backend : {} compression_type : {} compression_level : {}",
-        ctx->RegionId(), pb::common::RegionType_Name(region_type), backup_ts, backup_tso, storage_path,
-        storage_backend.DebugString(), pb::common::CompressionType_Name(compression_type), compression_level);
+// backup & restore
+butil::Status TxnEngineHelper::BackupData(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                          store::RegionPtr region, const pb::common::RegionType &region_type,
+                                          std::string backup_ts, int64_t backup_tso, const std::string &storage_path,
+                                          const pb::common::StorageBackend &storage_backend,
+                                          const pb::common::CompressionType &compression_type,
+                                          int32_t compression_level, dingodb::pb::store::BackupDataResponse *response) {
+  butil::Status status;
 
-    if (region == nullptr) {
-      std::string s = fmt::format("[backupdata][region({})]  region not found.", ctx->RegionId());
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
-    }
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})] backup data. backup_ts : {}  backup_tso : {} storage_path : {} "
+      "storage_backend : {} compression_type : {} compression_level : {}",
+      ctx->RegionId(), pb::common::RegionType_Name(region_type), backup_ts, backup_tso, storage_path,
+      storage_backend.DebugString(), pb::common::CompressionType_Name(compression_type), compression_level);
 
-    bool is_txn = region->IsTxn();
-
-    // txn
-    std::map<std::string, std::string> kv_data;
-    std::map<std::string, std::string> kv_write;
-
-    // non txn
-    std::map<std::string, std::string> kv_default;
-    std::map<std::string, std::string> kv_scalar;
-    std::map<std::string, std::string> kv_table;
-    std::map<std::string, std::string> kv_scalar_speedup;
-
-    std::string region_type_name;
-
-    if (region_type == pb::common::RegionType::STORE_REGION && is_txn) {
-      region_type_name = Constant::kStoreRegionName;
-      status = DoBackupDataForStoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-    } else if (region_type == pb::common::RegionType::STORE_REGION && !is_txn) {
-      region_type_name = Constant::kStoreRegionName;
-      status = DoBackupDataForStoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
-                                          kv_table, kv_scalar_speedup);
-    } else if (region_type == pb::common::RegionType::INDEX_REGION && is_txn) {
-      region_type_name = Constant::kIndexRegionName;
-      status = DoBackupDataForIndexTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-    } else if (region_type == pb::common::RegionType::INDEX_REGION && !is_txn) {
-      region_type_name = Constant::kIndexRegionName;
-      status = DoBackupDataForIndexNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
-                                          kv_table, kv_scalar_speedup);
-    } else if (region_type == pb::common::RegionType::DOCUMENT_REGION && is_txn) {
-      region_type_name = Constant::kDocumentRegionName;
-      status = DoBackupDataForDocumentTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-    } else if (region_type == pb::common::RegionType::DOCUMENT_REGION && !is_txn) {
-      region_type_name = Constant::kDocumentRegionName;
-      status = DoBackupDataForDocumentNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
-                                             kv_table, kv_scalar_speedup);
-    } else {
-      std::string s = fmt::format("[backupdata][region({})][region_type({})] BackupData invalid region type and txn",
-                                  region->Id(), pb::common::RegionType_Name(region_type), (is_txn ? "true" : "false"));
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
-    }
-
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    std::string hash_code;
-
-    Helper::CalSha1CodeWithString(region->Range().start_key(), hash_code);
-
-    // second timestamp
-    int64_t second_timestamp = Helper::Timestamp();
-
-    std::string backup_file_prefix =
-        fmt::format("{}_{}_{}_{}", region->Id(), region->EpochToString(), hash_code, second_timestamp);
-
-    pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group = response->mutable_sst_metas();
-
-    int64_t instance_id = Server::GetInstance().Id();
-
-    if (is_txn) {
-      status = WriteSstFileForTxn(region, instance_id, region_type, storage_backend, backup_file_prefix,
-                                  region_type_name, kv_data, kv_write, sst_meta_group);
-
-    } else {
-      status =
-          WriteSstFileForNonTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-                                kv_default, kv_scalar, kv_table, kv_scalar_speedup, sst_meta_group);
-    }
-
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    return butil::Status();
+  if (region == nullptr) {
+    std::string s = fmt::format("[backupdata][region({})]  region not found.", ctx->RegionId());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
   }
 
-  butil::Status TxnEngineHelper::DoBackupDataCoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
-                                                     store::RegionPtr region, const pb::common::RegionType &region_type,
-                                                     int64_t backup_tso, std::map<std::string, std::string> &kv_data,
-                                                     std::map<std::string, std::string> &kv_write) {
-    int64_t start_time_ms = Helper::TimestampMs();
-    int64_t end_time_ms = 0;
-    int64_t total_iter_count = 0;
-    int64_t region_id = ctx->RegionId();
-    std::string region_start_key = region->Range().start_key();
-    std::string region_end_key = region->Range().end_key();
+  bool is_txn = region->IsTxn();
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-        << fmt::format("[backupdata][region({})][type({})][txn] start region start_key: {} end_key: {} backup_tso : {}",
-                       region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
-                       Helper::StringToHex(region_end_key), backup_tso);
+  // txn
+  std::map<std::string, std::string> kv_data;
+  std::map<std::string, std::string> kv_write;
 
-    RawEngine::ReaderPtr reader = raw_engine->Reader();
-    std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+  // non txn
+  std::map<std::string, std::string> kv_default;
+  std::map<std::string, std::string> kv_scalar;
+  std::map<std::string, std::string> kv_table;
+  std::map<std::string, std::string> kv_scalar_speedup;
 
-    IteratorOptions write_iter_options;
-    write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
-    write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+  std::string region_type_name;
 
-    auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
-    if (nullptr == write_iter) {
+  if (region_type == pb::common::RegionType::STORE_REGION && is_txn) {
+    region_type_name = Constant::kStoreRegionName;
+    status = DoBackupDataForStoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else if (region_type == pb::common::RegionType::STORE_REGION && !is_txn) {
+    region_type_name = Constant::kStoreRegionName;
+    status = DoBackupDataForStoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
+                                        kv_table, kv_scalar_speedup);
+  } else if (region_type == pb::common::RegionType::INDEX_REGION && is_txn) {
+    region_type_name = Constant::kIndexRegionName;
+    status = DoBackupDataForIndexTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else if (region_type == pb::common::RegionType::INDEX_REGION && !is_txn) {
+    region_type_name = Constant::kIndexRegionName;
+    status = DoBackupDataForIndexNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
+                                        kv_table, kv_scalar_speedup);
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION && is_txn) {
+    region_type_name = Constant::kDocumentRegionName;
+    status = DoBackupDataForDocumentTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION && !is_txn) {
+    region_type_name = Constant::kDocumentRegionName;
+    status = DoBackupDataForDocumentNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
+                                           kv_table, kv_scalar_speedup);
+  } else {
+    std::string s = fmt::format("[backupdata][region({})][region_type({})] BackupData invalid region type and txn",
+                                region->Id(), pb::common::RegionType_Name(region_type), (is_txn ? "true" : "false"));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  std::string hash_code;
+
+  Helper::CalSha1CodeWithString(region->Range().start_key(), hash_code);
+
+  // second timestamp
+  int64_t second_timestamp = Helper::Timestamp();
+
+  std::string backup_file_prefix =
+      fmt::format("{}_{}_{}_{}", region->Id(), region->EpochToString(), hash_code, second_timestamp);
+
+  pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group = response->mutable_sst_metas();
+
+  int64_t instance_id = Server::GetInstance().Id();
+
+  if (is_txn) {
+    status = WriteSstFileForTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                                kv_data, kv_write, sst_meta_group);
+
+  } else {
+    status =
+        WriteSstFileForNonTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                              kv_default, kv_scalar, kv_table, kv_scalar_speedup, sst_meta_group);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoBackupDataCoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                   store::RegionPtr region, const pb::common::RegionType &region_type,
+                                                   int64_t backup_tso, std::map<std::string, std::string> &kv_data,
+                                                   std::map<std::string, std::string> &kv_write) {
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_iter_count = 0;
+  int64_t region_id = ctx->RegionId();
+  std::string region_start_key = region->Range().start_key();
+  std::string region_end_key = region->Range().end_key();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+      << fmt::format("[backupdata][region({})][type({})][txn] start region start_key: {} end_key: {} backup_tso : {}",
+                     region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+                     Helper::StringToHex(region_end_key), backup_tso);
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions write_iter_options;
+  write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+
+  auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
+  if (nullptr == write_iter) {
+    std::string s =
+        fmt::format("[backupdata][write][region({})][type({})][txn] NewIterator failed.  start_key: {} end_key: {} ",
+                    region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+                    Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  write_iter->Seek(write_iter_options.lower_bound);
+
+  // this var is too long. this is important var. do not cut down it.
+  bool is_continue_scan_in_this_write_key = false;
+
+  std::string write_key;
+  std::string last_write_key;
+
+  while (write_iter->Valid()) {
+    total_iter_count++;
+    std::string_view write_iter_key = write_iter->Key();
+    std::string_view write_iter_value = write_iter->Value();
+
+    int64_t write_ts = 0;
+
+    auto ret = mvcc::Codec::DecodeKey(write_iter_key, write_key, write_ts);
+    if (!ret) {
       std::string s =
-          fmt::format("[backupdata][write][region({})][type({})][txn] NewIterator failed.  start_key: {} end_key: {} ",
-                      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
-                      Helper::StringToHex(region_end_key));
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
+          fmt::format("[backupdata][write][region({})][type({})][txn] decode txn key failed, write_iter->key : {} ",
+                      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_iter_key));
+      DINGO_LOG(FATAL) << s;
     }
 
-    write_iter->Seek(write_iter_options.lower_bound);
+    // reset for first put
+    if (last_write_key != write_key) {
+      is_continue_scan_in_this_write_key = true;
+      last_write_key = write_key;
+    }
 
-    // this var is too long. this is important var. do not cut down it.
-    bool is_continue_scan_in_this_write_key = false;
-
-    std::string write_key;
-    std::string last_write_key;
-
-    while (write_iter->Valid()) {
-      total_iter_count++;
-      std::string_view write_iter_key = write_iter->Key();
-      std::string_view write_iter_value = write_iter->Value();
-
-      int64_t write_ts = 0;
-
-      auto ret = mvcc::Codec::DecodeKey(write_iter_key, write_key, write_ts);
-      if (!ret) {
-        std::string s =
-            fmt::format("[backupdata][write][region({})][type({})][txn] decode txn key failed, write_iter->key : {} ",
-                        region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_iter_key));
-        DINGO_LOG(FATAL) << s;
-      }
-
-      // reset for first put
-      if (last_write_key != write_key) {
-        is_continue_scan_in_this_write_key = true;
-        last_write_key = write_key;
-      }
-
-      // write_ts > backup_tso key value
-      if (write_ts > backup_tso) {
-        write_iter->Next();
-        continue;
-      }
-
-      if (!is_continue_scan_in_this_write_key) {
-        write_iter->Next();
-        continue;
-      }
-
-      pb::store::WriteInfo write_info;
-      bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
-      if (!parse_success) {
-        std::string s = fmt::format(
-            "[backupdata][write][region({})][type({})][txn] ParseFromArray failed, write_iter->key : {}  "
-            "write_key : {}  write_ts : {}, write_iter->value : {} ",
-            region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_iter_key),
-            Helper::StringToHex(write_key), write_ts, Helper::StringToHex(write_iter_value));
-        DINGO_LOG(FATAL) << s;
-      }
-
-      int64_t start_ts = write_info.start_ts();
-      pb::store::Op op = write_info.op();
-
-      // handle write_ts <= backup_tso key value
-      switch (op) {
-        case pb::store::Put:
-          [[fallthrough]];
-        case pb::store::Delete: {
-          butil::Status status =
-              DoWriteDataAndCheckForTxn(reader, snapshot, region_id, region_type, write_info, write_iter_key,
-                                        write_iter_value, write_key, start_ts, write_ts, kv_data, kv_write);
-          if (!status.ok()) {
-            DINGO_LOG(ERROR) << status.error_cstr();
-            return status;
-          }
-          is_continue_scan_in_this_write_key = false;
-          break;
-        }
-        case pb::store::Rollback: {
-          // continue scan
-          break;
-        }
-        case pb::store::Lock:
-          [[fallthrough]];
-        case pb::store::PutIfAbsent:
-          [[fallthrough]];
-        case pb::store::None:
-          [[fallthrough]];
-        case pb::store::Op_INT_MIN_SENTINEL_DO_NOT_USE_:
-          [[fallthrough]];
-        case pb::store::Op_INT_MAX_SENTINEL_DO_NOT_USE_:
-          [[fallthrough]];
-        default: {
-          std::string s = fmt::format(
-              "[backupdata][write][region({})][type({})][txn] invalid pb::store::Op type : {} type string : "
-              "{} , write_iter->key : {}  write_key : {}  write_ts : {} write_iter->value : {} ignore. ",
-              region_id, pb::common::RegionType_Name(region_type), static_cast<int>(op), pb::store::Op_Name(op),
-              Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
-              write_info.ShortDebugString());
-          DINGO_LOG(ERROR) << s;
-          break;
-        }
-      }
-
+    // write_ts > backup_tso key value
+    if (write_ts > backup_tso) {
       write_iter->Next();
+      continue;
     }
 
-    end_time_ms = Helper::TimestampMs();
+    if (!is_continue_scan_in_this_write_key) {
+      write_iter->Next();
+      continue;
+    }
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[backupdata][region({})][type({})][txn] end region start_key: {} end_key: {} backup_tso "
-        ": {} time consuming : {} ms total_data_count : {} total_write_count : {}  total_iter_count : {} ",
-        region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
-        Helper::StringToHex(region_end_key), backup_tso, (end_time_ms - start_time_ms), kv_data.size(), kv_write.size(),
-        total_iter_count);
+    pb::store::WriteInfo write_info;
+    bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
+    if (!parse_success) {
+      std::string s = fmt::format(
+          "[backupdata][write][region({})][type({})][txn] ParseFromArray failed, write_iter->key : {}  "
+          "write_key : {}  write_ts : {}, write_iter->value : {} ",
+          region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_iter_key),
+          Helper::StringToHex(write_key), write_ts, Helper::StringToHex(write_iter_value));
+      DINGO_LOG(FATAL) << s;
+    }
 
-    return butil::Status();
+    int64_t start_ts = write_info.start_ts();
+    pb::store::Op op = write_info.op();
+
+    // handle write_ts <= backup_tso key value
+    switch (op) {
+      case pb::store::Put:
+        [[fallthrough]];
+      case pb::store::Delete: {
+        butil::Status status =
+            DoWriteDataAndCheckForTxn(reader, snapshot, region_id, region_type, write_info, write_iter_key,
+                                      write_iter_value, write_key, start_ts, write_ts, kv_data, kv_write);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
+        }
+        is_continue_scan_in_this_write_key = false;
+        break;
+      }
+      case pb::store::Rollback: {
+        // continue scan
+        break;
+      }
+      case pb::store::Lock:
+        [[fallthrough]];
+      case pb::store::PutIfAbsent:
+        [[fallthrough]];
+      case pb::store::None:
+        [[fallthrough]];
+      case pb::store::Op_INT_MIN_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      case pb::store::Op_INT_MAX_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      default: {
+        std::string s = fmt::format(
+            "[backupdata][write][region({})][type({})][txn] invalid pb::store::Op type : {} type string : "
+            "{} , write_iter->key : {}  write_key : {}  write_ts : {} write_iter->value : {} ignore. ",
+            region_id, pb::common::RegionType_Name(region_type), static_cast<int>(op), pb::store::Op_Name(op),
+            Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
+            write_info.ShortDebugString());
+        DINGO_LOG(ERROR) << s;
+        break;
+      }
+    }
+
+    write_iter->Next();
   }
 
-  butil::Status TxnEngineHelper::DoBackupDataCoreNonTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_default,
-      std::map<std::string, std::string> &kv_scalar, std::map<std::string, std::string> &kv_table,
-      std::map<std::string, std::string> &kv_scalar_speedup) {
-    int64_t start_time_ms = Helper::TimestampMs();
-    int64_t end_time_ms = 0;
-    int64_t total_delete_count = 0;
-    int64_t total_iter_count = 0;
-    int64_t region_id = ctx->RegionId();
-    std::string region_start_key = region->Range().start_key();
-    std::string region_end_key = region->Range().end_key();
+  end_time_ms = Helper::TimestampMs();
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[backupdata][region({})][type({})][nontxn] start region start_key: {} end_key: {} "
-        "backup_tso : {}",
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})][txn] end region start_key: {} end_key: {} backup_tso "
+      ": {} time consuming : {} ms total_data_count : {} total_write_count : {}  total_iter_count : {} ",
+      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), backup_tso, (end_time_ms - start_time_ms), kv_data.size(), kv_write.size(),
+      total_iter_count);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoBackupDataCoreNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                      store::RegionPtr region,
+                                                      const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                      std::map<std::string, std::string> &kv_default,
+                                                      std::map<std::string, std::string> &kv_scalar,
+                                                      std::map<std::string, std::string> &kv_table,
+                                                      std::map<std::string, std::string> &kv_scalar_speedup) {
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_delete_count = 0;
+  int64_t total_iter_count = 0;
+  int64_t region_id = ctx->RegionId();
+  std::string region_start_key = region->Range().start_key();
+  std::string region_end_key = region->Range().end_key();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})][nontxn] start region start_key: {} end_key: {} "
+      "backup_tso : {}",
+      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), backup_tso);
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions default_iter_options;
+  default_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  default_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+
+  const std::string &cf_name =
+      (region_type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF);
+
+  auto default_iter = reader->NewIterator(cf_name, snapshot, default_iter_options);
+  if (nullptr == default_iter) {
+    std::string s = fmt::format(
+        "[backupdata][default][region({})][type({})][nontxn] NewIterator failed.  start_key: {} end_key: {} ",
         region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
-        Helper::StringToHex(region_end_key), backup_tso);
+        Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
 
-    RawEngine::ReaderPtr reader = raw_engine->Reader();
-    std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+  default_iter->Seek(default_iter_options.lower_bound);
 
-    IteratorOptions default_iter_options;
-    default_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
-    default_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+  // this var is too long. this is important var. do not cut down it.
+  bool is_continue_scan_in_this_default_key = false;
 
-    const std::string &cf_name =
-        (region_type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF);
+  std::string default_key;
+  std::string last_default_key;
 
-    auto default_iter = reader->NewIterator(cf_name, snapshot, default_iter_options);
-    if (nullptr == default_iter) {
-      std::string s = fmt::format(
-          "[backupdata][default][region({})][type({})][nontxn] NewIterator failed.  start_key: {} end_key: {} ",
-          region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
-          Helper::StringToHex(region_end_key));
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
-    }
+  char prefix = '\0';
+  int64_t region_part_id = 0;
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    prefix = region->GetKeyPrefix();
+    region_part_id = region->PartitionId();
+  }
 
-    default_iter->Seek(default_iter_options.lower_bound);
+  auto lambda_emplace_back_function = [&region, &prefix, &region_part_id, &kv_default, &kv_scalar, &kv_table,
+                                       &kv_scalar_speedup, &snapshot, &reader](
+                                          pb::common::RegionType type, std::string_view default_iter_key,
+                                          std::string_view default_iter_value, int64_t vector_id, int64_t default_ts) {
+    // push back to kv_default
+    { kv_default.insert({std::string(default_iter_key), std::string(default_iter_value)}); }
 
-    // this var is too long. this is important var. do not cut down it.
-    bool is_continue_scan_in_this_default_key = false;
+    if (type == pb::common::RegionType::INDEX_REGION) {
+      std::string scalar_key = std::string(default_iter_key);
+      std::string scalar_value;
+      auto status = reader->KvGet(Constant::kVectorScalarCF, snapshot, scalar_key, scalar_value);
+      if (status.ok()) {
+        kv_scalar.insert({scalar_key, scalar_value});
+      }
 
-    std::string default_key;
-    std::string last_default_key;
+      std::string table_key = std::string(default_iter_key);
+      std::string table_value;
+      status = reader->KvGet(Constant::kVectorTableCF, snapshot, table_key, table_value);
+      if (status.ok()) {
+        kv_table.insert({table_key, table_value});
+      }
 
-    char prefix = '\0';
-    int64_t region_part_id = 0;
-    if (region_type == pb::common::RegionType::INDEX_REGION) {
-      prefix = region->GetKeyPrefix();
-      region_part_id = region->PartitionId();
-    }
-
-    auto lambda_emplace_back_function = [&region, &prefix, &region_part_id, &kv_default, &kv_scalar, &kv_table,
-                                         &kv_scalar_speedup, &snapshot,
-                                         &reader](pb::common::RegionType type, std::string_view default_iter_key,
-                                                  std::string_view default_iter_value, int64_t vector_id,
-                                                  int64_t default_ts) {
-      // push back to kv_default
-      { kv_default.insert({std::string(default_iter_key), std::string(default_iter_value)}); }
-
-      if (type == pb::common::RegionType::INDEX_REGION) {
-        std::string scalar_key = std::string(default_iter_key);
-        std::string scalar_value;
-        auto status = reader->KvGet(Constant::kVectorScalarCF, snapshot, scalar_key, scalar_value);
-        if (status.ok()) {
-          kv_scalar.insert({scalar_key, scalar_value});
-        }
-
-        std::string table_key = std::string(default_iter_key);
-        std::string table_value;
-        status = reader->KvGet(Constant::kVectorTableCF, snapshot, table_key, table_value);
-        if (status.ok()) {
-          kv_table.insert({table_key, table_value});
-        }
-
-        pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-        for (const auto &fields : scalar_schema.fields()) {
-          if (fields.enable_speed_up()) {
-            std::string scalar_speedup_key =
-                VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
-            std::string scalar_speedup_value;
-            status =
-                reader->KvGet(Constant::kVectorScalarKeySpeedUpCF, snapshot, scalar_speedup_key, scalar_speedup_value);
-            if (status.ok()) {
-              kv_scalar_speedup.insert({scalar_speedup_key, scalar_speedup_value});
-            }
+      pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+      for (const auto &fields : scalar_schema.fields()) {
+        if (fields.enable_speed_up()) {
+          std::string scalar_speedup_key =
+              VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
+          std::string scalar_speedup_value;
+          status =
+              reader->KvGet(Constant::kVectorScalarKeySpeedUpCF, snapshot, scalar_speedup_key, scalar_speedup_value);
+          if (status.ok()) {
+            kv_scalar_speedup.insert({scalar_speedup_key, scalar_speedup_value});
           }
         }
       }
-    };
+    }
+  };
 
-    while (default_iter->Valid()) {
-      total_iter_count++;
-      std::string_view default_iter_key = default_iter->Key();
-      std::string_view default_iter_value = default_iter->Value();
-      int64_t default_ts = 0;
+  while (default_iter->Valid()) {
+    total_iter_count++;
+    std::string_view default_iter_key = default_iter->Key();
+    std::string_view default_iter_value = default_iter->Value();
+    int64_t default_ts = 0;
 
-      auto ret = mvcc::Codec::DecodeKey(default_iter_key, default_key, default_ts);
-      if (!ret) {
-        std::string s =
-            fmt::format("[backupdata][decode][region({})][type({})][nontxn] decode key failed, key : {} ", region_id,
-                        pb::common::RegionType_Name(region_type), Helper::StringToHex(default_iter_key));
+    auto ret = mvcc::Codec::DecodeKey(default_iter_key, default_key, default_ts);
+    if (!ret) {
+      std::string s =
+          fmt::format("[backupdata][decode][region({})][type({})][nontxn] decode key failed, key : {} ", region_id,
+                      pb::common::RegionType_Name(region_type), Helper::StringToHex(default_iter_key));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    int64_t vector_id = 0;
+    int64_t partition_id = 0;
+
+    if (region_type == pb::common::RegionType::INDEX_REGION) {
+      VectorCodec::DecodeFromEncodeKeyWithTs(std::string(default_iter_key), partition_id, vector_id);
+      if (region_part_id != partition_id) {
+        std::string s = fmt::format(
+            "[backupdata][decode][region({})][type({})][nontxn] decode  region_part_id({}) != "
+            "partition_id({}), "
+            "key : {} ",
+            region_id, pb::common::RegionType_Name(region_type), region_part_id, partition_id,
+            Helper::StringToHex(default_iter_key));
         DINGO_LOG(FATAL) << s;
       }
+    }
 
-      int64_t vector_id = 0;
-      int64_t partition_id = 0;
+    if (last_default_key != default_key) {
+      is_continue_scan_in_this_default_key = true;
+      last_default_key = default_key;
+    }
 
-      if (region_type == pb::common::RegionType::INDEX_REGION) {
-        VectorCodec::DecodeFromEncodeKeyWithTs(std::string(default_iter_key), partition_id, vector_id);
-        if (region_part_id != partition_id) {
-          std::string s = fmt::format(
-              "[backupdata][decode][region({})][type({})][nontxn] decode  region_part_id({}) != "
-              "partition_id({}), "
-              "key : {} ",
-              region_id, pb::common::RegionType_Name(region_type), region_part_id, partition_id,
-              Helper::StringToHex(default_iter_key));
-          DINGO_LOG(FATAL) << s;
-        }
-      }
-
-      if (last_default_key != default_key) {
-        is_continue_scan_in_this_default_key = true;
-        last_default_key = default_key;
-      }
-
-      // write_ts > backup_tso key value
-      if (default_ts > backup_tso) {
-        default_iter->Next();
-        continue;
-      }
-
-      if (!is_continue_scan_in_this_default_key) {
-        default_iter->Next();
-        continue;
-      }
-
-      mvcc::ValueFlag value_flag = mvcc::Codec::GetValueFlag(default_iter_value);
-
-      switch (value_flag) {
-        case mvcc::ValueFlag::kPut:
-          [[fallthrough]];
-        case mvcc::ValueFlag::kPutTTL:
-          [[fallthrough]];
-        case mvcc::ValueFlag::kDelete: {
-          lambda_emplace_back_function(region_type, default_iter_key, default_iter_value, vector_id, default_ts);
-          is_continue_scan_in_this_default_key = false;
-          break;
-        }
-
-        default: {
-          std::string s =
-              fmt::format("[backupdata][region({})][type({})][nontxn] invalid mvcc value flag : {}, value : {} ",
-                          region_id, pb::common::RegionType_Name(region_type), static_cast<int>(value_flag),
-                          Helper::StringToHex(default_iter_value));
-          DINGO_LOG(FATAL) << s;
-        }
-      }
-
+    // write_ts > backup_tso key value
+    if (default_ts > backup_tso) {
       default_iter->Next();
+      continue;
     }
 
-    end_time_ms = Helper::TimestampMs();
+    if (!is_continue_scan_in_this_default_key) {
+      default_iter->Next();
+      continue;
+    }
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[backupdata][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
-        "backup_tso "
-        ": {} time  consuming : {} ms total_default_count : {} total_scalar_count : {}  total_table_count : {} "
-        "total_scalar_speedup_count : {} total_iter_count : {}",
-        region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
-        Helper::StringToHex(region_end_key), backup_tso, (end_time_ms - start_time_ms), kv_default.size(),
-        kv_scalar.size(), kv_table.size(), kv_scalar_speedup.size(), total_iter_count);
+    mvcc::ValueFlag value_flag = mvcc::Codec::GetValueFlag(default_iter_value);
 
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::DoBackupDataForStoreTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_data,
-      std::map<std::string, std::string> &kv_write) {
-    return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-  }
-
-  butil::Status TxnEngineHelper::DoBackupDataForStoreNonTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_default,
-      std::map<std::string, std::string> &kv_scalar, std::map<std::string, std::string> &kv_table,
-      std::map<std::string, std::string> &kv_scalar_speedup) {
-    return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
-                                  kv_scalar_speedup);
-  }
-
-  butil::Status TxnEngineHelper::DoBackupDataForIndexTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_data,
-      std::map<std::string, std::string> &kv_write) {
-    return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-  }
-
-  butil::Status TxnEngineHelper::DoBackupDataForIndexNonTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_default,
-      std::map<std::string, std::string> &kv_scalar, std::map<std::string, std::string> &kv_table,
-      std::map<std::string, std::string> &kv_scalar_speedup) {
-    return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
-                                  kv_scalar_speedup);
-  }
-
-  butil::Status TxnEngineHelper::DoBackupDataForDocumentTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_data,
-      std::map<std::string, std::string> &kv_write) {
-    return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-  }
-
-  butil::Status TxnEngineHelper::DoBackupDataForDocumentNonTxn(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_default,
-      std::map<std::string, std::string> &kv_scalar, std::map<std::string, std::string> &kv_table,
-      std::map<std::string, std::string> &kv_scalar_speedup) {
-    return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
-                                  kv_scalar_speedup);
-  }
-
-  butil::Status TxnEngineHelper::DoWriteDataAndCheckForTxn(
-      RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot, int64_t region_id,
-      const pb::common::RegionType &region_type, const pb::store::WriteInfo &write_info,
-      std::string_view write_iter_key, std::string_view write_iter_value, const std::string &write_key,
-      int64_t start_ts, int64_t write_ts, std::map<std::string, std::string> &kv_data,
-      std::map<std::string, std::string> &kv_write) {
-    std::string lock_key = mvcc::Codec::EncodeKey(write_key, Constant::kLockVer);
-    std::string lock_value;
-    butil::Status status = reader->KvGet(Constant::kTxnLockCF, snapshot, lock_key, lock_value);
-    if (status.ok()) {
-      pb::store::LockInfo lock_info;
-
-      if (!lock_value.empty()) {
-        auto ret = lock_info.ParseFromString(lock_value);
-        if (!ret) {
-          DINGO_LOG(FATAL) << "[backupdata] GetLockInfo parse lock info failed, lock_key: "
-                           << Helper::StringToHex(lock_key) << ", lock_value: " << Helper::StringToHex(lock_value);
-        }
-
-        if (lock_info.lock_ts() == start_ts) {
-          // exist lock conflict
-          std::string s = fmt::format(
-              "[backupdata][write][region({})][type({})][txn] lock conflict, write_key : {}  "
-              "write_ts : {} lock_key : {} lock_ts : {} lock_info : {}",
-              region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_key), write_ts,
-              Helper::StringToHex(lock_key), lock_info.lock_ts(), lock_info.ShortDebugString());
-          DINGO_LOG(ERROR) << status.error_cstr();
-          return butil::Status(pb::error::Errno::EBACKUP_TXN_FOUND_LOCK, s);
-        }
+    switch (value_flag) {
+      case mvcc::ValueFlag::kPut:
+        [[fallthrough]];
+      case mvcc::ValueFlag::kPutTTL:
+        [[fallthrough]];
+      case mvcc::ValueFlag::kDelete: {
+        lambda_emplace_back_function(region_type, default_iter_key, default_iter_value, vector_id, default_ts);
+        is_continue_scan_in_this_default_key = false;
+        break;
       }
 
-    } else if (status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
+      default: {
+        std::string s =
+            fmt::format("[backupdata][region({})][type({})][nontxn] invalid mvcc value flag : {}, value : {} ",
+                        region_id, pb::common::RegionType_Name(region_type), static_cast<int>(value_flag),
+                        Helper::StringToHex(default_iter_value));
+        DINGO_LOG(FATAL) << s;
+      }
     }
 
-    { kv_write.insert({std::string(write_iter_key), std::string(write_iter_value)}); }
+    default_iter->Next();
+  }
 
-    // try get key from data column family. if not exist , ignore.
-    std::string data_key = mvcc::Codec::EncodeKey(write_key, write_info.start_ts());
-    std::string data_value;
-    status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
-    if (status.ok()) {
-      kv_data.insert({data_key, data_value});
-    } else {
-      if (pb::error::Errno::EKEY_NOT_FOUND != status.error_code()) {
-        // other error
+  end_time_ms = Helper::TimestampMs();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
+      "backup_tso "
+      ": {} time  consuming : {} ms total_default_count : {} total_scalar_count : {}  total_table_count : {} "
+      "total_scalar_speedup_count : {} total_iter_count : {}",
+      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), backup_tso, (end_time_ms - start_time_ms), kv_default.size(),
+      kv_scalar.size(), kv_table.size(), kv_scalar_speedup.size(), total_iter_count);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForStoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                       store::RegionPtr region,
+                                                       const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                       std::map<std::string, std::string> &kv_data,
+                                                       std::map<std::string, std::string> &kv_write) {
+  return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForStoreNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                          store::RegionPtr region,
+                                                          const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                          std::map<std::string, std::string> &kv_default,
+                                                          std::map<std::string, std::string> &kv_scalar,
+                                                          std::map<std::string, std::string> &kv_table,
+                                                          std::map<std::string, std::string> &kv_scalar_speedup) {
+  return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
+                                kv_scalar_speedup);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForIndexTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                       store::RegionPtr region,
+                                                       const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                       std::map<std::string, std::string> &kv_data,
+                                                       std::map<std::string, std::string> &kv_write) {
+  return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForIndexNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                          store::RegionPtr region,
+                                                          const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                          std::map<std::string, std::string> &kv_default,
+                                                          std::map<std::string, std::string> &kv_scalar,
+                                                          std::map<std::string, std::string> &kv_table,
+                                                          std::map<std::string, std::string> &kv_scalar_speedup) {
+  return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
+                                kv_scalar_speedup);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForDocumentTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                          store::RegionPtr region,
+                                                          const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                          std::map<std::string, std::string> &kv_data,
+                                                          std::map<std::string, std::string> &kv_write) {
+  return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForDocumentNonTxn(
+    std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
+    const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_default,
+    std::map<std::string, std::string> &kv_scalar, std::map<std::string, std::string> &kv_table,
+    std::map<std::string, std::string> &kv_scalar_speedup) {
+  return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
+                                kv_scalar_speedup);
+}
+
+butil::Status TxnEngineHelper::DoWriteDataAndCheckForTxn(
+    RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot, int64_t region_id,
+    const pb::common::RegionType &region_type, const pb::store::WriteInfo &write_info, std::string_view write_iter_key,
+    std::string_view write_iter_value, const std::string &write_key, int64_t start_ts, int64_t write_ts,
+    std::map<std::string, std::string> &kv_data, std::map<std::string, std::string> &kv_write) {
+  std::string lock_key = mvcc::Codec::EncodeKey(write_key, Constant::kLockVer);
+  std::string lock_value;
+  butil::Status status = reader->KvGet(Constant::kTxnLockCF, snapshot, lock_key, lock_value);
+  if (status.ok()) {
+    pb::store::LockInfo lock_info;
+
+    if (!lock_value.empty()) {
+      auto ret = lock_info.ParseFromString(lock_value);
+      if (!ret) {
+        DINGO_LOG(FATAL) << "[backupdata] GetLockInfo parse lock info failed, lock_key: "
+                         << Helper::StringToHex(lock_key) << ", lock_value: " << Helper::StringToHex(lock_value);
+      }
+
+      if (lock_info.lock_ts() == start_ts) {
+        // exist lock conflict
         std::string s = fmt::format(
-            "[backupdata][data][region({})][type({})][txn] get key failed. key: {} raw_key : {}  "
-            "start_ts : {} status : {} write_info: {}",
-            region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(data_key),
-            Helper::StringToHex(write_key), write_info.start_ts(), status.error_cstr(), write_info.ShortDebugString());
-        DINGO_LOG(ERROR) << s;
-        return status;
-      }
-    }
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::WriteSstFileForTxn(
-      store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
-      const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
-      const std::string &region_type_name, const std::map<std::string, std::string> &kv_data,
-      const std::map<std::string, std::string> &kv_write, pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
-    butil::Status status;
-
-    status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-                            Constant::kTxnWriteCF, kv_write, sst_meta_group);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-                            Constant::kTxnDataCF, kv_data, sst_meta_group);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::WriteSstFileForNonTxn(
-      store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
-      const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
-      const std::string &region_type_name, const std::map<std::string, std::string> &kv_default,
-      const std::map<std::string, std::string> &kv_scalar, const std::map<std::string, std::string> &kv_table,
-      const std::map<std::string, std::string> &kv_scalar_speedup,
-      pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
-    butil::Status status;
-
-    status = DoWriteSstFile(
-        region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-        (region_type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF),
-        kv_default, sst_meta_group);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-                            Constant::kVectorScalarCF, kv_scalar, sst_meta_group);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-                            Constant::kVectorTableCF, kv_table, sst_meta_group);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
-                            Constant::kVectorScalarKeySpeedUpCF, kv_scalar_speedup, sst_meta_group);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::DoWriteSstFile(
-      store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
-      const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
-      const std::string &region_type_name, const std::string &cf, const std::map<std::string, std::string> &kvs,
-      pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
-    butil::Status status;
-
-    if (kvs.empty()) {
-      std::string s = fmt::format("[backupdata][region({})][region_type({})] empty. ignore.", region->Id(),
-                                  pb::common::RegionType_Name(region_type));
-      DINGO_LOG(INFO) << s;
-      return butil::Status();
-    }
-
-    rocksdb::Options options;
-    rocks::SstFileWriter sst(options);
-    std::string base_path = storage_backend.local().path();
-    std::string dir_name = fmt::format("{}-{}", region_type_name, instance_id);
-    std::string dir_path = base_path + "/" + dir_name;
-
-    if (std::filesystem::exists(dir_path)) {
-      std::error_code ec;
-      if (!std::filesystem::is_directory(dir_path, ec)) {
-        std::string s = fmt::format("dir_path : {} is not directory, {}, {}", dir_path, ec.value(), ec.message());
-        DINGO_LOG(ERROR) << s;
-        return butil::Status(pb::error::Errno::EFILE_NOT_DIRECTORY, s);
-      }
-    } else {
-      bool is_success = Helper::CreateDirectory(dir_path);
-      if (!is_success) {
-        std::string s = fmt::format("[backupdata][region({})][region_type({})] CreateDirectory failed. dir_path : {}",
-                                    region->Id(), pb::common::RegionType_Name(region_type), dir_path);
-        DINGO_LOG(ERROR) << s;
-        return butil::Status(pb::error::Errno::EBACKUP_CREATE_REMOTE_DIR, s);
+            "[backupdata][write][region({})][type({})][txn] lock conflict, write_key : {}  "
+            "write_ts : {} lock_key : {} lock_ts : {} lock_info : {}",
+            region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_key), write_ts,
+            Helper::StringToHex(lock_key), lock_info.lock_ts(), lock_info.ShortDebugString());
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return butil::Status(pb::error::Errno::EBACKUP_TXN_FOUND_LOCK, s);
       }
     }
 
-    std::string data_file_name = fmt::format("{}_{}.sst", backup_file_prefix, cf);
-    std::string data_file_path = dir_path + "/" + data_file_name;
-    status = sst.SaveFile(kvs, data_file_path);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-    int64_t data_file_size = sst.GetSize();
-    std::string data_file_hash_code;
-    status = Helper::CalSha1CodeWithFileEx(data_file_path, data_file_hash_code);
-
-    pb::common::BackupDataFileValueSstMeta *sst_meta = sst_meta_group->add_backup_data_file_value_sst_metas();
-    sst_meta->set_cf(cf);
-    sst_meta->set_region_id(region->Id());
-    sst_meta->set_dir_name(dir_name);
-    sst_meta->set_file_size(data_file_size);
-    sst_meta->set_encryption(data_file_hash_code);
-    sst_meta->set_file_name(data_file_name);
-
-    return butil::Status();
+  } else if (status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
   }
 
-  butil::Status TxnEngineHelper::BackupMeta(
-      std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
-      const pb::common::RegionType &region_type, std::string backup_ts, int64_t backup_tso,
-      const std::string &storage_path, const pb::common::StorageBackend &storage_backend,
-      const pb::common::CompressionType &compression_type, int32_t compression_level,
-      dingodb::pb::store::BackupMetaResponse *response) {
-    butil::Status status;
+  { kv_write.insert({std::string(write_iter_key), std::string(write_iter_value)}); }
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[backupmeta][region({})][type({})] backup meta. backup_ts : {}  backup_tso : {} storage_path : {} "
-        "storage_backend : {} compression_type : {} compression_level : {}",
-        ctx->RegionId(), pb::common::RegionType_Name(region_type), backup_ts, backup_tso, storage_path,
-        storage_backend.DebugString(), pb::common::CompressionType_Name(compression_type), compression_level);
-
-    if (region == nullptr) {
-      std::string s = fmt::format("[backupmeta][region({})]  region not found.", ctx->RegionId());
+  // try get key from data column family. if not exist , ignore.
+  std::string data_key = mvcc::Codec::EncodeKey(write_key, write_info.start_ts());
+  std::string data_value;
+  status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
+  if (status.ok()) {
+    kv_data.insert({data_key, data_value});
+  } else {
+    if (pb::error::Errno::EKEY_NOT_FOUND != status.error_code()) {
+      // other error
+      std::string s = fmt::format(
+          "[backupdata][data][region({})][type({})][txn] get key failed. key: {} raw_key : {}  "
+          "start_ts : {} status : {} write_info: {}",
+          region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(data_key),
+          Helper::StringToHex(write_key), write_info.start_ts(), status.error_cstr(), write_info.ShortDebugString());
       DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
+      return status;
     }
+  }
+  return butil::Status();
+}
 
-    bool is_txn = region->IsTxn();
+butil::Status TxnEngineHelper::WriteSstFileForTxn(
+    store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
+    const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
+    const std::string &region_type_name, const std::map<std::string, std::string> &kv_data,
+    const std::map<std::string, std::string> &kv_write, pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
+  butil::Status status;
 
-    // txn
-    std::map<std::string, std::string> kv_data;
-    std::map<std::string, std::string> kv_write;
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kTxnWriteCF, kv_write, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
-    std::string region_type_name;
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kTxnDataCF, kv_data, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
-    if (region_type == pb::common::RegionType::STORE_REGION && is_txn) {
-      region_type_name = Constant::kStoreRegionName;
-      status = DoBackupDataForStoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
-    } else {
-      std::string s = fmt::format("[backupmeta][region({})][region_type({})] backupmeta invalid region type and txn",
-                                  region->Id(), pb::common::RegionType_Name(region_type), (is_txn ? "true" : "false"));
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::WriteSstFileForNonTxn(
+    store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
+    const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
+    const std::string &region_type_name, const std::map<std::string, std::string> &kv_default,
+    const std::map<std::string, std::string> &kv_scalar, const std::map<std::string, std::string> &kv_table,
+    const std::map<std::string, std::string> &kv_scalar_speedup,
+    pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
+  butil::Status status;
+
+  status = DoWriteSstFile(
+      region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+      (region_type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF),
+      kv_default, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kVectorScalarCF, kv_scalar, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kVectorTableCF, kv_table, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kVectorScalarKeySpeedUpCF, kv_scalar_speedup, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoWriteSstFile(store::RegionPtr region, int64_t instance_id,
+                                              const pb::common::RegionType &region_type,
+                                              const pb::common::StorageBackend &storage_backend,
+                                              const std::string &backup_file_prefix,
+                                              const std::string &region_type_name, const std::string &cf,
+                                              const std::map<std::string, std::string> &kvs,
+                                              pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
+  butil::Status status;
+
+  if (kvs.empty()) {
+    std::string s = fmt::format("[backupdata][region({})][region_type({})] empty. ignore.", region->Id(),
+                                pb::common::RegionType_Name(region_type));
+    DINGO_LOG(INFO) << s;
+    return butil::Status();
+  }
+
+  rocksdb::Options options;
+  rocks::SstFileWriter sst(options);
+  std::string base_path = storage_backend.local().path();
+  std::string dir_name = fmt::format("{}-{}", region_type_name, instance_id);
+  std::string dir_path = base_path + "/" + dir_name;
+
+  if (std::filesystem::exists(dir_path)) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir_path, ec)) {
+      std::string s = fmt::format("dir_path : {} is not directory, {}, {}", dir_path, ec.value(), ec.message());
       DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+      return butil::Status(pb::error::Errno::EFILE_NOT_DIRECTORY, s);
     }
-
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
+  } else {
+    bool is_success = Helper::CreateDirectory(dir_path);
+    if (!is_success) {
+      std::string s = fmt::format("[backupdata][region({})][region_type({})] CreateDirectory failed. dir_path : {}",
+                                  region->Id(), pb::common::RegionType_Name(region_type), dir_path);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EBACKUP_CREATE_REMOTE_DIR, s);
     }
+  }
 
-    std::string hash_code;
+  std::string data_file_name = fmt::format("{}_{}.sst", backup_file_prefix, cf);
+  std::string data_file_path = dir_path + "/" + data_file_name;
+  status = sst.SaveFile(kvs, data_file_path);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
-    Helper::CalSha1CodeWithString(region->Range().start_key(), hash_code);
+  int64_t data_file_size = sst.GetSize();
+  std::string data_file_hash_code;
+  status = Helper::CalSha1CodeWithFileEx(data_file_path, data_file_hash_code);
 
-    // second timestamp
-    int64_t second_timestamp = Helper::Timestamp();
+  pb::common::BackupDataFileValueSstMeta *sst_meta = sst_meta_group->add_backup_data_file_value_sst_metas();
+  sst_meta->set_cf(cf);
+  sst_meta->set_region_id(region->Id());
+  sst_meta->set_dir_name(dir_name);
+  sst_meta->set_file_size(data_file_size);
+  sst_meta->set_encryption(data_file_hash_code);
+  sst_meta->set_file_name(data_file_name);
 
-    std::string backup_file_prefix =
-        fmt::format("{}_{}_{}_{}", region->Id(), region->EpochToString(), hash_code, second_timestamp);
+  return butil::Status();
+}
 
-    pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group = response->mutable_sst_metas();
+butil::Status TxnEngineHelper::BackupMeta(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                          store::RegionPtr region, const pb::common::RegionType &region_type,
+                                          std::string backup_ts, int64_t backup_tso, const std::string &storage_path,
+                                          const pb::common::StorageBackend &storage_backend,
+                                          const pb::common::CompressionType &compression_type,
+                                          int32_t compression_level, dingodb::pb::store::BackupMetaResponse *response) {
+  butil::Status status;
 
-    int64_t instance_id = Server::GetInstance().Id();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupmeta][region({})][type({})] backup meta. backup_ts : {}  backup_tso : {} storage_path : {} "
+      "storage_backend : {} compression_type : {} compression_level : {}",
+      ctx->RegionId(), pb::common::RegionType_Name(region_type), backup_ts, backup_tso, storage_path,
+      storage_backend.DebugString(), pb::common::CompressionType_Name(compression_type), compression_level);
 
-    if (is_txn) {
-      status = WriteSstFileForTxn(region, instance_id, region_type, storage_backend, backup_file_prefix,
-                                  region_type_name, kv_data, kv_write, sst_meta_group);
-    }
+  if (region == nullptr) {
+    std::string s = fmt::format("[backupmeta][region({})]  region not found.", ctx->RegionId());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
+  }
 
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
+  bool is_txn = region->IsTxn();
 
+  // txn
+  std::map<std::string, std::string> kv_data;
+  std::map<std::string, std::string> kv_write;
+
+  std::string region_type_name;
+
+  if (region_type == pb::common::RegionType::STORE_REGION && is_txn) {
+    region_type_name = Constant::kStoreRegionName;
+    status = DoBackupDataForStoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else {
+    std::string s = fmt::format("[backupmeta][region({})][region_type({})] backupmeta invalid region type and txn",
+                                region->Id(), pb::common::RegionType_Name(region_type), (is_txn ? "true" : "false"));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  std::string hash_code;
+
+  Helper::CalSha1CodeWithString(region->Range().start_key(), hash_code);
+
+  // second timestamp
+  int64_t second_timestamp = Helper::Timestamp();
+
+  std::string backup_file_prefix =
+      fmt::format("{}_{}_{}_{}", region->Id(), region->EpochToString(), hash_code, second_timestamp);
+
+  pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group = response->mutable_sst_metas();
+
+  int64_t instance_id = Server::GetInstance().Id();
+
+  if (is_txn) {
+    status = WriteSstFileForTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                                kv_data, kv_write, sst_meta_group);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status GetDataValue(const pb::store::WriteInfo &write_info,
+                           const std::map<std::string, pb::common::KeyValue> &kv_puts_data_map,
+                           const std::string &encode_key, std::string &data_value) {
+  if (!write_info.short_value().empty()) {
+    data_value = write_info.short_value();
     return butil::Status();
   }
 
-  butil::Status GetDataValue(const pb::store::WriteInfo &write_info,
-                             const std::map<std::string, pb::common::KeyValue> &kv_puts_data_map,
-                             const std::string &encode_key, std::string &data_value) {
-    if (!write_info.short_value().empty()) {
-      data_value = write_info.short_value();
-      return butil::Status();
-    }
+  std::string plain_key;
+  int64_t commit_ts = 0;
+  dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
+  std::string data_key = mvcc::Codec::EncodeKey(plain_key, write_info.start_ts());
+  auto iter = kv_puts_data_map.find(data_key);
+  if (iter != kv_puts_data_map.end()) {
+    data_value = iter->second.value();
+  } else {
+    return butil::Status(pb::error::Errno::EINTERNAL, "cannot find data");
+  }
+  return butil::Status();
+}
 
-    std::string plain_key;
-    int64_t commit_ts = 0;
-    dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
-    std::string data_key = mvcc::Codec::EncodeKey(plain_key, write_info.start_ts());
-    auto iter = kv_puts_data_map.find(data_key);
-    if (iter != kv_puts_data_map.end()) {
-      data_value = iter->second.value();
-    } else {
-      return butil::Status(pb::error::Errno::EINTERNAL, "cannot find data");
-    }
-    return butil::Status();
+void GetWritePlainKey(const std::string encode_key, std::string &key) {
+  std::string plain_key;
+  int64_t commit_ts = 0;
+  int64_t klock_ver = 0;
+  dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
+  dingodb::mvcc::Codec::DecodeKey(plain_key, key, klock_ver);
+}
+
+std::map<std::string, pb::common::KeyValue> GenKvPutsDataMap(const std::vector<pb::common::KeyValue> &kv_puts_data) {
+  std::map<std::string, pb::common::KeyValue> kv_puts_data_map;
+  for (const auto &kv : kv_puts_data) {
+    kv_puts_data_map[std::string(kv.key())] = kv;
+  }
+  return kv_puts_data_map;
+}
+
+butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                          std::shared_ptr<Engine> raft_engine,
+                                          const std::vector<pb::common::KeyValue> &kv_puts_data,
+                                          const std::vector<pb::common::KeyValue> &kv_puts_write) {
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  // for vector index region, commit to vector index
+  auto *vector_add = cf_put_delete->mutable_vector_add();
+  auto *vector_del = cf_put_delete->mutable_vector_del();
+  // for document index region, commit to document index
+  auto *document_add = cf_put_delete->mutable_document_add();
+  auto *document_del = cf_put_delete->mutable_document_del();
+
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+
+  if (kv_puts_data.empty() && kv_puts_write.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+        << fmt::format("[restoredata][region({})][region_type({})] kv_puts_data is empty and kv_puts_write is empty",
+                       region->Id(), pb::common::RegionType_Name(region->Type()));
+    return butil::Status::OK();
   }
 
-  void GetWritePlainKey(const std::string encode_key, std::string &key) {
-    std::string plain_key;
-    int64_t commit_ts = 0;
-    int64_t klock_ver = 0;
-    dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
-    dingodb::mvcc::Codec::DecodeKey(plain_key, key, klock_ver);
-  }
+  if (region->Type() == pb::common::INDEX_REGION || region->Type() == pb::common::DOCUMENT_REGION) {
+    auto kv_puts_data_map = GenKvPutsDataMap(kv_puts_data);
 
-  std::map<std::string, pb::common::KeyValue> GenKvPutsDataMap(const std::vector<pb::common::KeyValue> &kv_puts_data) {
-    std::map<std::string, pb::common::KeyValue> kv_puts_data_map;
-    for (const auto &kv : kv_puts_data) {
-      kv_puts_data_map[std::string(kv.key())] = kv;
-    }
-    return kv_puts_data_map;
-  }
+    for (const auto &kv : kv_puts_write) {
+      pb::store::WriteInfo tmp_write_info;
+      auto ret = tmp_write_info.ParseFromArray(kv.value().data(), kv.value().size());
+      if (!ret) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[restoredata][region({})][region_type({})] cannot parse tmp_write_info data_value:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
+        return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
+      }
 
-  butil::Status TxnEngineHelper::RestoreTxn(
-      std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<Engine> raft_engine,
-      const std::vector<pb::common::KeyValue> &kv_puts_data, const std::vector<pb::common::KeyValue> &kv_puts_write) {
-    pb::raft::TxnRaftRequest txn_raft_request;
-    auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-    // for vector index region, commit to vector index
-    auto *vector_add = cf_put_delete->mutable_vector_add();
-    auto *vector_del = cf_put_delete->mutable_vector_del();
-    // for document index region, commit to document index
-    auto *document_add = cf_put_delete->mutable_document_add();
-    auto *document_del = cf_put_delete->mutable_document_del();
+      std::string data_value;
+      auto status = GetDataValue(tmp_write_info, kv_puts_data_map, std::string(kv.key()), data_value);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[restoredata][region({})][region_type({})] cannot get data value, write_info:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), tmp_write_info.DebugString());
+        return butil::Status(pb::error::Errno::EINTERNAL, "cannot get data value");
+      }
 
-    int64_t total_size = 0;
-    int64_t total_count = 0;
+      if (region->Type() == pb::common::INDEX_REGION &&
+          region->Definition().index_parameter().has_vector_index_parameter()) {
+        if (tmp_write_info.op() == pb::store::Op::Put) {
+          pb::common::VectorWithId vector_with_id;
+          auto ret = vector_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format(
+                "[restoredata][region({})][region_type({})] parse vector_with_id failed, data_value:{}", region->Id(),
+                pb::common::RegionType_Name(region->Type()), Helper::StringToHex(data_value));
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
+          }
 
-    if (kv_puts_data.empty() && kv_puts_write.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-          << fmt::format("[restoredata][region({})][region_type({})] kv_puts_data is empty and kv_puts_write is empty",
-                         region->Id(), pb::common::RegionType_Name(region->Type()));
-      return butil::Status::OK();
-    }
+          *(vector_add->add_vectors()) = vector_with_id;
 
-    if (region->Type() == pb::common::INDEX_REGION || region->Type() == pb::common::DOCUMENT_REGION) {
-      auto kv_puts_data_map = GenKvPutsDataMap(kv_puts_data);
+          total_size += vector_with_id.ByteSizeLong();
+          total_count++;
 
-      for (const auto &kv : kv_puts_write) {
-        pb::store::WriteInfo tmp_write_info;
-        auto ret = tmp_write_info.ParseFromArray(kv.value().data(), kv.value().size());
-        if (!ret) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[restoredata][region({})][region_type({})] cannot parse tmp_write_info data_value:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
-          return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
-        }
-
-        std::string data_value;
-        auto status = GetDataValue(tmp_write_info, kv_puts_data_map, std::string(kv.key()), data_value);
-        if (!status.ok()) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[restoredata][region({})][region_type({})] cannot get data value, write_info:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), tmp_write_info.DebugString());
-          return butil::Status(pb::error::Errno::EINTERNAL, "cannot get data value");
-        }
-
-        if (region->Type() == pb::common::INDEX_REGION &&
-            region->Definition().index_parameter().has_vector_index_parameter()) {
-          if (tmp_write_info.op() == pb::store::Op::Put) {
-            pb::common::VectorWithId vector_with_id;
-            auto ret = vector_with_id.ParseFromString(data_value);
-            if (!ret) {
-              DINGO_LOG(ERROR) << fmt::format(
-                  "[restoredata][region({})][region_type({})] parse vector_with_id failed, data_value:{}", region->Id(),
-                  pb::common::RegionType_Name(region->Type()), Helper::StringToHex(data_value));
-              return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
-            }
-
-            *(vector_add->add_vectors()) = vector_with_id;
-
-            total_size += vector_with_id.ByteSizeLong();
-            total_count++;
-
-          } else if (tmp_write_info.op() == pb::store::Op::Delete) {
-            std::string origin_key;
-            GetWritePlainKey(std::string(kv.key()), origin_key);
-            auto vector_id = VectorCodec::UnPackageVectorId(origin_key);
-            if (vector_id == 0) {
-              DINGO_LOG(FATAL) << fmt::format(
-                  "[restoredata][region({})][region_type({})] decode vector_id failed, key:{}, write_info:{}",
-                  region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(origin_key),
-                  tmp_write_info.DebugString());
-            }
-            vector_del->add_ids(vector_id);
-            total_count++;
-          } else {
+        } else if (tmp_write_info.op() == pb::store::Op::Delete) {
+          std::string origin_key;
+          GetWritePlainKey(std::string(kv.key()), origin_key);
+          auto vector_id = VectorCodec::UnPackageVectorId(origin_key);
+          if (vector_id == 0) {
             DINGO_LOG(FATAL) << fmt::format(
-                "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
-                pb::common::RegionType_Name(region->Type()), pb::store::Op_Name(tmp_write_info.op()),
+                "[restoredata][region({})][region_type({})] decode vector_id failed, key:{}, write_info:{}",
+                region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(origin_key),
                 tmp_write_info.DebugString());
           }
+          vector_del->add_ids(vector_id);
+          total_count++;
+        } else {
+          DINGO_LOG(FATAL) << fmt::format(
+              "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), pb::store::Op_Name(tmp_write_info.op()),
+              tmp_write_info.DebugString());
         }
+      }
 
-        if (region->Type() == pb::common::DOCUMENT_REGION &&
-            region->Definition().index_parameter().has_document_index_parameter()) {
-          if (tmp_write_info.op() == pb::store::Op::Put) {
-            pb::common::DocumentWithId document_with_id;
-            auto ret = document_with_id.ParseFromString(data_value);
-            if (!ret) {
-              DINGO_LOG(ERROR) << fmt::format(
-                  "[restoredata][region({})][region_type({})] parse document_with_id failed, data_value:{}",
-                  region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(data_value));
-              return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
-            }
+      if (region->Type() == pb::common::DOCUMENT_REGION &&
+          region->Definition().index_parameter().has_document_index_parameter()) {
+        if (tmp_write_info.op() == pb::store::Op::Put) {
+          pb::common::DocumentWithId document_with_id;
+          auto ret = document_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format(
+                "[restoredata][region({})][region_type({})] parse document_with_id failed, data_value:{}", region->Id(),
+                pb::common::RegionType_Name(region->Type()), Helper::StringToHex(data_value));
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
+          }
 
-            *(document_add->add_documents()) = document_with_id;
+          *(document_add->add_documents()) = document_with_id;
 
-            total_size += document_with_id.ByteSizeLong();
-            total_count++;
+          total_size += document_with_id.ByteSizeLong();
+          total_count++;
 
-          } else if (tmp_write_info.op() == pb::store::Op::Delete) {
-            std::string origin_key;
-            GetWritePlainKey(std::string(kv.key()), origin_key);
+        } else if (tmp_write_info.op() == pb::store::Op::Delete) {
+          std::string origin_key;
+          GetWritePlainKey(std::string(kv.key()), origin_key);
 
-            auto document_id = DocumentCodec::UnPackageDocumentId(origin_key);
-            if (document_id == 0) {
-              DINGO_LOG(FATAL) << fmt::format(
-                  "[restoredata][region({})][region_type({})] decode document_id failed, key:{}, write_info:{}",
-                  region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(origin_key),
-                  tmp_write_info.DebugString());
-            }
-            document_del->add_ids(document_id);
-            total_count++;
-          } else {
+          auto document_id = DocumentCodec::UnPackageDocumentId(origin_key);
+          if (document_id == 0) {
             DINGO_LOG(FATAL) << fmt::format(
-                "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
-                pb::common::RegionType_Name(region->Type()), pb::store::Op_Name(tmp_write_info.op()),
+                "[restoredata][region({})][region_type({})] decode document_id failed, key:{}, write_info:{}",
+                region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(origin_key),
                 tmp_write_info.DebugString());
           }
-        }
-
-        if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-          auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-          if (ret.error_code() == EPERM) {
-            DINGO_LOG(ERROR) << fmt::format(
-                "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
-                pb::common::RegionType_Name(region->Type()), ret.error_str());
-            return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-          }
-          txn_raft_request.Clear();
-          cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-          vector_add = cf_put_delete->mutable_vector_add();
-          vector_del = cf_put_delete->mutable_vector_del();
-          document_add = cf_put_delete->mutable_document_add();
-          document_del = cf_put_delete->mutable_document_del();
-          total_size = 0;
-          total_count = 0;
+          document_del->add_ids(document_id);
+          total_count++;
+        } else {
+          DINGO_LOG(FATAL) << fmt::format(
+              "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), pb::store::Op_Name(tmp_write_info.op()),
+              tmp_write_info.DebugString());
         }
       }
-    }
-
-    if (!kv_puts_data.empty()) {
-      auto *data_puts = cf_put_delete->add_puts_with_cf();
-      data_puts->set_cf_name(Constant::kTxnDataCF);
-
-      for (auto const &kv_put : kv_puts_data) {
-        auto *kv = data_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
-        total_count++;
-        total_size += kv_put.key().size();
-        total_size += kv_put.value().size();
-
-        if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-          auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-          if (ret.error_code() == EPERM) {
-            DINGO_LOG(ERROR) << fmt::format(
-                "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
-                pb::common::RegionType_Name(region->Type()), ret.error_str());
-            return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-          }
-          txn_raft_request.Clear();
-          cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-          data_puts = cf_put_delete->add_puts_with_cf();
-          data_puts->set_cf_name(Constant::kTxnDataCF);
-          total_count = 0;
-          total_size = 0;
-        }
-      }
-    }
-
-    if (!kv_puts_write.empty()) {
-      auto *write_puts = cf_put_delete->add_puts_with_cf();
-      write_puts->set_cf_name(Constant::kTxnWriteCF);
-      for (auto const &kv_put : kv_puts_write) {
-        auto *kv = write_puts->add_kvs();
-        kv->set_key(kv_put.key());
-        kv->set_value(kv_put.value());
-        total_count++;
-        total_size += kv_put.key().size();
-        total_size += kv_put.value().size();
-
-        if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-          auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-          if (ret.error_code() == EPERM) {
-            DINGO_LOG(ERROR) << fmt::format(
-                "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
-                pb::common::RegionType_Name(region->Type()), ret.error_str());
-            return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-          }
-          txn_raft_request.Clear();
-          cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-          write_puts = cf_put_delete->add_puts_with_cf();
-          write_puts->set_cf_name(Constant::kTxnWriteCF);
-          total_count = 0;
-          total_size = 0;
-        }
-      }
-    }
-
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[backupdata][region({})][region_type({})] kv_puts_data_size:{}, kv_puts_write_size:{}", region->Id(),
-        pb::common::RegionType_Name(region->Type()), kv_puts_data.size(), kv_puts_write.size());
-
-    auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-    if (ret.error_code() == EPERM) {
-      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
-                                      region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
-      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-    }
-    return ret;
-  }
-
-  butil::Status TxnEngineHelper::RestoreNonTxnStore(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                                    std::shared_ptr<Engine> raft_engine,
-                                                    const std::vector<pb::common::KeyValue> &kv_default) {
-    if (region->Type() != pb::common::STORE_REGION) {
-      DINGO_LOG(FATAL) << "invalid regon type";
-    }
-
-    if (kv_default.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-          << fmt::format("[backupdata][region({})][region_type({})] kv_default is empty", region->Id(),
-                         pb::common::RegionType_Name(region->Type()));
-      return butil::Status::OK();
-    }
-
-    int64_t ts = 0;
-    int64_t total_size = 0;
-    int64_t total_count = 0;
-    std::vector<pb::common::KeyValue> send_kvs;
-    butil::Status ret;
-    for (auto const &kv_data : kv_default) {
-      send_kvs.push_back(kv_data);
-      total_count++;
-      total_size += kv_data.key().size();
-      total_size += kv_data.value().size();
 
       if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(
-            ctx,
-            WriteDataBuilder::BuildWrite(ctx->CfName(), const_cast<std::vector<pb::common::KeyValue> &>(send_kvs), ts));
+        auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
         if (ret.error_code() == EPERM) {
           DINGO_LOG(ERROR) << fmt::format(
               "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
               pb::common::RegionType_Name(region->Type()), ret.error_str());
           return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
         }
+        txn_raft_request.Clear();
+        cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+        vector_add = cf_put_delete->mutable_vector_add();
+        vector_del = cf_put_delete->mutable_vector_del();
+        document_add = cf_put_delete->mutable_document_add();
+        document_del = cf_put_delete->mutable_document_del();
         total_size = 0;
         total_count = 0;
-        send_kvs.clear();
       }
     }
+  }
 
-    if (!send_kvs.empty()) {
+  if (!kv_puts_data.empty()) {
+    auto *data_puts = cf_put_delete->add_puts_with_cf();
+    data_puts->set_cf_name(Constant::kTxnDataCF);
+
+    for (auto const &kv_put : kv_puts_data) {
+      auto *kv = data_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+      total_count++;
+      total_size += kv_put.key().size();
+      total_size += kv_put.value().size();
+
+      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+        auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+        if (ret.error_code() == EPERM) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), ret.error_str());
+          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+        }
+        txn_raft_request.Clear();
+        cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+        data_puts = cf_put_delete->add_puts_with_cf();
+        data_puts->set_cf_name(Constant::kTxnDataCF);
+        total_count = 0;
+        total_size = 0;
+      }
+    }
+  }
+
+  if (!kv_puts_write.empty()) {
+    auto *write_puts = cf_put_delete->add_puts_with_cf();
+    write_puts->set_cf_name(Constant::kTxnWriteCF);
+    for (auto const &kv_put : kv_puts_write) {
+      auto *kv = write_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+      total_count++;
+      total_size += kv_put.key().size();
+      total_size += kv_put.value().size();
+
+      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+        auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+        if (ret.error_code() == EPERM) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), ret.error_str());
+          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+        }
+        txn_raft_request.Clear();
+        cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+        write_puts = cf_put_delete->add_puts_with_cf();
+        write_puts->set_cf_name(Constant::kTxnWriteCF);
+        total_count = 0;
+        total_size = 0;
+      }
+    }
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][region_type({})] kv_puts_data_size:{}, kv_puts_write_size:{}", region->Id(),
+      pb::common::RegionType_Name(region->Type()), kv_puts_data.size(), kv_puts_write.size());
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
+                                    region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+  return ret;
+}
+
+butil::Status TxnEngineHelper::RestoreNonTxnStore(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                  std::shared_ptr<Engine> raft_engine,
+                                                  const std::vector<pb::common::KeyValue> &kv_default) {
+  if (region->Type() != pb::common::STORE_REGION) {
+    DINGO_LOG(FATAL) << "invalid regon type";
+  }
+
+  if (kv_default.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+        << fmt::format("[backupdata][region({})][region_type({})] kv_default is empty", region->Id(),
+                       pb::common::RegionType_Name(region->Type()));
+    return butil::Status::OK();
+  }
+
+  int64_t ts = 0;
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+  std::vector<pb::common::KeyValue> send_kvs;
+  butil::Status ret;
+  for (auto const &kv_data : kv_default) {
+    send_kvs.push_back(kv_data);
+    total_count++;
+    total_size += kv_data.key().size();
+    total_size += kv_data.value().size();
+
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(
                                         ctx->CfName(), const_cast<std::vector<pb::common::KeyValue> &>(send_kvs), ts));
       if (ret.error_code() == EPERM) {
@@ -7107,77 +7156,75 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
                                         region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
         return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
       }
+      total_size = 0;
+      total_count = 0;
+      send_kvs.clear();
     }
-
-    return ret;
   }
 
-  butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                                       std::shared_ptr<Engine> raft_engine,
-                                                       const std::vector<pb::common::KeyValue> &kv_default) {
-    std::vector<pb::common::DocumentWithId> documents;
-    std::vector<int64_t> delete_document_ids;
-    std::vector<pb::common::KeyValue> send_kv_default;
-
-    if (region->Type() != pb::common::DOCUMENT_REGION ||
-        !region->Definition().index_parameter().has_document_index_parameter()) {
-      DINGO_LOG(FATAL) << "invalid regon type";
+  if (!send_kvs.empty()) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(
+                                      ctx->CfName(), const_cast<std::vector<pb::common::KeyValue> &>(send_kvs), ts));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
+                                      region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
+  }
 
-    if (kv_default.empty()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-          << fmt::format("[backupdata][region({})][region_type({})] kv_default is empty", region->Id(),
-                         pb::common::RegionType_Name(region->Type()));
-      return butil::Status::OK();
-    }
+  return ret;
+}
 
-    std::vector<pb::common::KeyValue> send_kvs;
-    int64_t total_size = 0;
-    int64_t total_count = 0;
-    butil::Status ret;
-    for (auto const &kv : kv_default) {
-      pb::common::DocumentWithId document_with_id;
-      std::string plain_key;
-      int64_t partition_id;
-      int64_t document_id;
-      dingodb::DocumentCodec::DecodeFromEncodeKeyWithTs(kv.key(), partition_id, document_id);
-      document_with_id.set_id(document_id);
-      dingodb::mvcc::ValueFlag flag;
-      int64_t ttl;
-      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
-        if (!document_with_id.mutable_document()->ParseFromArray(value.data(), value.size())) {
-          DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
-        }
-        documents.push_back(document_with_id);
-        total_count++;
-        total_size += document_with_id.ByteSizeLong();
-      } else {
-        delete_document_ids.push_back(document_id);
-        total_count++;
+butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                     std::shared_ptr<Engine> raft_engine,
+                                                     const std::vector<pb::common::KeyValue> &kv_default) {
+  std::vector<pb::common::DocumentWithId> documents;
+  std::vector<int64_t> delete_document_ids;
+  std::vector<pb::common::KeyValue> send_kv_default;
+
+  if (region->Type() != pb::common::DOCUMENT_REGION ||
+      !region->Definition().index_parameter().has_document_index_parameter()) {
+    DINGO_LOG(FATAL) << "invalid regon type";
+  }
+
+  if (kv_default.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+        << fmt::format("[backupdata][region({})][region_type({})] kv_default is empty", region->Id(),
+                       pb::common::RegionType_Name(region->Type()));
+    return butil::Status::OK();
+  }
+
+  std::vector<pb::common::KeyValue> send_kvs;
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+  butil::Status ret;
+  for (auto const &kv : kv_default) {
+    pb::common::DocumentWithId document_with_id;
+    std::string plain_key;
+    int64_t partition_id;
+    int64_t document_id;
+    dingodb::DocumentCodec::DecodeFromEncodeKeyWithTs(kv.key(), partition_id, document_id);
+    document_with_id.set_id(document_id);
+    dingodb::mvcc::ValueFlag flag;
+    int64_t ttl;
+    auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+    if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+      if (!document_with_id.mutable_document()->ParseFromArray(value.data(), value.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
       }
-      send_kv_default.push_back(kv);
+      documents.push_back(document_with_id);
       total_count++;
-      total_size += kv.key().size();
-      total_size += kv.value().size();
-
-      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents,
-                                                                   delete_document_ids, send_kv_default, true));
-        if (ret.error_code() == EPERM) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
-                           << ", write raft engine failed, status: " << ret.error_str();
-          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-        }
-        documents.clear();
-        delete_document_ids.clear();
-        send_kv_default.clear();
-        total_size = 0;
-        total_count = 0;
-      }
+      total_size += document_with_id.ByteSizeLong();
+    } else {
+      delete_document_ids.push_back(document_id);
+      total_count++;
     }
+    send_kv_default.push_back(kv);
+    total_count++;
+    total_size += kv.key().size();
+    total_size += kv.value().size();
 
-    if (total_size > 0 || total_count > 0) {
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids,
                                                                  send_kv_default, true));
       if (ret.error_code() == EPERM) {
@@ -7185,276 +7232,284 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
                          << ", write raft engine failed, status: " << ret.error_str();
         return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
       }
+      documents.clear();
+      delete_document_ids.clear();
+      send_kv_default.clear();
+      total_size = 0;
+      total_count = 0;
     }
-
-    return ret;
   }
 
-  std::vector<std::string> GenScalarSpeedUpKeys(char prefix,
-                                                const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
-    std::vector<std::string> scalar_speed_up_keys;
-
-    std::string prev_encode_key;
-    for (const auto &kv : kv_scalar_speed_up) {
-      const auto &encode_key = std::string(kv.key());
-      int64_t vector_id = 0;
-      int64_t partition_id = 0;
-      std::string scalar_key;
-      int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
-      VectorCodec::DecodeFromEncodeKeyWithTs(encode_key, partition_id, vector_id, scalar_key);
-      std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, ts);
-      if (prev_encode_key != encode_key) {
-        scalar_speed_up_keys.push_back(encode_key_with_ts);
-      }
-      prev_encode_key = encode_key;
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids,
+                                                               send_kv_default, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
+                       << ", write raft engine failed, status: " << ret.error_str();
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
-    return scalar_speed_up_keys;
   }
 
-  butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(
-      const std::vector<pb::common::KeyValue> &kv_default, const std::vector<pb::common::KeyValue> &kv_scalar,
-      const std::vector<pb::common::KeyValue> &kv_table, const std::vector<std::string> &scalar_speed_up_keys,
-      std::vector<pb::common::VectorWithId> &vector_with_ids, std::vector<int64_t> &vector_delete_ids) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-        << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
-                       kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
+  return ret;
+}
 
-    std::vector<pb::common::VectorWithKey> part_vectors;
-    // vecotr data
-    for (const auto &kv : kv_default) {
-      const auto &encode_key = std::string(kv.key());
-      pb::common::VectorWithKey vector_with_key;
-      vector_with_key.set_key(encode_key);
+std::vector<std::string> GenScalarSpeedUpKeys(char prefix,
+                                              const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
+  std::vector<std::string> scalar_speed_up_keys;
 
-      int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
-      std::string encode_key_no_ts(dingodb::VectorCodec::TruncateTsForKey(encode_key));
-      vector_with_key.mutable_vector_with_id()->set_id(
-          dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts));
-
-      dingodb::mvcc::ValueFlag flag;
-      int64_t ttl;
-      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
-        if (!vector_with_key.mutable_vector_with_id()->mutable_vector()->ParseFromArray(value.data(), value.size())) {
-          DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
-        }
-      } else {
-        vector_with_key.set_is_delete(true);
-      }
-
-      part_vectors.push_back(vector_with_key);
+  std::string prev_encode_key;
+  for (const auto &kv : kv_scalar_speed_up) {
+    const auto &encode_key = std::string(kv.key());
+    int64_t vector_id = 0;
+    int64_t partition_id = 0;
+    std::string scalar_key;
+    int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
+    VectorCodec::DecodeFromEncodeKeyWithTs(encode_key, partition_id, vector_id, scalar_key);
+    std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, ts);
+    if (prev_encode_key != encode_key) {
+      scalar_speed_up_keys.push_back(encode_key_with_ts);
     }
-
-    // scalar data
-    {
-      uint32_t count = 0;
-      for (const auto &kv : kv_scalar) {
-        auto &vector = part_vectors.at(count++);
-        CHECK(kv.key() == vector.key()) << "Not match key.";
-
-        dingodb::mvcc::ValueFlag flag;
-        int64_t ttl;
-        auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-        if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
-          if (!vector.mutable_vector_with_id()->mutable_scalar_data()->ParseFromArray(value.data(), value.size())) {
-            DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", value.size());
-          }
-        }
-      }
-    }
-
-    // table data
-    {
-      uint32_t count = 0;
-      for (const auto &kv : kv_table) {
-        auto &vector = part_vectors.at(count++);
-        CHECK(kv.key() == vector.key()) << "Not match key.";
-
-        dingodb::mvcc::ValueFlag flag;
-        int64_t ttl;
-        auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-        if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
-          if (!vector.mutable_vector_with_id()->mutable_table_data()->ParseFromArray(value.data(), value.size())) {
-            DINGO_LOG(FATAL) << fmt::format("Parse vector table proto failed, value size: {}.", value.size());
-          }
-        }
-      }
-    }
-
-    // scalar_speed_up data
-    {
-      // only check scalar encode key
-      uint32_t count = 0;
-      for (const auto &key : scalar_speed_up_keys) {
-        auto &vector = part_vectors.at(count++);
-        CHECK(key == vector.key()) << "Not match key.";
-      }
-    }
-
-    for (auto &vector : part_vectors) {
-      if (vector.is_delete()) {
-        vector_delete_ids.push_back(vector.vector_with_id().id());
-      } else {
-        vector_with_ids.push_back(vector.vector_with_id());
-      }
-    }
-    return butil::Status();
+    prev_encode_key = encode_key;
   }
+  return scalar_speed_up_keys;
+}
 
-  butil::Status TxnEngineHelper::PreProcessVectorIndex(
-      const std::vector<pb::common::KeyValue> &kv_default, const std::vector<pb::common::KeyValue> &kv_scalar,
-      const std::vector<pb::common::KeyValue> &kv_table, const std::vector<std::string> &scalar_speed_up_keys,
-      std::vector<pb::common::VectorWithId> &vector_with_ids, std::vector<int64_t> &vector_delete_ids) {
-    // encodekey -> KeyValue
-    std::unordered_map<std::string, std::string_view> scalar_map;
-    std::unordered_map<std::string, std::string_view> table_map;
-    std::unordered_set<std::string> scalar_speed_up_set;
-    scalar_map.reserve(kv_scalar.size());
-    table_map.reserve(kv_table.size());
-    scalar_speed_up_set.reserve(scalar_speed_up_keys.size());
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-        << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
-                       kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
-    // scalar data
-    for (const auto &kv : kv_scalar) {
-      dingodb::mvcc::ValueFlag flag;
-      int64_t ttl;
-      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-      scalar_map[kv.key()] = value;
-    }
+butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
+                                                             const std::vector<pb::common::KeyValue> &kv_scalar,
+                                                             const std::vector<pb::common::KeyValue> &kv_table,
+                                                             const std::vector<std::string> &scalar_speed_up_keys,
+                                                             std::vector<pb::common::VectorWithId> &vector_with_ids,
+                                                             std::vector<int64_t> &vector_delete_ids) {
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+      << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
+                     kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
 
-    // table data
-    for (const auto &kv : kv_table) {
-      dingodb::mvcc::ValueFlag flag;
-      int64_t ttl;
-      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-      table_map[kv.key()] = value;
-    }
+  std::vector<pb::common::VectorWithKey> part_vectors;
+  // vecotr data
+  for (const auto &kv : kv_default) {
+    const auto &encode_key = std::string(kv.key());
+    pb::common::VectorWithKey vector_with_key;
+    vector_with_key.set_key(encode_key);
 
-    // scalar_speed_up data
-    for (const auto &key : scalar_speed_up_keys) {
-      scalar_speed_up_set.insert(key);
-    }
+    int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
+    std::string encode_key_no_ts(dingodb::VectorCodec::TruncateTsForKey(encode_key));
+    vector_with_key.mutable_vector_with_id()->set_id(
+        dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts));
 
-    // vecotr data
-    for (auto const &kv : kv_default) {
-      const auto &encode_key = std::string(kv.key());
-      pb::common::VectorWithId vector_with_id;
-
-      int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
-      std::string encode_key_no_ts(dingodb::VectorCodec::TruncateTsForKey(encode_key));
-      int64_t vector_id = dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts);
-
-      dingodb::mvcc::ValueFlag flag;
-      int64_t ttl;
-      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
-        vector_with_id.set_id(vector_id);
-
-        if (!vector_with_id.mutable_vector()->ParseFromArray(value.data(), value.size())) {
-          DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
-        }
-
-        auto iter = scalar_map.find(encode_key);
-        if (iter != scalar_map.end()) {
-          if (!vector_with_id.mutable_scalar_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
-            DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
-          }
-          scalar_map.erase(encode_key);
-        }
-
-        iter = table_map.find(encode_key);
-        if (iter != table_map.end()) {
-          if (!vector_with_id.mutable_table_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
-            DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
-          }
-          table_map.erase(encode_key);
-        }
-
-        if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
-          scalar_speed_up_set.erase(encode_key);
-        }
-
-        vector_with_ids.push_back(vector_with_id);
-
-      } else {
-        auto iter = scalar_map.find(encode_key);
-        if (iter != scalar_map.end()) {
-          scalar_map.erase(encode_key);
-        }
-
-        iter = table_map.find(encode_key);
-        if (iter != table_map.end()) {
-          table_map.erase(encode_key);
-        }
-
-        if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
-          scalar_speed_up_set.erase(encode_key);
-        }
-
-        vector_delete_ids.push_back(vector_id);
+    dingodb::mvcc::ValueFlag flag;
+    int64_t ttl;
+    auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+    if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+      if (!vector_with_key.mutable_vector_with_id()->mutable_vector()->ParseFromArray(value.data(), value.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
       }
-    }
-
-    // check table_map && scalar_map && scalar_speed_up_set must be empty.
-    if (!scalar_map.empty() || !table_map.empty() || !scalar_speed_up_set.empty()) {
-      DINGO_LOG(FATAL) << fmt::format("scalar_map.size:{}, table_map.size:{}, scalar_speed_up_map.size:{} must be zero",
-                                      scalar_map.size(), table_map.size(), scalar_speed_up_set.size());
-    }
-
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::RestoreNonTxnIndex(
-      std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<Engine> raft_engine,
-      const std::vector<pb::common::KeyValue> &kv_default, const std::vector<pb::common::KeyValue> &kv_scalar,
-      const std::vector<pb::common::KeyValue> &kv_table, const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
-    butil::Status status;
-    std::vector<pb::common::VectorWithId> vector_with_ids;
-    std::vector<int64_t> vector_delete_ids;
-    auto scalar_speed_up_keys = GenScalarSpeedUpKeys(region->GetKeyPrefix(), kv_scalar_speed_up);
-
-    if (kv_default.size() == kv_scalar.size() && kv_default.size() == kv_table.size() &&
-        (kv_default.size() == scalar_speed_up_keys.size() || scalar_speed_up_keys.size() == 0)) {
-      status = OptimizePreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids,
-                                             vector_delete_ids);
     } else {
-      status = PreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids,
-                                     vector_delete_ids);
+      vector_with_key.set_is_delete(true);
     }
 
-    if (!status.ok()) {
-      return status;
-    }
-    std::vector<pb::common::KeyValue> send_kv_default;
-    std::vector<pb::common::KeyValue> send_kv_scalar;
-    std::vector<pb::common::KeyValue> send_kv_table;
-    std::vector<pb::common::KeyValue> send_kv_scalar_speed_up;
-    std::vector<pb::common::VectorWithId> send_vector_with_ids;
+    part_vectors.push_back(vector_with_key);
+  }
 
-    int64_t total_size = 0;
-    int64_t total_count = 0;
-    butil::Status ret;
+  // scalar data
+  {
+    uint32_t count = 0;
+    for (const auto &kv : kv_scalar) {
+      auto &vector = part_vectors.at(count++);
+      CHECK(kv.key() == vector.key()) << "Not match key.";
 
-    for (auto const &vector : vector_with_ids) {
-      send_vector_with_ids.push_back(vector);
-      total_size += vector.ByteSizeLong();
-      total_count++;
-      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(send_vector_with_ids, {}, {}, {}, {}, {}, true));
-        if (ret.error_code() == EPERM) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[backupdata][region({})][region_type({})] write vector_with_id failed, status:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), ret.error_str());
-          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      dingodb::mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+        if (!vector.mutable_vector_with_id()->mutable_scalar_data()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", value.size());
         }
-        send_vector_with_ids.clear();
-        total_size = 0;
-        total_count = 0;
       }
     }
+  }
 
-    if (total_size > 0 || total_count > 0) {
+  // table data
+  {
+    uint32_t count = 0;
+    for (const auto &kv : kv_table) {
+      auto &vector = part_vectors.at(count++);
+      CHECK(kv.key() == vector.key()) << "Not match key.";
+
+      dingodb::mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+        if (!vector.mutable_vector_with_id()->mutable_table_data()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector table proto failed, value size: {}.", value.size());
+        }
+      }
+    }
+  }
+
+  // scalar_speed_up data
+  {
+    // only check scalar encode key
+    uint32_t count = 0;
+    for (const auto &key : scalar_speed_up_keys) {
+      auto &vector = part_vectors.at(count++);
+      CHECK(key == vector.key()) << "Not match key.";
+    }
+  }
+
+  for (auto &vector : part_vectors) {
+    if (vector.is_delete()) {
+      vector_delete_ids.push_back(vector.vector_with_id().id());
+    } else {
+      vector_with_ids.push_back(vector.vector_with_id());
+    }
+  }
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
+                                                     const std::vector<pb::common::KeyValue> &kv_scalar,
+                                                     const std::vector<pb::common::KeyValue> &kv_table,
+                                                     const std::vector<std::string> &scalar_speed_up_keys,
+                                                     std::vector<pb::common::VectorWithId> &vector_with_ids,
+                                                     std::vector<int64_t> &vector_delete_ids) {
+  // encodekey -> KeyValue
+  std::unordered_map<std::string, std::string_view> scalar_map;
+  std::unordered_map<std::string, std::string_view> table_map;
+  std::unordered_set<std::string> scalar_speed_up_set;
+  scalar_map.reserve(kv_scalar.size());
+  table_map.reserve(kv_table.size());
+  scalar_speed_up_set.reserve(scalar_speed_up_keys.size());
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+      << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
+                     kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
+  // scalar data
+  for (const auto &kv : kv_scalar) {
+    dingodb::mvcc::ValueFlag flag;
+    int64_t ttl;
+    auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+    scalar_map[kv.key()] = value;
+  }
+
+  // table data
+  for (const auto &kv : kv_table) {
+    dingodb::mvcc::ValueFlag flag;
+    int64_t ttl;
+    auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+    table_map[kv.key()] = value;
+  }
+
+  // scalar_speed_up data
+  for (const auto &key : scalar_speed_up_keys) {
+    scalar_speed_up_set.insert(key);
+  }
+
+  // vecotr data
+  for (auto const &kv : kv_default) {
+    const auto &encode_key = std::string(kv.key());
+    pb::common::VectorWithId vector_with_id;
+
+    int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
+    std::string encode_key_no_ts(dingodb::VectorCodec::TruncateTsForKey(encode_key));
+    int64_t vector_id = dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts);
+
+    dingodb::mvcc::ValueFlag flag;
+    int64_t ttl;
+    auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+    if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+      vector_with_id.set_id(vector_id);
+
+      if (!vector_with_id.mutable_vector()->ParseFromArray(value.data(), value.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
+      }
+
+      auto iter = scalar_map.find(encode_key);
+      if (iter != scalar_map.end()) {
+        if (!vector_with_id.mutable_scalar_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
+        }
+        scalar_map.erase(encode_key);
+      }
+
+      iter = table_map.find(encode_key);
+      if (iter != table_map.end()) {
+        if (!vector_with_id.mutable_table_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
+        }
+        table_map.erase(encode_key);
+      }
+
+      if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
+        scalar_speed_up_set.erase(encode_key);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+
+    } else {
+      auto iter = scalar_map.find(encode_key);
+      if (iter != scalar_map.end()) {
+        scalar_map.erase(encode_key);
+      }
+
+      iter = table_map.find(encode_key);
+      if (iter != table_map.end()) {
+        table_map.erase(encode_key);
+      }
+
+      if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
+        scalar_speed_up_set.erase(encode_key);
+      }
+
+      vector_delete_ids.push_back(vector_id);
+    }
+  }
+
+  // check table_map && scalar_map && scalar_speed_up_set must be empty.
+  if (!scalar_map.empty() || !table_map.empty() || !scalar_speed_up_set.empty()) {
+    DINGO_LOG(FATAL) << fmt::format("scalar_map.size:{}, table_map.size:{}, scalar_speed_up_map.size:{} must be zero",
+                                    scalar_map.size(), table_map.size(), scalar_speed_up_set.size());
+  }
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::RestoreNonTxnIndex(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                  std::shared_ptr<Engine> raft_engine,
+                                                  const std::vector<pb::common::KeyValue> &kv_default,
+                                                  const std::vector<pb::common::KeyValue> &kv_scalar,
+                                                  const std::vector<pb::common::KeyValue> &kv_table,
+                                                  const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
+  butil::Status status;
+  std::vector<pb::common::VectorWithId> vector_with_ids;
+  std::vector<int64_t> vector_delete_ids;
+  auto scalar_speed_up_keys = GenScalarSpeedUpKeys(region->GetKeyPrefix(), kv_scalar_speed_up);
+
+  if (kv_default.size() == kv_scalar.size() && kv_default.size() == kv_table.size() &&
+      (kv_default.size() == scalar_speed_up_keys.size() || scalar_speed_up_keys.size() == 0)) {
+    status = OptimizePreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids,
+                                           vector_delete_ids);
+  } else {
+    status = PreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids,
+                                   vector_delete_ids);
+  }
+
+  if (!status.ok()) {
+    return status;
+  }
+  std::vector<pb::common::KeyValue> send_kv_default;
+  std::vector<pb::common::KeyValue> send_kv_scalar;
+  std::vector<pb::common::KeyValue> send_kv_table;
+  std::vector<pb::common::KeyValue> send_kv_scalar_speed_up;
+  std::vector<pb::common::VectorWithId> send_vector_with_ids;
+
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+  butil::Status ret;
+
+  for (auto const &vector : vector_with_ids) {
+    send_vector_with_ids.push_back(vector);
+    total_size += vector.ByteSizeLong();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(send_vector_with_ids, {}, {}, {}, {}, {}, true));
       if (ret.error_code() == EPERM) {
         DINGO_LOG(ERROR) << fmt::format(
@@ -7466,31 +7521,31 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
       total_size = 0;
       total_count = 0;
     }
+  }
 
-    for (auto const &kv : kv_default) {
-      send_kv_default.push_back(kv);
-      total_size += kv.key().size();
-      total_size += kv.value().size();
-      total_count++;
-      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, send_kv_default, {}, {}, {}, {}, true));
-        if (ret.error_code() == EPERM) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[backupdata][region({})][region_type({})] write send_kv_defaultfailed, status:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), ret.error_str());
-          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-        }
-        send_kv_default.clear();
-        total_size = 0;
-        total_count = 0;
-      }
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(send_vector_with_ids, {}, {}, {}, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write vector_with_id failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
+    send_vector_with_ids.clear();
+    total_size = 0;
+    total_count = 0;
+  }
 
-    if (total_size > 0 || total_count > 0) {
+  for (auto const &kv : kv_default) {
+    send_kv_default.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, send_kv_default, {}, {}, {}, {}, true));
       if (ret.error_code() == EPERM) {
         DINGO_LOG(ERROR) << fmt::format(
-            "[backupdata][region({})][region_type({})] write send_kv_default failed, status:{}", region->Id(),
+            "[backupdata][region({})][region_type({})] write send_kv_defaultfailed, status:{}", region->Id(),
             pb::common::RegionType_Name(region->Type()), ret.error_str());
         return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
       }
@@ -7498,27 +7553,27 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
       total_size = 0;
       total_count = 0;
     }
+  }
 
-    for (auto const &kv : kv_scalar) {
-      send_kv_scalar.push_back(kv);
-      total_size += kv.key().size();
-      total_size += kv.value().size();
-      total_count++;
-      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, send_kv_scalar, {}, {}, {}, true));
-        if (ret.error_code() == EPERM) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[backupdata][region({})][region_type({})] write send_kv_scalar failed, status:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), ret.error_str());
-          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-        }
-        send_kv_scalar.clear();
-        total_size = 0;
-        total_count = 0;
-      }
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, send_kv_default, {}, {}, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write send_kv_default failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
+    send_kv_default.clear();
+    total_size = 0;
+    total_count = 0;
+  }
 
-    if (total_size > 0 || total_count > 0) {
+  for (auto const &kv : kv_scalar) {
+    send_kv_scalar.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, send_kv_scalar, {}, {}, {}, true));
       if (ret.error_code() == EPERM) {
         DINGO_LOG(ERROR) << fmt::format(
@@ -7530,27 +7585,27 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
       total_size = 0;
       total_count = 0;
     }
+  }
 
-    for (auto const &kv : kv_table) {
-      send_kv_table.push_back(kv);
-      total_size += kv.key().size();
-      total_size += kv.value().size();
-      total_count++;
-      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, send_kv_table, {}, {}, true));
-        if (ret.error_code() == EPERM) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[backupdata][region({})][region_type({})] write send_kv_table failed, status:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), ret.error_str());
-          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-        }
-        send_kv_table.clear();
-        total_size = 0;
-        total_count = 0;
-      }
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, send_kv_scalar, {}, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write send_kv_scalar failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
+    send_kv_scalar.clear();
+    total_size = 0;
+    total_count = 0;
+  }
 
-    if (total_size > 0 || total_count > 0) {
+  for (auto const &kv : kv_table) {
+    send_kv_table.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, send_kv_table, {}, {}, true));
       if (ret.error_code() == EPERM) {
         DINGO_LOG(ERROR) << fmt::format(
@@ -7562,235 +7617,249 @@ bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock
       total_size = 0;
       total_count = 0;
     }
+  }
 
-    for (auto const &kv : kv_scalar_speed_up) {
-      send_kv_scalar_speed_up.push_back(kv);
-      total_size += kv.key().size();
-      total_size += kv.value().size();
-      total_count++;
-      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
-        ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, {}, send_kv_scalar_speed_up, {}, true));
-        if (ret.error_code() == EPERM) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[backupdata][region({})][region_type({})] write send_kv_scalar_speed_up failed, status:{}", region->Id(),
-              pb::common::RegionType_Name(region->Type()), ret.error_str());
-          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-        }
-        send_kv_scalar_speed_up.clear();
-        total_size = 0;
-        total_count = 0;
-      }
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, send_kv_table, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write send_kv_table failed, status:{}",
+                                      region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
-    if (total_size > 0 || total_count > 0) {
+    send_kv_table.clear();
+    total_size = 0;
+    total_count = 0;
+  }
+
+  for (auto const &kv : kv_scalar_speed_up) {
+    send_kv_scalar_speed_up.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
       ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, {}, send_kv_scalar_speed_up, {}, true));
       if (ret.error_code() == EPERM) {
         DINGO_LOG(ERROR) << fmt::format(
-            "[backupdata][region({})][region_type({})] write send_kv_scalar_speed_up cf failed, status:{}",
-            region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+            "[backupdata][region({})][region_type({})] write send_kv_scalar_speed_up failed, status:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), ret.error_str());
         return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
       }
       send_kv_scalar_speed_up.clear();
       total_size = 0;
       total_count = 0;
     }
-    return ret;
   }
-
-  butil::Status TxnEngineHelper::RestoreNonTxn(
-      std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<Engine> raft_engine,
-      const std::vector<pb::common::KeyValue> &kv_default, const std::vector<pb::common::KeyValue> &kv_scalar,
-      const std::vector<pb::common::KeyValue> &kv_table, const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
-    if (region->Type() == pb::common::STORE_REGION) {
-      return RestoreNonTxnStore(ctx, region, raft_engine, kv_default);
-    } else if (region->Type() == pb::common::INDEX_REGION) {
-      return RestoreNonTxnIndex(ctx, region, raft_engine, kv_default, kv_scalar, kv_table, kv_scalar_speed_up);
-    } else if (region->Type() == pb::common::DOCUMENT_REGION) {
-      return RestoreNonTxnDocument(ctx, region, raft_engine, kv_default);
-    } else {
-      DINGO_LOG(FATAL) << fmt::format("Region type:{} not support restore.",
-                                      pb::common::RegionType_Name(region->Type()));
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, {}, send_kv_scalar_speed_up, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write send_kv_scalar_speed_up cf failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
     }
-    return butil::Status();
+    send_kv_scalar_speed_up.clear();
+    total_size = 0;
+    total_count = 0;
   }
+  return ret;
+}
 
-  butil::Status TxnEngineHelper::DoReadSstFileForTxn(
-      std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<Engine> raft_engine,
-      const pb::common::StorageBackend &storage_backend,
-      const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group) {
-    rocksdb::Options options;
-    options.env = rocksdb::Env::Default();
-    if (options.env == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] rocksdb options env is nullptr",
-                                      region->Id(), pb::common::RegionType_Name(region->Type()));
-      return butil::Status(pb::error::EINTERNAL, "Internal restore data sst file error.");
-    }
-
-    rocksdb::SstFileReader reader(options);
-    std::string dir_path;
-    std::string file_path;
-    rocksdb::Status status;
-    butil::Status butil_status;
-    std::vector<pb::common::KeyValue> kv_puts_data;
-    std::vector<pb::common::KeyValue> kv_puts_write;
-    for (const auto &sst_meta : sst_meta_group.backup_data_file_value_sst_metas()) {
-      dir_path = fmt::format("{}/{}", storage_backend.local().path(), sst_meta.dir_name());
-      file_path = fmt::format("{}/{}", dir_path, sst_meta.file_name());
-
-      status = reader.Open(file_path);
-      if (BAIDU_UNLIKELY(!status.ok())) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[restoredata][region({})][region_type({})] reader open file{} failed, error: {}", region->Id(),
-            pb::common::RegionType_Name(region->Type()), file_path, status.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal open sst file failed.");
-      }
-
-      std::unique_ptr<rocksdb::Iterator> iter(reader.NewIterator(rocksdb::ReadOptions()));
-      for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-        pb::common::KeyValue kv;
-        kv.set_key(iter->key().data(), iter->key().size());
-        kv.set_value(iter->value().data(), iter->value().size());
-        if (sst_meta.cf() == Constant::kTxnDataCF) {
-          kv_puts_data.emplace_back(kv);
-        } else if (sst_meta.cf() == Constant::kTxnWriteCF) {
-          kv_puts_write.emplace_back(kv);
-        } else {
-          DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
-        }
-      }
-    }
-    if (!kv_puts_data.empty() || !kv_puts_write.empty()) {
-      butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
-      if (BAIDU_UNLIKELY(!status.ok())) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[restoredata][region({})][region_type({})] RestoreTxn failed, status "
-            "code: {}, "
-            "message: {}",
-            region->Id(), pb::common::RegionType_Name(region->Type()), butil_status.error_code(),
-            butil_status.error_str());
-        return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-      }
-
-      kv_puts_data.clear();
-      kv_puts_write.clear();
-    }
-
-    DINGO_LOG(INFO) << fmt::format("[restoredata][region({})][region_type({})] rebuild sst done.", region->Id(),
-                                   pb::common::RegionType_Name(region->Type()));
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::DoReadSstFileForNonTxn(
-      std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<Engine> raft_engine,
-      const pb::common::StorageBackend &storage_backend,
-      const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group) {
-    rocksdb::Options options;
-    options.env = rocksdb::Env::Default();
-    if (options.env == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] rocksdb options env is nullptr",
-                                      region->Id(), pb::common::RegionType_Name(region->Type()));
-      return butil::Status(pb::error::EINTERNAL, "Internal restore data sst file error.");
-    }
-
-    rocksdb::SstFileReader reader(options);
-    std::string dir_path;
-    std::string file_path;
-    rocksdb::Status status;
-    butil::Status butil_status;
-
-    std::vector<pb::common::KeyValue> kv_default;
-    std::vector<pb::common::KeyValue> kv_scalar;
-    std::vector<pb::common::KeyValue> kv_table;
-    std::vector<pb::common::KeyValue> kv_scalar_speed_up;
-
-    for (const auto &sst_meta : sst_meta_group.backup_data_file_value_sst_metas()) {
-      dir_path = fmt::format("{}/{}", storage_backend.local().path(), sst_meta.dir_name());
-      file_path = fmt::format("{}/{}", dir_path, sst_meta.file_name());
-
-      status = reader.Open(file_path);
-      if (BAIDU_UNLIKELY(!status.ok())) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[restoredata][region({})][region_type({})] reader open file{} failed, error: {}", region->Id(),
-            pb::common::RegionType_Name(region->Type()), file_path, status.ToString());
-        return butil::Status(pb::error::EINTERNAL, "Internal open sst file failed.");
-      }
-
-      std::unique_ptr<rocksdb::Iterator> iter(reader.NewIterator(rocksdb::ReadOptions()));
-      for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-        pb::common::KeyValue kv;
-        kv.set_key(iter->key().data(), iter->key().size());
-        kv.set_value(iter->value().data(), iter->value().size());
-        if (sst_meta.cf() == Constant::kVectorDataCF || sst_meta.cf() == Constant::kStoreDataCF) {
-          kv_default.emplace_back(kv);
-        } else if (sst_meta.cf() == Constant::kVectorScalarCF) {
-          kv_scalar.emplace_back(kv);
-        } else if (sst_meta.cf() == Constant::kVectorTableCF) {
-          kv_table.emplace_back(kv);
-        } else if (sst_meta.cf() == Constant::kVectorScalarKeySpeedUpCF) {
-          kv_scalar_speed_up.emplace_back(kv);
-        } else {
-          DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
-        }
-      }
-    }
-
-    // vector index must handle kv_default, kv_scalar, kv_table, and kv_scalar_speed_up simultaneously.
-    if (!kv_default.empty() || !kv_scalar.empty() || !kv_table.empty() || !kv_scalar_speed_up.empty()) {
-      butil_status = RestoreNonTxn(ctx, region, raft_engine, kv_default, kv_scalar, kv_table, kv_scalar_speed_up);
-      if (BAIDU_UNLIKELY(!status.ok())) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[restoredata] RestoreNontxn failed,  status code: {}, "
-            "message: {}",
-            butil_status.error_code(), butil_status.error_str());
-        return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-      }
-
-      kv_default.clear();
-      kv_scalar.clear();
-      kv_table.clear();
-      kv_scalar_speed_up.clear();
-    }
-
-    DINGO_LOG(INFO) << fmt::format("[restoredata][region({})][region_type({})] rebuild sst done.", region->Id(),
-                                   pb::common::RegionType_Name(region->Type()));
-    return butil::Status();
-  }
-
-  butil::Status TxnEngineHelper::ReadSstFile(std::shared_ptr<Context> ctx, store::RegionPtr region,
+butil::Status TxnEngineHelper::RestoreNonTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                              std::shared_ptr<Engine> raft_engine,
-                                             const pb::common::StorageBackend &storage_backend,
-                                             const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group) {
-    bool is_txn = region->IsTxn();
-    // std::string region_type_name;
-    if (is_txn) {
-      return DoReadSstFileForTxn(ctx, region, raft_engine, storage_backend, sst_meta_group);
+                                             const std::vector<pb::common::KeyValue> &kv_default,
+                                             const std::vector<pb::common::KeyValue> &kv_scalar,
+                                             const std::vector<pb::common::KeyValue> &kv_table,
+                                             const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
+  if (region->Type() == pb::common::STORE_REGION) {
+    return RestoreNonTxnStore(ctx, region, raft_engine, kv_default);
+  } else if (region->Type() == pb::common::INDEX_REGION) {
+    return RestoreNonTxnIndex(ctx, region, raft_engine, kv_default, kv_scalar, kv_table, kv_scalar_speed_up);
+  } else if (region->Type() == pb::common::DOCUMENT_REGION) {
+    return RestoreNonTxnDocument(ctx, region, raft_engine, kv_default);
+  } else {
+    DINGO_LOG(FATAL) << fmt::format("Region type:{} not support restore.", pb::common::RegionType_Name(region->Type()));
+  }
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoReadSstFileForTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                   std::shared_ptr<Engine> raft_engine,
+                                                   const pb::common::StorageBackend &storage_backend,
+                                                   const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group) {
+  rocksdb::Options options;
+  options.env = rocksdb::Env::Default();
+  if (options.env == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] rocksdb options env is nullptr",
+                                    region->Id(), pb::common::RegionType_Name(region->Type()));
+    return butil::Status(pb::error::EINTERNAL, "Internal restore data sst file error.");
+  }
+
+  rocksdb::SstFileReader reader(options);
+  std::string dir_path;
+  std::string file_path;
+  rocksdb::Status status;
+  butil::Status butil_status;
+  std::vector<pb::common::KeyValue> kv_puts_data;
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  for (const auto &sst_meta : sst_meta_group.backup_data_file_value_sst_metas()) {
+    dir_path = fmt::format("{}/{}", storage_backend.local().path(), sst_meta.dir_name());
+    file_path = fmt::format("{}/{}", dir_path, sst_meta.file_name());
+
+    status = reader.Open(file_path);
+    if (BAIDU_UNLIKELY(!status.ok())) {
+      DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] reader open file{} failed, error: {}",
+                                      region->Id(), pb::common::RegionType_Name(region->Type()), file_path,
+                                      status.ToString());
+      return butil::Status(pb::error::EINTERNAL, "Internal open sst file failed.");
     }
-    return DoReadSstFileForNonTxn(ctx, region, raft_engine, storage_backend, sst_meta_group);
+
+    std::unique_ptr<rocksdb::Iterator> iter(reader.NewIterator(rocksdb::ReadOptions()));
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      pb::common::KeyValue kv;
+      kv.set_key(iter->key().data(), iter->key().size());
+      kv.set_value(iter->value().data(), iter->value().size());
+      if (sst_meta.cf() == Constant::kTxnDataCF) {
+        kv_puts_data.emplace_back(kv);
+      } else if (sst_meta.cf() == Constant::kTxnWriteCF) {
+        kv_puts_write.emplace_back(kv);
+      } else {
+        DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
+      }
+    }
+  }
+  if (!kv_puts_data.empty() || !kv_puts_write.empty()) {
+    butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
+    if (BAIDU_UNLIKELY(!status.ok())) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[restoredata][region({})][region_type({})] RestoreTxn failed, status "
+          "code: {}, "
+          "message: {}",
+          region->Id(), pb::common::RegionType_Name(region->Type()), butil_status.error_code(),
+          butil_status.error_str());
+      return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
+    }
+
+    kv_puts_data.clear();
+    kv_puts_write.clear();
   }
 
-  butil::Status TxnEngineHelper::RestoreMeta(std::shared_ptr<Context> ctx, std::shared_ptr<Engine> raft_engine,
-                                             store::RegionPtr region, std::string backup_ts, int64_t backup_tso,
-                                             const pb::common::StorageBackend &storage_backend,
-                                             const dingodb::pb::common::BackupDataFileValueSstMetaGroup &sst_metas) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[restoredata][region({})] restore meta. backup_ts : {}  backup_tso : {} "
-        "storage_backend : {} sst_metas_size : {}",
-        ctx->RegionId(), backup_ts, backup_tso, storage_backend.DebugString(), sst_metas.DebugString());
+  DINGO_LOG(INFO) << fmt::format("[restoredata][region({})][region_type({})] rebuild sst done.", region->Id(),
+                                 pb::common::RegionType_Name(region->Type()));
+  return butil::Status();
+}
 
-    return ReadSstFile(ctx, region, raft_engine, storage_backend, sst_metas);
+butil::Status TxnEngineHelper::DoReadSstFileForNonTxn(
+    std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<Engine> raft_engine,
+    const pb::common::StorageBackend &storage_backend,
+    const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group) {
+  rocksdb::Options options;
+  options.env = rocksdb::Env::Default();
+  if (options.env == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] rocksdb options env is nullptr",
+                                    region->Id(), pb::common::RegionType_Name(region->Type()));
+    return butil::Status(pb::error::EINTERNAL, "Internal restore data sst file error.");
   }
 
-  butil::Status TxnEngineHelper::RestoreData(std::shared_ptr<Context> ctx, std::shared_ptr<Engine> raft_engine,
-                                             store::RegionPtr region, std::string backup_ts, int64_t backup_tso,
-                                             const pb::common::StorageBackend &storage_backend,
-                                             const dingodb::pb::common::BackupDataFileValueSstMetaGroup &sst_metas) {
-    butil::Status status;
+  rocksdb::SstFileReader reader(options);
+  std::string dir_path;
+  std::string file_path;
+  rocksdb::Status status;
+  butil::Status butil_status;
 
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
-        "[restoredata][region({})] restore data. backup_ts : {}  backup_tso : {} "
-        "storage_backend : {} sst_metas_size : {}",
-        ctx->RegionId(), backup_ts, backup_tso, storage_backend.DebugString(), sst_metas.DebugString());
+  std::vector<pb::common::KeyValue> kv_default;
+  std::vector<pb::common::KeyValue> kv_scalar;
+  std::vector<pb::common::KeyValue> kv_table;
+  std::vector<pb::common::KeyValue> kv_scalar_speed_up;
 
-    return ReadSstFile(ctx, region, raft_engine, storage_backend, sst_metas);
+  for (const auto &sst_meta : sst_meta_group.backup_data_file_value_sst_metas()) {
+    dir_path = fmt::format("{}/{}", storage_backend.local().path(), sst_meta.dir_name());
+    file_path = fmt::format("{}/{}", dir_path, sst_meta.file_name());
+
+    status = reader.Open(file_path);
+    if (BAIDU_UNLIKELY(!status.ok())) {
+      DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] reader open file{} failed, error: {}",
+                                      region->Id(), pb::common::RegionType_Name(region->Type()), file_path,
+                                      status.ToString());
+      return butil::Status(pb::error::EINTERNAL, "Internal open sst file failed.");
+    }
+
+    std::unique_ptr<rocksdb::Iterator> iter(reader.NewIterator(rocksdb::ReadOptions()));
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      pb::common::KeyValue kv;
+      kv.set_key(iter->key().data(), iter->key().size());
+      kv.set_value(iter->value().data(), iter->value().size());
+      if (sst_meta.cf() == Constant::kVectorDataCF || sst_meta.cf() == Constant::kStoreDataCF) {
+        kv_default.emplace_back(kv);
+      } else if (sst_meta.cf() == Constant::kVectorScalarCF) {
+        kv_scalar.emplace_back(kv);
+      } else if (sst_meta.cf() == Constant::kVectorTableCF) {
+        kv_table.emplace_back(kv);
+      } else if (sst_meta.cf() == Constant::kVectorScalarKeySpeedUpCF) {
+        kv_scalar_speed_up.emplace_back(kv);
+      } else {
+        DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
+      }
+    }
   }
+
+  // vector index must handle kv_default, kv_scalar, kv_table, and kv_scalar_speed_up simultaneously.
+  if (!kv_default.empty() || !kv_scalar.empty() || !kv_table.empty() || !kv_scalar_speed_up.empty()) {
+    butil_status = RestoreNonTxn(ctx, region, raft_engine, kv_default, kv_scalar, kv_table, kv_scalar_speed_up);
+    if (BAIDU_UNLIKELY(!status.ok())) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[restoredata] RestoreNontxn failed,  status code: {}, "
+          "message: {}",
+          butil_status.error_code(), butil_status.error_str());
+      return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
+    }
+
+    kv_default.clear();
+    kv_scalar.clear();
+    kv_table.clear();
+    kv_scalar_speed_up.clear();
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[restoredata][region({})][region_type({})] rebuild sst done.", region->Id(),
+                                 pb::common::RegionType_Name(region->Type()));
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::ReadSstFile(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                           std::shared_ptr<Engine> raft_engine,
+                                           const pb::common::StorageBackend &storage_backend,
+                                           const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group) {
+  bool is_txn = region->IsTxn();
+  // std::string region_type_name;
+  if (is_txn) {
+    return DoReadSstFileForTxn(ctx, region, raft_engine, storage_backend, sst_meta_group);
+  }
+  return DoReadSstFileForNonTxn(ctx, region, raft_engine, storage_backend, sst_meta_group);
+}
+
+butil::Status TxnEngineHelper::RestoreMeta(std::shared_ptr<Context> ctx, std::shared_ptr<Engine> raft_engine,
+                                           store::RegionPtr region, std::string backup_ts, int64_t backup_tso,
+                                           const pb::common::StorageBackend &storage_backend,
+                                           const dingodb::pb::common::BackupDataFileValueSstMetaGroup &sst_metas) {
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[restoredata][region({})] restore meta. backup_ts : {}  backup_tso : {} "
+      "storage_backend : {} sst_metas_size : {}",
+      ctx->RegionId(), backup_ts, backup_tso, storage_backend.DebugString(), sst_metas.DebugString());
+
+  return ReadSstFile(ctx, region, raft_engine, storage_backend, sst_metas);
+}
+
+butil::Status TxnEngineHelper::RestoreData(std::shared_ptr<Context> ctx, std::shared_ptr<Engine> raft_engine,
+                                           store::RegionPtr region, std::string backup_ts, int64_t backup_tso,
+                                           const pb::common::StorageBackend &storage_backend,
+                                           const dingodb::pb::common::BackupDataFileValueSstMetaGroup &sst_metas) {
+  butil::Status status;
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[restoredata][region({})] restore data. backup_ts : {}  backup_tso : {} "
+      "storage_backend : {} sst_metas_size : {}",
+      ctx->RegionId(), backup_ts, backup_tso, storage_backend.DebugString(), sst_metas.DebugString());
+
+  return ReadSstFile(ctx, region, raft_engine, storage_backend, sst_metas);
+}
 
 }  // namespace dingodb
