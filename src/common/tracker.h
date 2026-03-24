@@ -50,8 +50,39 @@ class Tracker {
 
     uint64_t read_store_time_ns{0};
   };
-  // name,elapsed_time_us,skip_versions
-  using ElapsedTime = std::tuple<std::string, uint32_t, int32_t>;
+  struct RocksDBPerfContext {
+    uint64_t block_cache_hit_count{0};
+    uint64_t block_read_count{0};
+    uint64_t block_read_time_ns{0};
+    uint64_t block_decompress_time_ns{0};
+    uint64_t internal_key_skipped_count{0};
+    uint64_t internal_delete_skipped_count{0};
+    uint64_t user_key_comparison_count{0};
+    uint64_t block_read_byte{0};
+    uint64_t seek_internal_seek_time_ns{0};
+    uint64_t find_next_user_entry_time_ns{0};
+
+    RocksDBPerfContext& operator+=(const RocksDBPerfContext& other) {
+      block_cache_hit_count += other.block_cache_hit_count;
+      block_read_count += other.block_read_count;
+      block_read_time_ns += other.block_read_time_ns;
+      block_decompress_time_ns += other.block_decompress_time_ns;
+      internal_key_skipped_count += other.internal_key_skipped_count;
+      internal_delete_skipped_count += other.internal_delete_skipped_count;
+      user_key_comparison_count += other.user_key_comparison_count;
+      block_read_byte += other.block_read_byte;
+      seek_internal_seek_time_ns += other.seek_internal_seek_time_ns;
+      find_next_user_entry_time_ns += other.find_next_user_entry_time_ns;
+      return *this;
+    }
+  };
+
+  struct ElapsedTime {
+    std::string name;
+    uint32_t elapsed_time_us{0};
+    int32_t skip_versions{0};
+    RocksDBPerfContext rocksdb_perf;
+  };
 
   struct Time {
     std::vector<ElapsedTime> elapsed_times;
@@ -136,7 +167,16 @@ class Tracker {
   const Time& GetTime() const { return time_; }
 
   void RecordElapsedTime(const std::string& name, uint32_t elapsed_time, int32_t skip_versions) {
-    time_.elapsed_times.emplace_back(name, elapsed_time, skip_versions);
+    time_.elapsed_times.push_back({name, elapsed_time, skip_versions, {}});
+  }
+
+  void RecordElapsedTime(const std::string& name, uint32_t elapsed_time, int32_t skip_versions,
+                         const RocksDBPerfContext& perf) {
+    time_.elapsed_times.push_back({name, elapsed_time, skip_versions, perf});
+  }
+
+  void RecordElapsedTime(ElapsedTime&& et) {
+    time_.elapsed_times.push_back(std::move(et));
   }
 
   // latency statistics
