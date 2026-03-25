@@ -58,31 +58,7 @@
 
 namespace dingodb {
 
-// RAII helper for RocksDB PerfContext
-struct RocksDBPerfGuard {
-  rocksdb::PerfContext *perf_ctx;
-
-  RocksDBPerfGuard() {
-    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
-    perf_ctx = rocksdb::get_perf_context();
-    perf_ctx->Reset();
-  }
-
-  ~RocksDBPerfGuard() { rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable); }
-
-  Tracker::RocksDBPerfContext GetPerfContext() const {
-    return {perf_ctx->block_cache_hit_count,
-            perf_ctx->block_read_count,
-            perf_ctx->block_read_time,
-            perf_ctx->block_decompress_time,
-            perf_ctx->internal_key_skipped_count,
-            perf_ctx->internal_delete_skipped_count,
-            perf_ctx->user_key_comparison_count,
-            perf_ctx->block_read_byte,
-            perf_ctx->seek_internal_seek_time,
-            perf_ctx->find_next_user_entry_time};
-  }
-};
+DEFINE_bool(enable_rocksdb_perf_context, false, "enable rocksdb perf context tracking");
 
 DEFINE_int64(max_short_value_in_write_cf, 256, "max short value in write cf");
 DEFINE_int64(max_batch_get_count, 4096, "max batch get count");
@@ -109,6 +85,7 @@ DECLARE_int64(stream_message_max_limit_size);
 DEFINE_validator(dingo_log_switch_txn_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_txn_gc_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_backup_detail, &PassBool);
+DEFINE_validator(enable_rocksdb_perf_context, &PassBool);
 
 DEFINE_int64(txn_iterator_elapse_time_threshold_ms, 5, "txn iterator elapse time ms threshold");
 
@@ -2762,29 +2739,41 @@ butil::Status TxnEngineHelper::Prewrite(
     const char *phase_name;
     uint64_t start_us;
     rocksdb::PerfContext *perf_ctx;
+    bool perf_enabled;
 
     PhaseTimer(Tracker::ElapsedTime &acc, TxnReader &reader, int64_t ts, const std::string &k, const char *name)
-        : accum(acc), txn_reader(reader), start_ts(ts), key(k), phase_name(name), start_us(Helper::TimestampUs()) {
-      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
-      perf_ctx = rocksdb::get_perf_context();
-      perf_ctx->Reset();
+        : accum(acc),
+          txn_reader(reader),
+          start_ts(ts),
+          key(k),
+          phase_name(name),
+          start_us(Helper::TimestampUs()),
+          perf_ctx(nullptr),
+          perf_enabled(FLAGS_enable_rocksdb_perf_context) {
+      if (perf_enabled) {
+        rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+        perf_ctx = rocksdb::get_perf_context();
+        perf_ctx->Reset();
+      }
     }
 
     ~PhaseTimer() {
       uint64_t elapsed = Helper::TimestampUs() - start_us;
       accum.elapsed_time_us += elapsed;
       accum.skip_versions += txn_reader.GetSkippedVersions();
-      accum.rocksdb_perf.block_cache_hit_count += perf_ctx->block_cache_hit_count;
-      accum.rocksdb_perf.block_read_count += perf_ctx->block_read_count;
-      accum.rocksdb_perf.block_read_time_ns += perf_ctx->block_read_time;
-      accum.rocksdb_perf.block_decompress_time_ns += perf_ctx->block_decompress_time;
-      accum.rocksdb_perf.internal_key_skipped_count += perf_ctx->internal_key_skipped_count;
-      accum.rocksdb_perf.internal_delete_skipped_count += perf_ctx->internal_delete_skipped_count;
-      accum.rocksdb_perf.user_key_comparison_count += perf_ctx->user_key_comparison_count;
-      accum.rocksdb_perf.block_read_byte += perf_ctx->block_read_byte;
-      accum.rocksdb_perf.seek_internal_seek_time_ns += perf_ctx->seek_internal_seek_time;
-      accum.rocksdb_perf.find_next_user_entry_time_ns += perf_ctx->find_next_user_entry_time;
-      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+      if (perf_enabled) {
+        accum.rocksdb_perf.block_cache_hit_count += perf_ctx->block_cache_hit_count;
+        accum.rocksdb_perf.block_read_count += perf_ctx->block_read_count;
+        accum.rocksdb_perf.block_read_time_ns += perf_ctx->block_read_time;
+        accum.rocksdb_perf.block_decompress_time_ns += perf_ctx->block_decompress_time;
+        accum.rocksdb_perf.internal_key_skipped_count += perf_ctx->internal_key_skipped_count;
+        accum.rocksdb_perf.internal_delete_skipped_count += perf_ctx->internal_delete_skipped_count;
+        accum.rocksdb_perf.user_key_comparison_count += perf_ctx->user_key_comparison_count;
+        accum.rocksdb_perf.block_read_byte += perf_ctx->block_read_byte;
+        accum.rocksdb_perf.seek_internal_seek_time_ns += perf_ctx->seek_internal_seek_time;
+        accum.rocksdb_perf.find_next_user_entry_time_ns += perf_ctx->find_next_user_entry_time;
+        rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+      }
 
       if (elapsed > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)

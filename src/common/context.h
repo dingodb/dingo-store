@@ -24,8 +24,10 @@
 #include "common/synchronization.h"
 #include "common/tracker.h"
 #include "diskann/diskann_utils.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
+#include "rocksdb/perf_context.h"
 
 #ifndef ENABLE_GC_MOCK
 #define ENABLE_GC_MOCK
@@ -196,6 +198,44 @@ class Context {
 };
 
 using ContextPtr = std::shared_ptr<Context>;
+
+DECLARE_bool(enable_rocksdb_perf_context);
+
+// RAII helper for RocksDB PerfContext
+struct RocksDBPerfGuard {
+  rocksdb::PerfContext *perf_ctx;
+  bool enabled;
+
+  RocksDBPerfGuard() : perf_ctx(nullptr), enabled(FLAGS_enable_rocksdb_perf_context) {
+    if (enabled) {
+      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+      perf_ctx = rocksdb::get_perf_context();
+      perf_ctx->Reset();
+    }
+  }
+
+  ~RocksDBPerfGuard() {
+    if (enabled) {
+      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+    }
+  }
+
+  Tracker::RocksDBPerfContext GetPerfContext() const {
+    if (!enabled) {
+      return {};
+    }
+    return {perf_ctx->block_cache_hit_count,
+            perf_ctx->block_read_count,
+            perf_ctx->block_read_time,
+            perf_ctx->block_decompress_time,
+            perf_ctx->internal_key_skipped_count,
+            perf_ctx->internal_delete_skipped_count,
+            perf_ctx->user_key_comparison_count,
+            perf_ctx->block_read_byte,
+            perf_ctx->seek_internal_seek_time,
+            perf_ctx->find_next_user_entry_time};
+  }
+};
 
 }  // namespace dingodb
 
