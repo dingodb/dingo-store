@@ -45,6 +45,7 @@ class ClusterStatImpl : public pb::cluster::dingo, public brpc::Tabbed {
 
   void PrintStores(std::ostream& os, bool use_html);
   void PrintExecutors(std::ostream& os, bool use_html);
+  void PrintSafePoints(std::ostream& os, bool use_html);
 };
 
 }  // namespace dingodb

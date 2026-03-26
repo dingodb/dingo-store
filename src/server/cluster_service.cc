@@ -14,8 +14,13 @@
 
 #include "server/cluster_service.h"
 
+#include <chrono>
 #include <cstdint>
+#include <ctime>
+#include <iomanip>
+#include <map>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -24,6 +29,7 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "common/helper.h"
+#include "coordinator/tso_control.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -86,7 +92,17 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
     url_line.push_back(std::string());
     line.push_back(pb::common::StoreType_Name(store.store_type()));  // TYPE
     url_line.push_back(std::string());
-    line.push_back(pb::common::StoreState_Name(store.state()));  // STATE
+    if (use_html) {
+      if (store.state() == pb::common::StoreState::STORE_NORMAL) {
+        line.push_back("<span class=\"green-text bold-text\">" + pb::common::StoreState_Name(store.state()) +
+                       "</span>");  // STATE
+      } else {
+        line.push_back("<span class=\"red-text bold-text\">" + pb::common::StoreState_Name(store.state()) +
+                       "</span>");  // STATE
+      }
+    } else {
+      line.push_back(pb::common::StoreState_Name(store.state()));  // STATE
+    }
     url_line.push_back(std::string());
     line.push_back(pb::common::StoreInState_Name(store.in_state()));  //
     url_line.push_back(std::string());
@@ -389,6 +405,11 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   os << (use_html ? "<br>\n" : "\n");
   PrintExecutors(os, use_html);
 
+  if (coordinator_controller_->IsLeader()) {
+    os << (use_html ? "<br>\n" : "\n");
+    PrintSafePoints(os, use_html);
+  }
+
   {
     os << (use_html ? "<br>\n" : "\n");
     std::vector<std::string> table_header;
@@ -459,6 +480,92 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   os.move_to(cntl->response_attachment());
   cntl->set_response_compress_type(brpc::COMPRESS_TYPE_GZIP);
+}
+
+void ClusterStatImpl::PrintSafePoints(std::ostream& os, bool use_html) {
+  int64_t safe_point = 0;
+  bool gc_stop = false;
+  std::vector<int64_t> tenant_ids;
+  bool get_all_tenant = true;
+  std::map<int64_t, int64_t> tenant_safe_points;
+  int64_t resolve_lock_safe_point = 0;
+  std::vector<int64_t> tenant_resolve_lock_ids;
+  std::map<int64_t, int64_t> resolve_lock_tenant_safe_points;
+
+  auto status = coordinator_controller_->GetGCSafePoint(safe_point, gc_stop, tenant_ids, get_all_tenant,
+                                                        tenant_safe_points, resolve_lock_safe_point,
+                                                        tenant_resolve_lock_ids, resolve_lock_tenant_safe_points);
+  if (!status.ok()) {
+    os << "Failed to get GC SafePoint: " << status.error_str() << '\n';
+    return;
+  }
+
+  auto convert_tso_to_datetime = [](int64_t tso) -> std::string {
+    if (tso == 0) {
+      return "N/A";
+    }
+    int64_t milliseconds = (tso >> kLogicalBits) + kBaseTimestampMs;
+    std::chrono::milliseconds ms(milliseconds);
+    auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(ms);
+    std::time_t time = std::chrono::system_clock::to_time_t(tp);
+    std::tm tm = *std::localtime(&time);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return oss.str();
+  };
+
+  std::vector<std::string> table_header;
+  table_header.push_back("TENANT_ID");
+  table_header.push_back("GC_SAFE_POINT");
+  // table_header.push_back("GC_SAFE_POINT_TIME");
+  table_header.push_back("RESOLVE_LOCK_SAFE_POINT");
+  // table_header.push_back("RESOLVE_LOCK_SAFE_POINT_TIME");
+
+  std::vector<int32_t> min_widths;
+  min_widths.push_back(12);  // TENANT_ID
+  min_widths.push_back(42);  // GC_SAFE_POINT
+  // min_widths.push_back(22);  // GC_SAFE_POINT_TIME
+  min_widths.push_back(55);  // RESOLVE_LOCK_SAFE_POINT
+  // min_widths.push_back(30);  // RESOLVE_LOCK_SAFE_POINT_TIME
+
+  std::vector<std::vector<std::string>> table_contents;
+  std::vector<std::vector<std::string>> table_urls;
+
+  // Default tenant (tenant_id=0)
+  {
+    std::vector<std::string> line;
+    line.push_back("0 (default)");
+    line.push_back(fmt::format("{}({})", std::to_string(safe_point), convert_tso_to_datetime(safe_point)));
+    line.push_back(fmt::format("{}({})", std::to_string(resolve_lock_safe_point),
+                               convert_tso_to_datetime(resolve_lock_safe_point)));
+    table_contents.push_back(line);
+    table_urls.push_back(std::vector<std::string>(3));
+  }
+
+  // Other tenants
+  for (const auto& [tenant_id, sp] : tenant_safe_points) {
+    std::vector<std::string> line;
+    line.push_back(std::to_string(tenant_id));
+    line.push_back(fmt::format("{}({})", std::to_string(sp), convert_tso_to_datetime(sp)));
+
+    auto it = resolve_lock_tenant_safe_points.find(tenant_id);
+    if (it != resolve_lock_tenant_safe_points.end()) {
+      line.push_back(fmt::format("{}({})", std::to_string(it->second), convert_tso_to_datetime(it->second)));
+    } else {
+      line.push_back("N/A");
+      line.push_back("N/A");
+    }
+    table_contents.push_back(line);
+    table_urls.push_back(std::vector<std::string>(3));
+  }
+
+  if (use_html) {
+    os << "<span class=\"bold-text\">GC (gc_stop=" << (gc_stop ? "true" : "false") << "): </span>" << '\n';
+  } else {
+    os << "GC (gc_stop=" << (gc_stop ? "true" : "false") << "):" << '\n';
+  }
+
+  Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
 void ClusterStatImpl::SetControl(std::shared_ptr<CoordinatorControl> coordinator_controller,
