@@ -2,9 +2,9 @@ name: Java_Maven_Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ quickBI-v4.0.0 ]
   pull_request:
-    branches: [ main ]
+    branches: [ quickBI-v4.0.0 ]
 
 jobs:
   build:
@@ -13,23 +13,25 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      with:
+        ref: 'quickBI-v4.0.0'
+
+    - uses: actions/setup-java@v4
       with:
         java-version: '17'
-        distribution: 'temurin'
-        cache: maven
+        distribution: 'adopt'
+        server-id: central
+        server-username: MAVEN_USERNAME
+        server-password: MAVEN_PASSWORD
+        gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+        gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
     - name: Clone Submodule
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: git submodule update --init --recursive
 
-    - name: Build with Maven
-      run:  cd java && mvn clean compile -Dmaven.test.skip=true  #-DiskipTests
-      # run: cd java && mvn -B package --file pom.xml
-
-
-    # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-    # - name: Update dependency graph
-    #   uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
+    - name: Publish package
+      run:  cd java && mvn clean deploy -Dmaven.test.skip=true
+      env:
+        MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+        MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+        MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
