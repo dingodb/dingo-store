@@ -213,8 +213,7 @@ TEST_F(TxnScanTest, KvDeleteRangeBefore) { DeleteRange(); }
 
 TEST_F(TxnScanTest, Prepare) {
   int schema_version = 1;
-  std::vector<dingodb::serialV2::BaseSchemaPtr> schemas =
-      std::vector<dingodb::serialV2::BaseSchemaPtr>();
+  std::vector<dingodb::serialV2::BaseSchemaPtr> schemas = std::vector<dingodb::serialV2::BaseSchemaPtr>();
   long common_id = 1;  // NOLINT
 
   schemas.reserve(6);
@@ -766,8 +765,10 @@ TEST_F(TxnScanTest, Scan) {
   std::set<int64_t> resolved_locks = {};
   size_t cnt = 0;
 
+  auto ctx = std::make_shared<Context>();
+
   auto stream = Stream::New(10000000);
-  ok = TxnEngineHelper::Scan(stream, engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit,
+  ok = TxnEngineHelper::Scan(ctx, stream, engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit,
                              key_only, is_reverse, resolved_locks, false, pb_coprocessor, txn_result_info, kvs,
                              has_more, end_key);
 
