@@ -17,10 +17,12 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "bvar/latency_recorder.h"
 #include "common/helper.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -50,6 +52,19 @@ class Tracker {
 
     uint64_t read_store_time_ns{0};
   };
+  struct RocksDBPerfSummary {
+    uint64_t io_time_ns{0};
+    uint64_t cache_hit_count{0};
+    uint64_t internal_skipped_count{0};
+
+    RocksDBPerfSummary& operator+=(const RocksDBPerfSummary& other) {
+      io_time_ns += other.io_time_ns;
+      cache_hit_count += other.cache_hit_count;
+      internal_skipped_count += other.internal_skipped_count;
+      return *this;
+    }
+  };
+
   struct RocksDBPerfContext {
     uint64_t block_cache_hit_count{0};
     uint64_t block_read_count{0};
@@ -74,6 +89,24 @@ class Tracker {
       seek_internal_seek_time_ns += other.seek_internal_seek_time_ns;
       find_next_user_entry_time_ns += other.find_next_user_entry_time_ns;
       return *this;
+    }
+
+    RocksDBPerfSummary ToSummary() const {
+      return {
+          block_read_time_ns + block_decompress_time_ns + seek_internal_seek_time_ns + find_next_user_entry_time_ns,
+          block_cache_hit_count,
+          internal_key_skipped_count + internal_delete_skipped_count,
+      };
+    }
+
+    std::string ToString() const {
+      return fmt::format(
+          "block_cache_hit={}, block_read_count={}, block_read_time_ns={}, "
+          "block_decompress_time_ns={}, internal_key_skipped={}, internal_delete_skipped={}, "
+          "user_key_cmp={}, block_read_byte={}, seek_internal_time_ns={}, find_next_entry_time_ns={}",
+          block_cache_hit_count, block_read_count, block_read_time_ns, block_decompress_time_ns,
+          internal_key_skipped_count, internal_delete_skipped_count, user_key_comparison_count, block_read_byte,
+          seek_internal_seek_time_ns, find_next_user_entry_time_ns);
     }
   };
 
@@ -163,6 +196,9 @@ class Tracker {
   }
   inline uint64_t ReadStoreTime() const { return metrics_.read_store_time_ns; }
 
+  void SetStartTs(int64_t start_ts) { start_ts_ = start_ts; }
+  int64_t StartTs() const { return start_ts_; }
+
   Time& GetTime() { return time_; }
   const Time& GetTime() const { return time_; }
 
@@ -194,6 +230,7 @@ class Tracker {
  private:
   uint64_t start_time_;
   uint64_t last_time_;
+  int64_t start_ts_{0};
 
   pb::common::RequestInfo request_info_;
   Metrics metrics_;
