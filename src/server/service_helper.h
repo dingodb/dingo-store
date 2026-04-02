@@ -36,6 +36,7 @@ namespace dingodb {
 DECLARE_int64(service_log_threshold_time_ns);
 DECLARE_int32(log_print_max_length);
 DECLARE_bool(enable_dump_service_message);
+DECLARE_bool(enable_rocksdb_perf_metric);
 
 struct LatchContext;
 using LatchContextPtr = std::shared_ptr<LatchContext>;
@@ -234,23 +235,24 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
   time_info->set_vector_index_write_time_ns(tracker->VectorIndexwriteTime());
   time_info->set_document_index_write_time_ns(tracker->DocumentIndexwriteTime());
 
-  const auto& time = tracker->GetTime();
-  for (const auto& et : time.elapsed_times) {
-    auto* mut_elapsed_time = time_info->add_elapsed_times();
-    mut_elapsed_time->set_name(et.name);
-    mut_elapsed_time->set_time_us(et.elapsed_time_us);
-    mut_elapsed_time->set_skip_version(et.skip_versions);
-    auto* perf = mut_elapsed_time->mutable_rocksdb_perf();
-    perf->set_block_cache_hit_count(et.rocksdb_perf.block_cache_hit_count);
-    perf->set_block_read_count(et.rocksdb_perf.block_read_count);
-    perf->set_block_read_time_ns(et.rocksdb_perf.block_read_time_ns);
-    perf->set_block_decompress_time_ns(et.rocksdb_perf.block_decompress_time_ns);
-    perf->set_internal_key_skipped_count(et.rocksdb_perf.internal_key_skipped_count);
-    perf->set_internal_delete_skipped_count(et.rocksdb_perf.internal_delete_skipped_count);
-    perf->set_user_key_comparison_count(et.rocksdb_perf.user_key_comparison_count);
-    perf->set_block_read_byte(et.rocksdb_perf.block_read_byte);
-    perf->set_seek_internal_seek_time_ns(et.rocksdb_perf.seek_internal_seek_time_ns);
-    perf->set_find_next_user_entry_time_ns(et.rocksdb_perf.find_next_user_entry_time_ns);
+  if (FLAGS_enable_rocksdb_perf_metric) {
+    const auto& time = tracker->GetTime();
+    for (const auto& et : time.elapsed_times) {
+      auto* mut_elapsed_time = time_info->add_elapsed_times();
+      mut_elapsed_time->set_name(et.name);
+      mut_elapsed_time->set_time_us(et.elapsed_time_us);
+      mut_elapsed_time->set_skip_version(et.skip_versions);
+
+      auto summary = et.rocksdb_perf.ToSummary();
+      auto* perf_summary = mut_elapsed_time->mutable_rocksdb_perf_summary();
+      perf_summary->set_io_time_ns(summary.io_time_ns);
+      perf_summary->set_cache_hit_count(summary.cache_hit_count);
+      perf_summary->set_internal_skipped_count(summary.internal_skipped_count);
+
+      DINGO_LOG(INFO) << fmt::format("[perf][start_ts:{}][{}] time_us={} skip_version={} {}",
+                                        tracker->StartTs(), et.name, et.elapsed_time_us, et.skip_versions,
+                                        et.rocksdb_perf.ToString());
+    }
   }
 }
 

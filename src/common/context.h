@@ -199,14 +199,14 @@ class Context {
 
 using ContextPtr = std::shared_ptr<Context>;
 
-DECLARE_bool(enable_rocksdb_perf_context);
+DECLARE_bool(enable_rocksdb_perf_metric);
 
 // RAII helper for RocksDB PerfContext
 struct RocksDBPerfGuard {
   rocksdb::PerfContext *perf_ctx;
   bool enabled;
 
-  RocksDBPerfGuard() : perf_ctx(nullptr), enabled(FLAGS_enable_rocksdb_perf_context) {
+  RocksDBPerfGuard() : perf_ctx(nullptr), enabled(FLAGS_enable_rocksdb_perf_metric) {
     if (enabled) {
       rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
       perf_ctx = rocksdb::get_perf_context();

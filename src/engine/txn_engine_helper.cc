@@ -58,7 +58,7 @@
 
 namespace dingodb {
 
-DEFINE_bool(enable_rocksdb_perf_context, false, "enable rocksdb perf context tracking");
+DEFINE_bool(enable_rocksdb_perf_metric, false, "enable rocksdb perf context tracking");
 
 DEFINE_int64(max_short_value_in_write_cf, 256, "max short value in write cf");
 DEFINE_int64(max_batch_get_count, 4096, "max batch get count");
@@ -85,7 +85,7 @@ DECLARE_int64(stream_message_max_limit_size);
 DEFINE_validator(dingo_log_switch_txn_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_txn_gc_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_backup_detail, &PassBool);
-DEFINE_validator(enable_rocksdb_perf_context, &PassBool);
+DEFINE_validator(enable_rocksdb_perf_metric, &PassBool);
 
 DEFINE_int64(txn_iterator_elapse_time_threshold_ms, 5, "txn iterator elapse time ms threshold");
 
@@ -1256,6 +1256,7 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "txn_result_info is not empty");
   }
   auto tracker = ctx->Tracker();
+  tracker->SetStartTs(start_ts);
   uint64_t start_time = Helper::TimestampUs();
 
   TxnReader txn_reader(engine);
@@ -1279,7 +1280,7 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
     return butil::Status(pb::error::Errno::EINTERNAL, "GetWriteIter failed");
   }
 
-  uint64_t batch_get_time = Helper::TimestampMs();
+  uint64_t batch_get_time = Helper::TimestampUs();
   int64_t total_skip_versions = 0;
   Tracker::RocksDBPerfContext total_perf;
   // for every key in keys, get lock info, if lock_ts < start_ts, return LockInfo
@@ -1446,7 +1447,7 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
     }
   }
 
-  tracker->RecordElapsedTime("scan_keys", Helper::TimestampUs() - batch_get_time, total_skip_versions, total_perf);
+  tracker->RecordElapsedTime("batch_get_keys", Helper::TimestampUs() - batch_get_time, total_skip_versions, total_perf);
 
   if (Helper::TimestampUs() - start_time > FLAGS_rpc_elapse_time_threshold_ms * 1000) {
     DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
@@ -1498,6 +1499,7 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
   }
   auto tracker = ctx->Tracker();
+  tracker->SetStartTs(start_ts);
 
   // get or new TxnIterator.
   StreamStatePtr current_stream_state = stream->StreamState();
@@ -1512,11 +1514,6 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
                                   stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
       DINGO_LOG(ERROR) << s;
       return butil::Status(status.error_code(), s);
-    }
-    tracker->RecordElapsedTime("init:txn_iterator", Helper::TimestampUs() - iter_init_time, 0);
-    if (Helper::TimestampUs() - iter_init_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-          "[txn]Scan start_ts:{}, iter_init elapsed:{} ms.", start_ts, Helper::TimestampUs() - iter_init_time);
     }
 
     uint64_t seek_start_time = Helper::TimestampUs();
@@ -2729,6 +2726,7 @@ butil::Status TxnEngineHelper::Prewrite(
   std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> locks_for_1pc;
 
   auto tracker = ctx->Tracker();
+  tracker->SetStartTs(start_ts);
   uint64_t start_time = Helper::TimestampUs();
 
   struct PhaseTimer {
@@ -2749,7 +2747,7 @@ butil::Status TxnEngineHelper::Prewrite(
           phase_name(name),
           start_us(Helper::TimestampUs()),
           perf_ctx(nullptr),
-          perf_enabled(FLAGS_enable_rocksdb_perf_context) {
+          perf_enabled(FLAGS_enable_rocksdb_perf_metric) {
       if (perf_enabled) {
         rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
         perf_ctx = rocksdb::get_perf_context();
@@ -2777,8 +2775,9 @@ butil::Status TxnEngineHelper::Prewrite(
 
       if (elapsed > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn]PreWrite start_ts:{}, key:{}, {}, skip_versions:{} time:{} us", start_ts,
-                           Helper::StringToHex(key), phase_name, txn_reader.GetSkippedVersions(), elapsed);
+            << fmt::format("[txn]PreWrite start_ts:{}, key:{}, {}, skip_versions:{} time:{} us, perf:[{}]", start_ts,
+                           Helper::StringToHex(key), phase_name, txn_reader.GetSkippedVersions(), elapsed,
+                           accum.rocksdb_perf.ToString());
       }
       txn_reader.ResetSkippedVersions();
     }
@@ -2804,9 +2803,9 @@ butil::Status TxnEngineHelper::Prewrite(
     return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
   }
 
-  Tracker::ElapsedTime lock_et{"lock"};
-  Tracker::ElapsedTime write_et{"write"};
-  Tracker::ElapsedTime commit_et{"commit"};
+  Tracker::ElapsedTime lock_et{"check_lock"};
+  Tracker::ElapsedTime write_et{"check_rollback"};
+  Tracker::ElapsedTime commit_et{"check_write_conflict"};
   // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
   for (int64_t i = 0; i < mutations.size(); i++) {
     const auto &mutation = mutations[i];
