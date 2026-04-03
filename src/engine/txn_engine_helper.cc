@@ -40,6 +40,7 @@
 #include "coprocessor/coprocessor_v2.h"
 #include "document/codec.h"
 #include "engine/gc_safe_point.h"
+#include "engine/gc_task_monitor.h"
 #include "engine/rocks_raw_engine.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -5075,6 +5076,11 @@ _interrupt1:
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
 
+  if (ctx->EnableTxnGcTaskMonitor()) {
+    GcTaskMonitor::GetInstance().AddRegionStats(region_id, start_time_ms, end_time_ms, total_iter_count,
+                                                total_delete_count, safe_point_ts);
+  }
+
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][txn] end region start_key: {} end_key: {} safe_point_ts "
       ": {} time consuming : {} ms total_delete_count : {} total_iter_count : {} ",
@@ -5371,6 +5377,11 @@ _interrupt1:
 
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
+
+  if (ctx->EnableTxnGcTaskMonitor()) {
+    GcTaskMonitor::GetInstance().AddRegionStats(region_id, start_time_ms, end_time_ms, total_iter_count,
+                                                total_delete_count, safe_point_ts);
+  }
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
@@ -6011,6 +6022,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     return;
   }
 
+  ScopedGcTaskRun gc_task_run;
+
   std::vector<store::RegionPtr> region_ptrs = Server::GetInstance().GetAllAliveRegion();
 
   std::vector<store::RegionPtr> leader_region_ptrs;
@@ -6047,6 +6060,17 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
                                      region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
                                      Helper::StringToHex(region_ptr->Range().end_key()));
     }
+  }
+
+  if (!leader_region_ptrs.empty()) {
+    std::unordered_set<int64_t> alive_region_ids;
+    alive_region_ids.reserve(leader_region_ptrs.size());
+    for (const auto &region_ptr : leader_region_ptrs) {
+      alive_region_ids.insert(region_ptr->Id());
+    }
+    GcTaskMonitor::GetInstance().RemoveMissingRegionStats(alive_region_ids);
+  } else {
+    GcTaskMonitor::GetInstance().RemoveMissingRegionStats({});
   }
 
   // Caution !!!
@@ -6108,6 +6132,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);
     ctx->SetRawEngineType(region_ptr->GetRawEngineType());
     ctx->SetStoreEngineType(region_ptr->GetStoreEngineType());
+    ctx->SetEnableTxnGcTaskMonitor(true);
 
     auto writer = storage->GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 

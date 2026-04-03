@@ -32,6 +32,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "document/codec.h"
+#include "engine/gc_task_monitor.h"
 #include "engine/raw_engine.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
@@ -890,6 +891,8 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
         truncate_prefix->set_trucate_prefix(trucate_prefix);
       }
     }
+  } else if (request->type() == pb::debug::DebugType::GC_METRICS) {
+    GetGcMetricsDebugInfo(response->mutable_gc_metrics(), Helper::PbRepeatedToVector(request->region_ids()));
   }
 }
 
