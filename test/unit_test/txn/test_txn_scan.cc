@@ -766,7 +766,7 @@ TEST_F(TxnScanTest, Scan) {
   size_t cnt = 0;
 
   auto ctx = std::make_shared<Context>();
-  ctx->SetTracker(std::make_shared<Tracker>());
+  ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
 
   auto stream = Stream::New(10000000);
   ok = TxnEngineHelper::Scan(ctx, stream, engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit,
