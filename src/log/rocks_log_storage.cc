@@ -70,6 +70,9 @@ DEFINE_int32(rocks_log_recycle_file_num, 8, "rocks log storage recycle log file 
 BRPC_VALIDATE_GFLAG(rocks_log_recycle_file_num, brpc::PositiveInteger);
 
 DEFINE_bool(rocks_log_enable_get_term_cache, false, "rocks log storage enable get term cache. default false");
+// Note: validator intentionally disabled — this flag must NOT be changed at runtime.
+// The cache is only populated during init(); toggling at runtime would leave it in an
+// inconsistent state (stale if disabled, incomplete if re-enabled).
 // BRPC_VALIDATE_GFLAG(rocks_log_enable_get_term_cache, brpc::PassValidate);
 
 static bvar::LatencyRecorder g_append_entry_total_latency("dingo_rocks_raft_log_total");
@@ -1195,10 +1198,8 @@ bool RocksLogStorage::RegisterIdTermToMap(int64_t region_id, IndexTermMap& index
   CHECK(it != nullptr) << fmt::format("[raft.log][{}] new iterator fail.", region_id);
 
   std::string_view end_key_view(end_key);
-  bool ret = true;
   int32_t append_count = 0;
   for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
-    // key
     int64_t temp_region_id;
     int64_t index;
 
@@ -1206,14 +1207,12 @@ bool RocksLogStorage::RegisterIdTermToMap(int64_t region_id, IndexTermMap& index
     CHECK(temp_region_id == region_id) << fmt::format("[raft.log][{}] not match region id({}).", region_id,
                                                       temp_region_id);
 
-    // value
     int type = 0;
     int64_t term = 0;
     Codec::DecodeValue(it->value().ToStringView(), type, term);
 
-    // In fact type = kEntryTypeNoOp = 1 or type = kEntryTypeData = 2 or type =  kEntryTypeConfiguration = 3
-    // Note: We are intentionally omitting the return value check here. Since the data is retrieved from RocksDB, we are
-    // unable to determine whether the ordering is appropriate; therefore, we are ignoring it.
+    // Data comes from RocksDB and ordering may not match Append()'s expectations
+    // (e.g. after truncate/reset), so we intentionally ignore the return value.
     index_term_map.Append(braft::LogId(index, term));
     append_count++;
   }
@@ -1222,7 +1221,7 @@ bool RocksLogStorage::RegisterIdTermToMap(int64_t region_id, IndexTermMap& index
 
   DINGO_LOG(INFO) << fmt::format("[raft.log][{}] register id term to map, append_count({}).", region_id, append_count);
 
-  return ret;
+  return true;
 }
 
 // delete logs from storage's head, [1, first_index_kept) will be discarded
@@ -1479,6 +1478,8 @@ braft::LogEntry* RocksLogStorageWrapper::get_entry(const int64_t index) {
 // get logentry's term by index
 int64_t RocksLogStorageWrapper::get_term(const int64_t index) {
   if (FLAGS_rocks_log_enable_get_term_cache) {
+    // IndexTermMap::GetTerm handles out-of-range by returning 0, no need to
+    // call FirstLogIndex/LastLogIndex which would defeat the cache purpose.
     BAIDU_SCOPED_LOCK(mutex_);
     return index_term_map_.GetTerm(index);
   } else {
@@ -1566,44 +1567,26 @@ int RocksLogStorageWrapper::append_entries(const std::vector<braft::LogEntry*>& 
 
 // delete logs from storage's head, [1, first_index_kept) will be discarded
 int RocksLogStorageWrapper::truncate_prefix(const int64_t keep_first_index) {
-  int ret = 0;
-  if (FLAGS_rocks_log_enable_get_term_cache) {
-    ret = log_storage_->TruncatePrefix(ClientType::kRaft, region_id_, keep_first_index);
-    if (0 == ret) {
-      BAIDU_SCOPED_LOCK(mutex_);
-      index_term_map_.TruncatePrefix(keep_first_index);
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] truncate prefix fail, keep_first_index({}).", region_id_,
-                                      keep_first_index);
-    }
-  } else {  // if (FLAGS_rocks_log_enable_get_term_cache) {
-    ret = log_storage_->TruncatePrefix(ClientType::kRaft, region_id_, keep_first_index);
-    if (0 != ret) {
-      DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] truncate prefix fail, keep_first_index({}).", region_id_,
-                                      keep_first_index);
-    }
+  int ret = log_storage_->TruncatePrefix(ClientType::kRaft, region_id_, keep_first_index);
+  if (0 != ret) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] truncate prefix fail, keep_first_index({}).", region_id_,
+                                    keep_first_index);
+  } else if (FLAGS_rocks_log_enable_get_term_cache) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    index_term_map_.TruncatePrefix(keep_first_index);
   }
   return ret;
 }
 
 // delete uncommitted logs from storage's tail, (last_index_kept, infinity) will be discarded
 int RocksLogStorageWrapper::truncate_suffix(const int64_t keep_last_index) {
-  int ret = 0;
-  if (FLAGS_rocks_log_enable_get_term_cache) {
-    ret = log_storage_->TruncateSuffix(ClientType::kRaft, region_id_, keep_last_index);
-    if (0 == ret) {
-      BAIDU_SCOPED_LOCK(mutex_);
-      index_term_map_.TruncateSuffix(keep_last_index);
-    } else {  // if (0 == ret) {
-      DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] truncate suffix fail, keep_last_index({}).", region_id_,
-                                      keep_last_index);
-    }
-  } else {  // if (FLAGS_rocks_log_enable_get_term_cache) {
-    ret = log_storage_->TruncateSuffix(ClientType::kRaft, region_id_, keep_last_index);
-    if (0 != ret) {
-      DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] truncate suffix fail, keep_last_index({}).", region_id_,
-                                      keep_last_index);
-    }
+  int ret = log_storage_->TruncateSuffix(ClientType::kRaft, region_id_, keep_last_index);
+  if (0 != ret) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] truncate suffix fail, keep_last_index({}).", region_id_,
+                                    keep_last_index);
+  } else if (FLAGS_rocks_log_enable_get_term_cache) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    index_term_map_.TruncateSuffix(keep_last_index);
   }
   return ret;
 }
@@ -1616,23 +1599,13 @@ int RocksLogStorageWrapper::reset(const int64_t next_log_index) {
   mutation.region_id = region_id_;
   mutation.reset_index = next_log_index;
 
-  int ret = 0;
-  if (FLAGS_rocks_log_enable_get_term_cache) {
-    ret = log_storage_->CommitMutation(&mutation) ? 0 : -1;
-    if (0 == ret) {
-      BAIDU_SCOPED_LOCK(mutex_);
-      index_term_map_.Reset();
-    } else {  // if (0 == ret) {
-      DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] reset fail, next_log_index({}).", region_id_, next_log_index);
-    }
-
-  } else {
-    ret = log_storage_->CommitMutation(&mutation) ? 0 : -1;
-    if (0 != ret) {
-      DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] reset fail, next_log_index({}).", region_id_, next_log_index);
-    }
+  int ret = log_storage_->CommitMutation(&mutation) ? 0 : -1;
+  if (0 != ret) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.log][{}] reset fail, next_log_index({}).", region_id_, next_log_index);
+  } else if (FLAGS_rocks_log_enable_get_term_cache) {
+    BAIDU_SCOPED_LOCK(mutex_);
+    index_term_map_.Reset();
   }
-
   return ret;
 }
 

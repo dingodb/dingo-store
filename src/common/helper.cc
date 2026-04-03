@@ -2482,6 +2482,14 @@ bool Helper::StringConvertFalse(const std::string& str) {
 
 void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
                                              pb::common::ControlConfigVariable& config, bool& gflags_var) {
+  // Support "query" mode: return current value without modification
+  if (variable.value() == "query" || variable.value() == "QUERY" || variable.value() == "Query") {
+    config.set_value(gflags_var ? "true" : "false");
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(false);
+    return;
+  }
+
   bool is_true = Helper::StringConvertTrue(variable.value());
   bool is_false = Helper::StringConvertFalse(variable.value());
 
