@@ -239,7 +239,7 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
         "[raft.engine][region({})] add node elapsed_time {} ms, state machine init {} ms, node init "
         "{} ms , add node {} ms.",
         region->Id(), elapsed_time, after_state_machine_init_time - start_time,
-        after_node_init_time - after_state_machine_init_time, elapsed_time - after_node_init_time);
+        after_node_init_time - after_state_machine_init_time, end_time - after_node_init_time);
   }
 
   return butil::Status();
