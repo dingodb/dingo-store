@@ -5769,7 +5769,6 @@ butil::Status CoordinatorControl::ProcessJobList() {
     const auto& job = it.second;
     auto status = ProcessJob(job, meta_increment, store_operation_map);
     if (!status.ok()) {
-      // print too many
       DINGO_LOG_IF(WARNING, FLAGS_print_process_job_error) << fmt::format(
           "[joblist] ProcessJob failed, error:{}, job:{}", Helper::PrintStatus(status), job.ShortDebugString());
     }

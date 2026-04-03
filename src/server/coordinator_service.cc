@@ -4084,14 +4084,6 @@ void DoControlConfig(google::protobuf::RpcController * /*controller*/,
     response->mutable_control_config_variable()->Add(std::move(config));
   }
 
-  butil::Status ret;
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "ControlConfig failed in coordinator_service";
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-    response->mutable_error()->set_errmsg(ret.error_str());
-    return;
-  }
-
   DINGO_LOG(INFO) << "ControlConfig Success.  " << response->DebugString();
 }
 
