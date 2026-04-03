@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -44,6 +45,7 @@ void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id)
 void SendMergeRegionToCoor(int64_t source_id, int64_t target_id);
 uint32_t SendGetJobList();
 dingodb::pb::common::StoreMap SendGetStoreMap();
+dingodb::pb::common::RegionMap SendGetRegionMap(std::map<int64_t, dingodb::pb::common::Region> *out = nullptr);
 void SendChangePeer(const dingodb::pb::common::RegionDefinition &region_definition);
 void SendSplitRegion(const dingodb::pb::common::RegionDefinition &region_definition);
 

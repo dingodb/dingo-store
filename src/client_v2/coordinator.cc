@@ -140,6 +140,36 @@ dingodb::pb::common::StoreMap SendGetStoreMap() {
   return response.storemap();
 }
 
+dingodb::pb::common::RegionMap SendGetRegionMap(std::map<int64_t, dingodb::pb::common::Region> *out) {
+  dingodb::pb::coordinator::GetRegionMapRequest request;
+  dingodb::pb::coordinator::GetRegionMapResponse response;
+
+  request.set_epoch(1);
+  request.set_tenant_id(-1);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionMap", request, response);
+
+  if (!status.ok()) {
+    std::cout << "Get region map failed, error: " << status.error_cstr() << std::endl;
+    return {};
+  }
+
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get region map failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return {};
+  }
+
+  if (out) {
+    for (const auto &region : response.regionmap().regions()) {
+      (*out)[region.id()] = region;
+    }
+  }
+
+  return response.regionmap();
+}
+
 void SendChangePeer(const dingodb::pb::common::RegionDefinition &region_definition) {
   dingodb::pb::coordinator::ChangePeerRegionRequest request;
   dingodb::pb::coordinator::ChangePeerRegionResponse response;

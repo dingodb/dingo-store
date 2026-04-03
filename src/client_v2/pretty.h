@@ -16,6 +16,7 @@
 #define DINGODB_CLIENT_PRETTY_H_
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,7 @@
 #include "proto/document.pb.h"
 #include "proto/index.pb.h"
 #include "proto/meta.pb.h"
+#include "proto/store_internal.pb.h"
 
 namespace client_v2 {
 
@@ -38,6 +40,72 @@ class Pretty {
     std::string comment;
     int64_t create_time;
     int64_t update_time;
+  };
+
+  struct ShowRegionTreeParam {
+    using TableDefinitionWithId = dingodb::pb::meta::TableDefinitionWithId;
+    using Region = dingodb::pb::store_internal::Region;
+
+   public:
+    ShowRegionTreeParam() = delete;
+    ShowRegionTreeParam(dingodb::pb::debug::DebugResponse &in_response, const std::vector<int64_t> &in_region_ids,
+                        bool in_show_ancestor, bool in_dot_format);
+    ~ShowRegionTreeParam() = default;
+
+    void SetSchema(const dingodb::pb::meta::Schema &in_schema);
+    void SetTableDefinitionWithId(const TableDefinitionWithId &in_table_def);
+    void AddIndexDefinitionWithId(const TableDefinitionWithId &in_index_def);
+
+   public:
+    // input parameters
+    bool show_ancestor;
+    const std::vector<int64_t> &region_ids;
+    dingodb::pb::debug::DebugResponse &response;
+    bool dot_format;
+
+    // input parameters (table/index info)
+    dingodb::pb::meta::Schema schema;
+    TableDefinitionWithId table_def;
+    std::map<int64_t, TableDefinitionWithId> index_defs;
+
+    // intermediate data generation for showing region tree
+    std::map<int64_t, const Region *> region_map;
+    std::map<int64_t, std::vector<const Region *>> region_childs;
+    
+    // Use a mutable variable to track shown region IDs and avoid duplicates
+    mutable std::set<int64_t> shown_region_ids;
+  };
+
+  struct ShowRegionPeersParam {
+    using RaftMetaMap = std::map<int64_t, std::map<int64_t, dingodb::pb::store_internal::RaftMeta>>;
+    using RaftLogMetaMap = std::map<int64_t, std::map<int64_t, dingodb::pb::debug::DebugResponse_RaftLogMeta>>;
+    using RegionMetaDetailMap = std::map<int64_t, std::map<int64_t, dingodb::pb::store_internal::Region>>;
+
+    // constructor
+    ShowRegionPeersParam() = delete;
+    ShowRegionPeersParam(const std::vector<dingodb::pb::common::Region> &in_regions,
+                         const RaftMetaMap &in_raft_meta_map, const RaftLogMetaMap &in_raft_log_meta_map,
+                         const RegionMetaDetailMap &in_region_meta_detail_map,
+                         const std::map<int64_t, int64_t> &in_table_index_replica_num_map,
+                         int64_t in_severe_lag_threshold, int64_t in_warn_lag_threshold, bool in_issues_only)
+        : regions(in_regions),
+          raft_meta_map(in_raft_meta_map),
+          raft_log_meta_map(in_raft_log_meta_map),
+          region_meta_detail_map(in_region_meta_detail_map),
+          table_index_replica_num_map(in_table_index_replica_num_map),
+          apply_lag_severe(in_severe_lag_threshold),
+          apply_lag_warn(in_warn_lag_threshold),
+          issues_only(in_issues_only) {}
+    ~ShowRegionPeersParam() = default;
+
+    const std::vector<dingodb::pb::common::Region> &regions;
+    const RaftMetaMap &raft_meta_map;
+    const RaftLogMetaMap &raft_log_meta_map;
+    const RegionMetaDetailMap &region_meta_detail_map;
+    const std::map<int64_t, int64_t> &table_index_replica_num_map;
+    int64_t apply_lag_severe;
+    int64_t apply_lag_warn;
+    bool issues_only;
   };
 
   static bool ShowError(const butil::Status &status);
@@ -76,6 +144,8 @@ class Pretty {
   static void Show(dingodb::pb::meta::GetTablesBySchemaResponse &response);
 
   static void Show(dingodb::pb::coordinator::GetGCSafePointResponse &response);
+  static void Show(const dingodb::pb::debug::DebugResponse::GCMetrics &gc_metrics, bool include_region,
+                   bool region_only = false);
   static void Show(dingodb::pb::coordinator::GetJobListResponse &response, bool is_interactive);
 
   static void Show(dingodb::pb::coordinator::GetExecutorMapResponse &response);
@@ -89,6 +159,9 @@ class Pretty {
   static void Show(dingodb::pb::coordinator::CreateIdsResponse &response);
   static void Show(dingodb::pb::store::TxnScanResponse &response, bool calc_count);
   static void PrintTableInteractive(const std::vector<std::vector<ftxui::Element>> &rows);
+
+  static void Show(const ShowRegionPeersParam &param);
+  static void Show(const ShowRegionTreeParam &param);
 };
 
 }  // namespace client_v2

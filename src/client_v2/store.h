@@ -416,6 +416,15 @@ struct TxnGCOptions {
 void SetUpTxnGC(CLI::App &app);
 void RunTxnGC(TxnGCOptions const &opt);
 
+struct GetGCMetricsOptions {
+  std::string coor_url;
+  std::string store_addrs;
+  bool include_region{false};
+  std::vector<int64_t> region_ids;
+};
+void SetUpGetGCMetrics(CLI::App &app);
+void RunGetGCMetrics(GetGCMetricsOptions const &opt);
+
 struct TxnCountOptions {
   std::string coor_url;
   int64_t id;
@@ -576,6 +585,26 @@ struct QueryRegionStatusOptions {
 void SetUpQueryRegionStatusMetrics(CLI::App &app);
 void RunQueryRegionStatus(QueryRegionStatusOptions const &opt);
 
+struct QueryRegionPeersOptions {
+  std::string coor_url;
+  std::string store_addrs;
+  std::vector<int64_t> region_ids;
+  int64_t apply_lag_severe;
+  int64_t apply_lag_warn;
+  bool issues_only;
+};
+void SetUpQueryRegionPeers(CLI::App &app);
+void RunQueryRegionPeers(QueryRegionPeersOptions const &opt);
+
+struct ShowRegionTreeOption {
+  std::string coor_url;
+  int64_t region_id;
+  int64_t table_id;
+  bool dot_format;
+};
+void SetUpShowRegionTree(CLI::App &app);
+void RunShowRegionTree(ShowRegionTreeOption const &opt);
+
 struct ModifyRegionMetaOptions {
   std::string coor_url;
   std::string store_addrs;
@@ -645,6 +674,7 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const &opt);
 void SendTxnScanLock(TxnScanLockOptions const &opt);
 void SendTxnHeartBeat(TxnHeartBeatOptions const &opt);
 void SendTxnGc(TxnGCOptions const &opt);
+void SendGetGCMetrics(GetGCMetricsOptions const &opt, const std::vector<int64_t> &region_ids = {});
 dingodb::pb::store::TxnScanResponse SendTxnCount(dingodb::pb::common::Region region,
                                                  const dingodb::pb::common::Range &range, int64_t start_ts,
                                                  int64_t resolve_locks = 0);
