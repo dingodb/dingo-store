@@ -597,6 +597,66 @@ butil::Status GetTableOrIndexDefinition(std::string table_name, int64_t schema_i
   return butil::Status::OK();
 }
 
+butil::Status BatchGetTableOrIndexDefinitions(
+    const std::set<int64_t> &entity_ids, std::map<int64_t, dingodb::pb::meta::TableDefinitionWithId> &definitions) {
+  if (entity_ids.empty()) {
+    return butil::Status::OK();
+  }
+
+  // Step 1: Fetch SQL meta once and resolve as many entity_ids as possible.
+  std::vector<MetaItem> metas;
+  auto status = GetSqlMeta(metas);
+  if (status.ok()) {
+    for (auto &meta : metas) {
+      if (meta.type != "Table" && meta.type != "Index") {
+        continue;
+      }
+      if (entity_ids.find(meta.entity_id) == entity_ids.end()) {
+        continue;
+      }
+      if (definitions.find(meta.entity_id) != definitions.end()) {
+        continue;
+      }
+      dingodb::pb::meta::TableDefinitionWithId def;
+      bool ret = def.ParseFromArray(meta.value.data(), meta.value.size());
+      if (ret && def.table_id().entity_id() > 0) {
+        definitions[meta.entity_id] = std::move(def);
+      }
+    }
+  } else {
+    DINGO_LOG(WARNING) << fmt::format(
+        "BatchGetTableOrIndexDefinitions: GetSqlMeta failed, error={}, falling back to individual RPCs",
+        status.error_cstr());
+  }
+
+  // Step 2: For remaining entity_ids not found in SQL meta, fall back to individual RPCs.
+  int64_t not_found_count = 0;
+  for (int64_t id : entity_ids) {
+    if (definitions.find(id) != definitions.end()) {
+      continue;
+    }
+    auto table_def = SendGetTable(id);
+    if (table_def.table_id().entity_id() > 0) {
+      definitions[id] = std::move(table_def);
+      continue;
+    }
+    auto index_def = SendGetIndex(id);
+    if (index_def.table_id().entity_id() > 0) {
+      definitions[id] = std::move(index_def);
+      continue;
+    }
+    ++not_found_count;
+    DINGO_LOG(WARNING) << fmt::format("BatchGetTableOrIndexDefinitions: not found, id={}", id);
+  }
+
+  if (not_found_count > 0) {
+    DINGO_LOG(WARNING) << fmt::format("BatchGetTableOrIndexDefinitions: {} out of {} entities not found",
+                                      not_found_count, entity_ids.size());
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status GetSchemaDefinition(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema) {
   auto status = GetSqlSchemaMeta(tenant_id, schema_id, schema);
   if (!status.ok()) {

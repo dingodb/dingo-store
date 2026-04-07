@@ -40,6 +40,7 @@
 #include "coprocessor/utils.h"
 #include "document/codec.h"
 #include "fmt/core.h"
+#include "fmt/ranges.h"
 #include "glog/logging.h"
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
@@ -79,10 +80,13 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpTxnBatchGet(app);
   SetUpTxnDump(app);
   SetUpTxnGC(app);
+  SetUpGetGCMetrics(app);
   SetUpTxnCount(app);
 
   SetUpWhichRegion(app);
   SetUpQueryRegionStatusMetrics(app);
+  SetUpQueryRegionPeers(app);
+  SetUpShowRegionTree(app);
   SetUpModifyRegionMeta(app);
   SetUpCompact(app);
   SetUpQueryMemoryLocks(app);
@@ -1127,6 +1131,119 @@ void RunTxnGC(TxnGCOptions const& opt) {
   client_v2::SendTxnGc(opt);
 }
 
+void SetUpGetGCMetrics(CLI::App& app) {
+  auto opt = std::make_shared<GetGCMetricsOptions>();
+  auto* cmd = app.add_subcommand("GetGCMetrics", "Get gc metrics")->group("Store Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs");
+  cmd->add_option("--region_ids", opt->region_ids,
+                  "query gc metrics by region ids. "
+                  "Automatically routes each region to its leader store via coordinator")
+      ->excludes("--store_addrs");
+  cmd->add_flag("--include_region", opt->include_region,
+                "whether to show each region gc info, only valid when store_addrs is set")
+      ->default_val(false);
+  cmd->callback([opt]() { RunGetGCMetrics(*opt); });
+}
+
+static std::string ResolveLeaderStoreAddr(const dingodb::pb::common::Region& region) {
+  for (const auto& peer : region.definition().peers()) {
+    if (peer.store_id() == region.leader_store_id() && !peer.server_location().host().empty() &&
+        peer.server_location().port() > 0) {
+      return peer.server_location().host() + ":" + std::to_string(peer.server_location().port());
+    }
+  }
+  return "";
+}
+
+static std::vector<dingodb::pb::common::Region> CollectGCMetricsRegions(const std::vector<int64_t>& region_ids) {
+  std::vector<dingodb::pb::common::Region> regions;
+  if (region_ids.empty()) {
+    return regions;
+  }
+
+  // When region count is small, query one by one to avoid fetching the full region map;
+  // otherwise fetch the full map and filter locally.
+  // Threshold of 10: below this, N individual RPCs are cheaper than one full-map RPC
+  // that returns all regions (potentially thousands). Above this, the amortized cost
+  // of a single full-map RPC becomes more efficient.
+  constexpr size_t kRegionIdThreshold = 10;
+  if (region_ids.size() < kRegionIdThreshold) {
+    regions.reserve(region_ids.size());
+    for (const auto region_id : region_ids) {
+      dingodb::pb::common::Region region = SendQueryRegion(region_id);
+      if (region.id() == 0) {
+        std::cout << "Get region failed, region_id=" << region_id << std::endl;
+        continue;
+      }
+      regions.push_back(std::move(region));
+    }
+    return regions;
+  }
+
+  std::map<int64_t, dingodb::pb::common::Region> region_map = SendGetRegionMap();
+  if (region_map.empty()) {
+    return regions;
+  }
+
+  regions.reserve(region_ids.size());
+  for (const auto region_id : region_ids) {
+    auto it = region_map.find(region_id);
+    if (it == region_map.end()) {
+      std::cout << "Get region failed, region_id=" << region_id << std::endl;
+      continue;
+    }
+    regions.push_back(it->second);
+  }
+
+  return regions;
+}
+
+void RunGetGCMetrics(GetGCMetricsOptions const& opt) {
+  if (opt.store_addrs.empty() && opt.region_ids.empty()) {
+    std::cout << "store_addrs and region_ids cannot both be empty." << std::endl;
+    return;
+  }
+
+  if (!opt.store_addrs.empty()) {
+    if (!SetUpStore("", {opt.store_addrs}, 0)) {
+      exit(-1);
+    }
+    client_v2::SendGetGCMetrics(opt);
+    return;
+  }
+
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+
+  auto regions = CollectGCMetricsRegions(opt.region_ids);
+  std::map<std::string, std::vector<int64_t>> leader_addr_region_ids;
+  for (const auto& region : regions) {
+    std::string leader_addr = ResolveLeaderStoreAddr(region);
+    if (leader_addr.empty()) {
+      std::cout << "Get region leader store addr failed, region_id=" << region.id()
+                << " leader_store_id=" << region.leader_store_id() << std::endl;
+      continue;
+    }
+    leader_addr_region_ids[leader_addr].push_back(region.id());
+  }
+
+  for (auto& [leader_addr, region_ids] : leader_addr_region_ids) {
+    std::sort(region_ids.begin(), region_ids.end());
+    region_ids.erase(std::unique(region_ids.begin(), region_ids.end()), region_ids.end());
+
+    InteractionManager::GetInstance().ResetStoreInteraction();
+    if (!InteractionManager::GetInstance().CreateStoreInteraction({leader_addr})) {
+      std::cout << "Create store interaction failed, leader_addr=" << leader_addr << std::endl;
+      continue;
+    }
+    auto region_ids_str = fmt::format("{}", fmt::join(region_ids, " "));
+    std::cout << fmt::format("LeaderStoreAddr={} Region=[{}]", leader_addr, region_ids_str) << std::endl;
+    client_v2::SendGetGCMetrics(opt, region_ids);
+  }
+}
+
 void SetUpTxnCount(CLI::App& app) {
   auto opt = std::make_shared<TxnCountOptions>();
   auto* cmd = app.add_subcommand("TxnCount", "Txn count")->group("Store Command");
@@ -2124,6 +2241,361 @@ void RunQueryRegionStatus(QueryRegionStatusOptions const& opt) {
     }
     std::cout << "Region: " << region_ids << " not exist." << '\n';
   }
+}
+
+void SetUpQueryRegionPeers(CLI::App& app) {
+  auto opt = std::make_shared<QueryRegionPeersOptions>();
+  auto cmd_desc = "Query region distribution and Raft cluster info";
+  auto* cmd = app.add_subcommand("QueryRegionPeers", cmd_desc)->group("Region Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs");
+  cmd->add_option("--region_ids", opt->region_ids,
+                  "region ids. When used with --store_addrs, filters regions on that store; "
+                  "when used alone, queries peers via coordinator");
+  cmd->add_option("--apply_lag_severe", opt->apply_lag_severe, "severe lag threshold")
+      ->default_val(10000)
+      ->check(CLI::PositiveNumber);
+  cmd->add_option("--apply_lag_warn", opt->apply_lag_warn, "warn lag threshold")
+      ->default_val(1000)
+      ->check(CLI::PositiveNumber);
+  cmd->add_flag("--issues_only", opt->issues_only, "only show slow info and check failed info")->default_val(false);
+
+  cmd->callback([opt]() { RunQueryRegionPeers(*opt); });
+}
+
+dingodb::pb::debug::DebugResponse SendDebugRequest(dingodb::pb::debug::DebugType debug_type,
+                                                   const std::string& store_addr,
+                                                   const std::vector<int64_t>& region_ids) {
+  InteractionManager::GetInstance().ResetStoreInteraction();
+  InteractionManager::GetInstance().CreateStoreInteraction({store_addr});
+
+  dingodb::pb::debug::DebugRequest request;
+  dingodb::pb::debug::DebugResponse response;
+  request.set_type(debug_type);
+  for (const auto& region_id : region_ids) {
+    request.add_region_ids(region_id);
+  }
+
+  auto status = InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Debug", request, response);
+  if (!status.ok()) {
+    std::cout << "Send debug request failed, store_addr=" << store_addr << " error: " << status.error_cstr()
+              << std::endl;
+  } else if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get region metrics failed, error:"
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+  }
+  return response;
+}
+
+static void RunQueryRegionPeersInfo(const std::vector<dingodb::pb::common::Region>& regions,
+                                    QueryRegionPeersOptions const& opt) {
+  // collect store addrs from region peers
+  std::map<int64_t, std::string> store_addrs;
+  std::vector<int64_t> region_ids;
+  for (const auto& region : regions) {
+    for (const auto& peer : region.definition().peers()) {
+      std::string peer_addr = peer.server_location().host() + ":" + std::to_string(peer.server_location().port());
+      store_addrs[peer.store_id()] = peer_addr;
+    }
+    region_ids.push_back(region.id());
+  }
+
+  // map<region_id, map<store_id, RaftMeta>>
+  std::map<int64_t, std::map<int64_t, dingodb::pb::store_internal::RaftMeta>> raft_meta_map;
+  // map<region_id, map<store_id, RaftLogMeta>>
+  std::map<int64_t, std::map<int64_t, dingodb::pb::debug::DebugResponse_RaftLogMeta>> raft_log_meta_map;
+  // map<region_id, map<store_id, RegionMetaDetail>>
+  std::map<int64_t, std::map<int64_t, dingodb::pb::store_internal::Region>> region_meta_details_map;
+
+  // send request to store
+  for (const auto& [peer_id, store_addr] : store_addrs) {
+    // DebugService lacks multi-type info retrieval in a single call; fetch via three separate RPCs
+    auto raft_meta_resp = SendDebugRequest(::dingodb::pb::debug::DebugType::STORE_RAFT_META, store_addr, region_ids);
+    auto raft_log_meta_resp = SendDebugRequest(::dingodb::pb::debug::DebugType::RAFT_LOG_META, store_addr, region_ids);
+    auto region_meta_details_resp =
+        SendDebugRequest(::dingodb::pb::debug::DebugType::STORE_REGION_META_DETAILS, store_addr, region_ids);
+
+    auto raft_metas = raft_meta_resp.raft_meta().raft_metas();
+    auto raft_log_metas = raft_log_meta_resp.raft_log_metas();
+    auto region_meta_details = region_meta_details_resp.region_meta_details().regions();
+    for (const auto& raft_meta : raft_metas) {
+      raft_meta_map[raft_meta.region_id()][peer_id] = raft_meta;
+    }
+    for (const auto& raft_log_meta : raft_log_metas) {
+      raft_log_meta_map[raft_log_meta.region_id()][peer_id] = raft_log_meta;
+    }
+    for (const auto& region_meta_detail : region_meta_details) {
+      region_meta_details_map[region_meta_detail.id()][peer_id] = region_meta_detail;
+    }
+  }
+
+  // collect table/index replica num for replica count consistency check.
+  std::map<int64_t, int64_t> table_index_replica_nums;  // key: table_id/index_id, value: replica num
+
+  // collect unique entity_ids first
+  std::set<int64_t> entity_ids;
+  for (const auto& region : regions) {
+    int64_t entity_id = region.definition().table_id();
+    if (entity_id <= 0) {
+      entity_id = region.definition().index_id();
+    }
+    if (entity_id > 0) {
+      entity_ids.insert(entity_id);
+    }
+  }
+
+  // batch fetch all table/index definitions
+  std::map<int64_t, dingodb::pb::meta::TableDefinitionWithId> definitions;
+  auto batch_status = BatchGetTableOrIndexDefinitions(entity_ids, definitions);
+  if (!batch_status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("BatchGetTableOrIndexDefinitions failed, error={}", batch_status.error_cstr());
+  }
+  for (const auto& [id, def] : definitions) {
+    table_index_replica_nums[id] = def.table_definition().replica();
+  }
+
+  // show
+  Pretty::ShowRegionPeersParam param(regions, std::move(raft_meta_map), std::move(raft_log_meta_map),
+                                     std::move(region_meta_details_map), std::move(table_index_replica_nums),
+                                     opt.apply_lag_severe, opt.apply_lag_warn, opt.issues_only);
+  Pretty::Show(param);
+}
+
+void RunQueryRegionPeers(QueryRegionPeersOptions const& opt) {
+  if (opt.region_ids.empty() && opt.store_addrs.empty()) {
+    std::cout << "Region_ids and store_addrs cannot both be empty." << '\n';
+    return;
+  }
+
+  // GetRegionMap through coordinator
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    std::cout << "Set Up failed coor_url=" << opt.coor_url;
+    exit(-1);
+  }
+
+  std::map<int64_t, dingodb::pb::common::Region> region_map = SendGetRegionMap();
+  if (region_map.empty()) {
+    return;
+  }
+
+  std::vector<int64_t> region_ids;
+
+  // when store_addrs is not empty, query region info through store
+  if (!opt.store_addrs.empty()) {
+    if (!SetUpStore("", {opt.store_addrs}, 0)) {
+      exit(-1);
+    }
+
+    dingodb::pb::debug::DebugRequest request;
+    dingodb::pb::debug::DebugResponse response;
+    request.set_type(::dingodb::pb::debug::DebugType::STORE_REGION_META_DETAILS);
+    for (const int64_t region_id : opt.region_ids) {
+      request.add_region_ids(region_id);
+    }
+
+    auto status =
+        InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Debug", request, response);
+    if (!status.ok()) {
+      std::cout << "Get region meta failed, error: " << status.error_cstr() << '\n';
+      return;
+    }
+    if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+      std::cout << "Get region meta failed, error:"
+                << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+                << response.error().errmsg();
+      return;
+    }
+    if (!response.has_region_meta_details()) {
+      std::cout << "No region meta details in response." << '\n';
+      return;
+    }
+
+    auto response_regions = response.region_meta_details().regions();
+    for (const auto& region : response_regions) {
+      region_ids.emplace_back(region.id());
+    }
+  } else {
+    region_ids = opt.region_ids;
+  }
+
+  // query raft meta and raft log meta through region peers, and show them together.
+  std::vector<dingodb::pb::common::Region> regions;
+  for (const int64_t region_id : region_ids) {
+    auto it = region_map.find(region_id);
+    if (it == region_map.end()) {
+      std::cout << "Region id " << region_id << " not exist." << '\n';
+      continue;
+    }
+    regions.push_back(it->second);
+  }
+
+  RunQueryRegionPeersInfo(regions, opt);
+}
+
+void SetUpShowRegionTree(CLI::App& app) {
+  auto opt = std::make_shared<ShowRegionTreeOptions>();
+  auto* cmd = app.add_subcommand("ShowRegionTree", "Show region graph ")->group("Region Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "region id")->check(CLI::PositiveNumber);
+  cmd->add_option("--table_id", opt->table_id, "table/index id")->check(CLI::PositiveNumber)->excludes("--region_id");
+  cmd->add_flag("--dot_format", opt->dot_format, "Whether show region tree in dot format")->default_val(false);
+  cmd->callback([opt]() { RunShowRegionTree(*opt); });
+}
+
+butil::Status GetTableHierarchy(int64_t table_id, const std::vector<int64_t>& index_ids,
+                                Pretty::ShowRegionTreeParam& out) {
+  if (table_id <= 0) {
+    return butil::Status::OK();
+  }
+  // table definition
+  dingodb::pb::meta::TableDefinitionWithId table_definition_with_id;
+  auto status = GetTableOrIndexDefinition(table_id, table_definition_with_id);
+  if (!status.ok()) {
+    return status;
+  }
+  out.SetTableDefinitionWithId(table_definition_with_id);
+
+  if (!index_ids.empty()) {
+    // index definition
+    dingodb::pb::meta::TableDefinitionWithId index_definition_with_id;
+    for (const auto& index_id : index_ids) {
+      status = GetTableOrIndexDefinition(index_id, index_definition_with_id);
+      if (!status.ok()) {
+        return status;
+      }
+      out.AddIndexDefinitionWithId(index_definition_with_id);
+    }
+  }
+
+  // schema
+  dingodb::pb::meta::Schema schema;
+  int64_t tenant_id = table_definition_with_id.tenant_id();
+  int64_t schema_id = table_definition_with_id.table_id().parent_entity_id();
+  status = GetSchemaDefinition(tenant_id, schema_id, schema);
+  if (!status.ok()) {
+    return status;
+  }
+  out.SetSchema(schema);
+  return butil::Status::OK();
+}
+
+void RunShowRegionTree(ShowRegionTreeOptions const& opt) {
+  // param check
+  if (opt.region_id <= 0 && opt.table_id <= 0) {
+    std::cout << "Must set region_id or table_id." << std::endl;
+    return;
+  }
+
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    std::cout << "Set Up failed coor_url=" << opt.coor_url << std::endl;
+    exit(-1);
+  }
+
+  // GetRegionMap through coordinator and check region_id
+  std::map<int64_t, dingodb::pb::common::Region> region_map = SendGetRegionMap();
+  if (region_map.empty()) {
+    return;
+  }
+
+  int64_t table_id = 0;
+  std::vector<int64_t> index_ids;
+  std::vector<int64_t> region_ids;
+
+  auto fill_ids = [&table_id, &index_ids, &region_ids](const dingodb::pb::common::Region& region) {
+    region_ids.emplace_back(region.id());
+    table_id = region.definition().table_id();
+    if (region.definition().index_id() > 0) {
+      index_ids.emplace_back(region.definition().index_id());
+    }
+  };
+
+  if (opt.region_id > 0) {
+    // Show only table, index, and parent/child regions on the specified region's hierarchy path.
+    auto iter = region_map.find(opt.region_id);
+    if (iter != region_map.end()) {
+      fill_ids(iter->second);
+    }
+  } else {
+    // Show the full region hierarchy for the table or index
+    for (const auto& [id, region] : region_map) {
+      if (region.definition().table_id() == opt.table_id || region.definition().index_id() == opt.table_id) {
+        fill_ids(region);
+      }
+    }
+    // Deduplicate
+    std::sort(index_ids.begin(), index_ids.end());
+    index_ids.erase(std::unique(index_ids.begin(), index_ids.end()), index_ids.end());
+
+    if (table_id <= 0 && index_ids.empty()) {
+      std::cout << "No table_id or index_id found." << std::endl;
+      return;
+    }
+  }
+
+  if (region_ids.empty()) {
+    std::cout << "No region found." << std::endl;
+    return;
+  }
+
+  // Get table region IDs and store addrs for querying region meta details.
+  std::vector<int64_t> table_region_ids;
+  std::vector<std::string> store_addr_vec;
+  for (const auto& [id, region] : region_map) {
+    if (region.definition().table_id() == table_id) {
+      table_region_ids.emplace_back(region.id());
+
+      std::string store_addr = ResolveLeaderStoreAddr(region);
+      if (store_addr.empty() && region.definition().peers_size() > 0) {
+        // Leader store addr not found, fallback to first peer (may return stale region meta)
+        const auto& peer = region.definition().peers(0);
+        if (!peer.server_location().host().empty() && peer.server_location().port() > 0) {
+          store_addr = peer.server_location().host() + ":" + std::to_string(peer.server_location().port());
+          DINGO_LOG(WARNING) << fmt::format(
+              "[ShowRegionTree] Leader store addr not found for region {}, fallback to peer store {}({})", region.id(),
+              peer.store_id(), store_addr);
+        }
+      }
+
+      if (!store_addr.empty()) {
+        store_addr_vec.emplace_back(std::move(store_addr));
+      }
+    }
+  }
+
+  std::sort(store_addr_vec.begin(), store_addr_vec.end());
+  store_addr_vec.erase(std::unique(store_addr_vec.begin(), store_addr_vec.end()), store_addr_vec.end());
+
+  if (store_addr_vec.empty()) {
+    std::cout << "No store addr found for table regions." << std::endl;
+    return;
+  }
+
+  // query region meta details
+  std::vector<dingodb::pb::debug::DebugResponse> responses;
+
+  for (const auto& addr : store_addr_vec) {
+    auto debug_type = ::dingodb::pb::debug::DebugType::STORE_REGION_META_DETAILS;
+    responses.emplace_back(std::move(SendDebugRequest(debug_type, addr, table_region_ids)));
+  }
+
+  if (responses.empty()) {
+    std::cout << "No STORE_REGION_META_DETAILS found." << std::endl;
+    return;
+  }
+
+  // show region tree
+  bool show_ancestor = opt.region_id > 0;  // when region_id is set, show ancestor regions
+  std::sort(region_ids.begin(), region_ids.end());
+  Pretty::ShowRegionTreeParam param(std::move(responses), region_ids, show_ancestor, opt.dot_format);
+
+  auto status = GetTableHierarchy(table_id, index_ids, param);
+  if (!status.ok()) {
+    Pretty::ShowError(status);
+    return;
+  }
+
+  Pretty::Show(param);
 }
 
 void SetUpModifyRegionMeta(CLI::App& app) {
@@ -3311,6 +3783,40 @@ void SendTxnGc(TxnGCOptions const& opt) {
     std::cout << "txn_result: " << response.txn_result().DebugString() << std::endl;
   } else {
     std::cout << "txn gc success." << std::endl;
+  }
+}
+
+void SendGetGCMetrics(GetGCMetricsOptions const& opt, const std::vector<int64_t>& region_ids) {
+  dingodb::pb::debug::DebugRequest request;
+  dingodb::pb::debug::DebugResponse response;
+  request.set_type(dingodb::pb::debug::DebugType::GC_METRICS);
+  for (const auto region_id : region_ids) {
+    if (region_id > 0) {
+      request.add_region_ids(region_id);
+    }
+  }
+
+  auto status = InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Debug", request, response);
+  if (!status.ok()) {
+    std::cout << "Get gc metrics failed, error: " << status.error_cstr() << std::endl;
+    return;
+  }
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get gc metrics failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+
+  if (!response.has_gc_metrics()) {
+    std::cout << "Get gc metrics failed, response has no gc_metrics." << std::endl;
+    return;
+  }
+
+  if (!region_ids.empty()) {
+    Pretty::Show(response.gc_metrics(), true, true);
+  } else {
+    Pretty::Show(response.gc_metrics(), opt.include_region, false);
   }
 }
 

@@ -20,8 +20,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -63,6 +65,9 @@ butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefi
 butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id);
 butil::Status GetTableOrIndexDefinition(std::string table_name, int64_t schema_id,
                                         dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id);
+
+butil::Status BatchGetTableOrIndexDefinitions(const std::set<int64_t> &entity_ids,
+                                              std::map<int64_t, dingodb::pb::meta::TableDefinitionWithId> &definitions);
 
 butil::Status GetSchemaDefinition(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema);
 

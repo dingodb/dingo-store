@@ -14,6 +14,7 @@
 
 #include "client_v2/pretty.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <ftxui/component/component.hpp>
@@ -22,6 +23,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1587,6 +1589,105 @@ void Pretty::Show(dingodb::pb::coordinator::GetGCSafePointResponse& response) {
   }
 }
 
+void Pretty::Show(const dingodb::pb::debug::DebugResponse::GCMetrics& gc_metrics, bool include_region,
+                  bool region_only) {
+  auto format_time = [](int64_t ts_ms) -> std::string {
+    if (ts_ms <= 0) {
+      return "-";
+    }
+    return dingodb::Helper::FormatMsTime(ts_ms);
+  };
+
+  auto build_region_rows = [&]() {
+    std::vector<std::vector<std::string>> region_rows = {
+        {"RegionId", "LastStart", "LastEnd", "SafePointTs", "IterCount", "DeleteCount", "InfoType"}};
+    for (const auto& region_history : gc_metrics.region_histories()) {
+      if (region_history.has_last_history()) {
+        const auto& last = region_history.last_history();
+        region_rows.push_back({fmt::format("{}", region_history.region_id()), format_time(last.start_time_ms()),
+                               format_time(last.end_time_ms()), fmt::format("{}", last.safe_point_ts()),
+                               fmt::format("{}", last.iter_count()), fmt::format("{}", last.delete_count()), "LastGc"});
+      }
+
+      if (region_history.has_last_delete_history()) {
+        const auto& last_delete = region_history.last_delete_history();
+        region_rows.push_back({fmt::format("{}", region_history.region_id()), format_time(last_delete.start_time_ms()),
+                               format_time(last_delete.end_time_ms()), fmt::format("{}", last_delete.safe_point_ts()),
+                               fmt::format("{}", last_delete.iter_count()),
+                               fmt::format("{}", last_delete.delete_count()), "LastWithDelete"});
+      }
+    }
+    return region_rows;
+  };
+
+  if (region_only) {
+    std::cout << "Region GC Metrics:" << std::endl;
+    auto region_rows = build_region_rows();
+    if (region_rows.size() == 1) {
+      std::cout << "No region gc metrics found." << std::endl;
+      return;
+    }
+    PrintTableAdaptive(region_rows);
+    std::cout << std::endl;
+    return;
+  }
+
+  std::vector<std::vector<std::string>> metric_rows = {
+      {"FirstGcStart", "LastGcEnd", "GCRunCount", "TotalIterCount", "TotalDeleteCount"},
+      {format_time(gc_metrics.first_start_time_ms()), format_time(gc_metrics.last_end_time_ms()),
+       fmt::format("{}", gc_metrics.run_count()), fmt::format("{}", gc_metrics.total_iter_count()),
+       fmt::format("{}", gc_metrics.total_delete_count())},
+  };
+  PrintTableAdaptive(metric_rows);
+
+  const dingodb::pb::debug::DebugResponse::TxnGcHistoryItem* last_gc = nullptr;
+  const dingodb::pb::debug::DebugResponse::TxnGcHistoryItem* last_gc_with_delete = nullptr;
+
+  if (gc_metrics.history_size() > 0) {
+    last_gc = &gc_metrics.history(0);
+  }
+
+  if (gc_metrics.has_last_with_delete_history()) {
+    last_gc_with_delete = &gc_metrics.last_with_delete_history();
+  }
+
+  if (last_gc_with_delete == nullptr) {
+    for (const auto& item : gc_metrics.history()) {
+      if (item.delete_count() > 0) {
+        last_gc_with_delete = &item;
+        break;
+      }
+    }
+  }
+
+  auto format_item = [&](const dingodb::pb::debug::DebugResponse::TxnGcHistoryItem* item) -> std::string {
+    if (item == nullptr) {
+      return "StartTime=- EndTime=- IterCount=0 DeleteCount=0";
+    }
+    return fmt::format("StartTime={} EndTime={} IterCount={} DeleteCount={}", format_time(item->start_time_ms()),
+                       format_time(item->end_time_ms()), item->iter_count(), item->delete_count());
+  };
+
+  std::cout << "Last GC With Deletions: " << format_item(last_gc_with_delete) << std::endl;
+  std::cout << "Last GC: " << format_item(last_gc) << std::endl;
+
+  std::cout << std::endl << "GC History:" << std::endl;
+  std::vector<std::vector<std::string>> history_rows = {{"Index", "StartTime", "EndTime", "IterCount", "DeleteCount"}};
+
+  for (int i = 0; i < gc_metrics.history_size(); ++i) {
+    const auto& item = gc_metrics.history(i);
+    history_rows.push_back({fmt::format("{}", gc_metrics.history_size() - i), format_time(item.start_time_ms()),
+                            format_time(item.end_time_ms()), fmt::format("{}", item.iter_count()),
+                            fmt::format("{}", item.delete_count())});
+  }
+  PrintTableAdaptive(history_rows);
+
+  if (include_region) {
+    std::cout << std::endl << "Last GC Per Region:" << std::endl;
+    PrintTableAdaptive(build_region_rows());
+  }
+}
+
 void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool is_interactive) {
   if (ShowError(response.error())) {
     return;
@@ -1863,6 +1964,681 @@ void Pretty::Show(dingodb::pb::store::TxnScanResponse& response, bool /*calc_cou
   }
 
   ShowTotalCount(result);
+}
+
+void Pretty::Show(const ShowRegionPeersParam& param) {
+  struct LagInfo {
+    int64_t region_id;
+    int64_t store_id;
+    std::string raft_location;
+    int64_t lag;
+  };
+
+  struct ReplicaCountIssueInfo {
+    int64_t region_id;
+    std::string table_or_index_type;
+    std::string expected_replica_num;
+    int64_t region_replica_num;
+  };
+
+  struct PeerStatusIssueInfo {
+    int64_t region_id;
+    int64_t store_id;
+    std::string server_location;
+    std::string raft_location;
+    std::string raft_role;
+    std::string replica_state;
+  };
+
+  struct PeerRangeIssueInfo {
+    int64_t region_id;
+    int64_t store_id;
+    std::string server_location;
+    std::string raft_location;
+    std::string raft_role;
+    std::string replica_range;
+  };
+
+  struct PeerStat {
+    int64_t store_id;
+    std::string server_location;
+    std::string raft_location;
+    std::string raft_role;
+    std::string replica_state = "N/A";
+    std::string replica_range = "N/A";
+    std::string range_start_key;
+    std::string range_end_key;
+    bool has_range = false;
+    int64_t term = -1;
+    int64_t last_log_index = -1;
+    int64_t applied_index = -1;
+    std::string ToString() const {
+      return fmt::format(
+          "StoreId={}, ServerLocation={}, RaftLocation={}, RaftRole={}, ReplicaState={}, "
+          "ReplicaRange={}, Term={}, LastLogIndex={}, AppliedIndex={}",
+          store_id, server_location, raft_location, raft_role, replica_state, replica_range, term, last_log_index,
+          applied_index);
+    }
+  };
+
+  std::vector<LagInfo> severe_lags;
+  std::vector<LagInfo> warn_lags;
+  std::vector<PeerStatusIssueInfo> peer_status_issue_peers;
+  std::vector<PeerRangeIssueInfo> peer_range_issue_peers;
+  std::vector<ReplicaCountIssueInfo> replica_count_inconsistent_regions;
+
+  for (const auto& region : param.regions) {
+    // print region basic info
+    const auto& definition = region.definition();
+
+    // gather peer stats
+    std::vector<PeerStat> peer_stats;
+    peer_stats.reserve(definition.peers_size());
+
+    for (const auto& peer : definition.peers()) {
+      PeerStat stat;
+      stat.store_id = peer.store_id();
+      stat.server_location = dingodb::Helper::LocationToString(peer.server_location());
+      stat.raft_location = dingodb::Helper::LocationToString(peer.raft_location());
+      if (peer.store_id() == region.leader_store_id()) {
+        stat.raft_role = "Leader";
+      } else if (peer.role() == dingodb::pb::common::PeerRole::LEARNER) {
+        stat.raft_role = "Learner";
+      } else {
+        stat.raft_role = "Follower";
+      }
+
+      // query raft meta for term/applied_index
+      auto region_raft_meta_iter = param.raft_meta_map.find(region.id());
+      if (region_raft_meta_iter != param.raft_meta_map.end()) {
+        auto peer_raft_meta_iter = region_raft_meta_iter->second.find(peer.store_id());
+        if (peer_raft_meta_iter != region_raft_meta_iter->second.end()) {
+          stat.term = peer_raft_meta_iter->second.term();
+          stat.applied_index = peer_raft_meta_iter->second.applied_index();
+        }
+      }
+
+      // query raft log meta for last_log_index
+      auto region_raft_log_meta_iter = param.raft_log_meta_map.find(region.id());
+      if (region_raft_log_meta_iter != param.raft_log_meta_map.end()) {
+        auto peer_raft_log_meta_iter = region_raft_log_meta_iter->second.find(peer.store_id());
+        if (peer_raft_log_meta_iter != region_raft_log_meta_iter->second.end()) {
+          stat.last_log_index = peer_raft_log_meta_iter->second.last_index();
+        }
+      }
+
+      // query region detail for replica state/range
+      auto region_meta_detail_iter = param.region_meta_detail_map.find(region.id());
+      if (region_meta_detail_iter != param.region_meta_detail_map.end()) {
+        auto peer_region_meta_detail_iter = region_meta_detail_iter->second.find(peer.store_id());
+        if (peer_region_meta_detail_iter != region_meta_detail_iter->second.end()) {
+          const auto& store_region = peer_region_meta_detail_iter->second;
+          stat.replica_state = dingodb::pb::common::StoreRegionState_Name(store_region.state());
+          stat.range_start_key = store_region.definition().range().start_key();
+          stat.range_end_key = store_region.definition().range().end_key();
+          stat.has_range = true;
+          stat.replica_range = fmt::format("[{}, {})", dingodb::Helper::StringToHex(stat.range_start_key),
+                                           dingodb::Helper::StringToHex(stat.range_end_key));
+        }
+      }
+
+      peer_stats.push_back(stat);
+    }
+
+    auto bool_to_consistent_str = [](bool value) { return value ? "YES" : "NO"; };
+
+    // check replica count consistency
+    int64_t region_replica_num = definition.peers_size();
+    int64_t table_or_index_id = definition.table_id();
+    std::string table_or_index_type = "Table";
+    if (table_or_index_id <= 0) {
+      table_or_index_id = definition.index_id();
+      table_or_index_type = "Index";
+    }
+    int64_t table_or_index_replica_num = -1;
+    bool replica_count_consistent = false;
+    auto table_or_index_iter = param.table_index_replica_num_map.find(table_or_index_id);
+    if (table_or_index_iter != param.table_index_replica_num_map.end()) {
+      table_or_index_replica_num = table_or_index_iter->second;
+      replica_count_consistent = (region_replica_num == table_or_index_replica_num);
+    }
+
+    // check peer status consistency
+    bool peer_status_consistent = !peer_stats.empty();
+    std::string base_replica_state;
+    bool base_status_initialized = false;
+    for (const auto& stat : peer_stats) {
+      if (stat.replica_state == "N/A") {
+        peer_status_consistent = false;
+        break;
+      }
+      if (!base_status_initialized) {
+        base_replica_state = stat.replica_state;
+        base_status_initialized = true;
+      } else if (base_replica_state != stat.replica_state) {
+        peer_status_consistent = false;
+        break;
+      }
+    }
+
+    // check peer range consistency
+    bool peer_range_consistent = !peer_stats.empty();
+    std::string base_start_key;
+    std::string base_end_key;
+    bool base_range_initialized = false;
+    for (const auto& stat : peer_stats) {
+      if (!stat.has_range) {
+        peer_range_consistent = false;
+        break;
+      }
+      if (!stat.range_end_key.empty() && stat.range_start_key >= stat.range_end_key) {
+        peer_range_consistent = false;
+        break;
+      }
+      if (!base_range_initialized) {
+        base_start_key = stat.range_start_key;
+        base_end_key = stat.range_end_key;
+        base_range_initialized = true;
+      } else if (base_start_key != stat.range_start_key || base_end_key != stat.range_end_key) {
+        peer_range_consistent = false;
+        break;
+      }
+    }
+    // print region info and consistency check results
+    auto region_info_str =
+        fmt::format("RegionId={} Name={} State={} TableId={} IndexId={} LeaderStoreId={} Epoch=[conf={}, ver={}]",
+                    region.id(), definition.name(), dingodb::pb::common::RegionState_Name(region.state()),
+                    definition.table_id(), definition.index_id(), region.leader_store_id(),
+                    definition.epoch().conf_version(), definition.epoch().version());
+
+    auto peer_status_consistent_str =
+        fmt::format("PeerStatusConsistent={}", bool_to_consistent_str(peer_status_consistent));
+
+    auto peer_range_consistent_str =
+        fmt::format("PeerRangeConsistent={}", bool_to_consistent_str(peer_range_consistent));
+
+    std::string table_or_index_replica_num_str =
+        table_or_index_replica_num >= 0 ? fmt::format("{}", table_or_index_replica_num) : "N/A";
+    auto replica_count_check_str =
+        fmt::format("ReplicaCountCheck={{{}ReplicaNum={}, RegionReplicaNum={}, Consistent={}}}", table_or_index_type,
+                    table_or_index_replica_num_str, region_replica_num,
+                    table_or_index_replica_num >= 0 ? bool_to_consistent_str(replica_count_consistent) : "N/A");
+
+    if (!peer_status_consistent) {
+      for (const auto& stat : peer_stats) {
+        peer_status_issue_peers.push_back(
+            {region.id(), stat.store_id, stat.server_location, stat.raft_location, stat.raft_role, stat.replica_state});
+      }
+    }
+    if (!peer_range_consistent) {
+      for (const auto& stat : peer_stats) {
+        peer_range_issue_peers.push_back(
+            {region.id(), stat.store_id, stat.server_location, stat.raft_location, stat.raft_role, stat.replica_range});
+      }
+    }
+    if (table_or_index_replica_num >= 0 && !replica_count_consistent) {
+      replica_count_inconsistent_regions.push_back(
+          {region.id(), table_or_index_type, table_or_index_replica_num_str, region_replica_num});
+    }
+
+    if (!param.issues_only) {
+      std::cout << region_info_str << std::endl;
+      std::cout << peer_status_consistent_str << std::endl;
+      std::cout << peer_range_consistent_str << std::endl;
+      std::cout << replica_count_check_str << std::endl;
+    }
+
+    // determine base applied index for lag calculation
+    int64_t leader_applied_index = -1;
+    int64_t max_applied_index = -1;
+    for (const auto& stat : peer_stats) {
+      if (stat.applied_index >= 0) {
+        max_applied_index = std::max(max_applied_index, stat.applied_index);
+        if (stat.store_id == region.leader_store_id()) {
+          leader_applied_index = stat.applied_index;
+        }
+      }
+    }
+    int64_t base_applied_index = (leader_applied_index >= 0) ? leader_applied_index : max_applied_index;
+
+    // peer stats to table
+    std::vector<std::vector<std::string>> rows;
+    rows = {{"StoreId", "ServerLocation", "RaftLocation", "RaftRole", "ReplicaState", "Term", "LastLogIndex",
+             "AppliedIndex", "ApplyLag"}};
+
+    std::string replica_ranges_str = "ReplicaRanges: ";
+    bool first_range = true;
+
+    std::sort(peer_stats.begin(), peer_stats.end(),
+              [](const PeerStat& a, const PeerStat& b) { return a.store_id < b.store_id; });
+
+    for (const auto& stat : peer_stats) {
+      std::string term_str = stat.term >= 0 ? fmt::format("{}", stat.term) : "N/A";
+      std::string last_log_index_str = stat.last_log_index >= 0 ? fmt::format("{}", stat.last_log_index) : "N/A";
+      std::string applied_index_str = stat.applied_index >= 0 ? fmt::format("{}", stat.applied_index) : "N/A";
+
+      // calculate lag
+      std::string apply_lag_str = "N/A";
+      if (base_applied_index >= 0 && stat.applied_index >= 0) {
+        auto lag = base_applied_index - stat.applied_index;
+        std::string lag_suffix;
+        if (param.apply_lag_severe > 0 && lag >= param.apply_lag_severe) {
+          lag_suffix = " (SEVERE)";
+          severe_lags.push_back({region.id(), stat.store_id, stat.raft_location, lag});
+        } else if (param.apply_lag_warn > 0 && lag >= param.apply_lag_warn) {
+          lag_suffix = " (WARN)";
+          warn_lags.push_back({region.id(), stat.store_id, stat.raft_location, lag});
+        }
+        apply_lag_str = fmt::format("{}{}", lag, lag_suffix);
+      }
+
+      // row for each peer
+      rows.push_back({fmt::format("{}", stat.store_id), stat.server_location, stat.raft_location, stat.raft_role,
+                      stat.replica_state, term_str, last_log_index_str, applied_index_str, apply_lag_str});
+      if (!first_range) {
+        replica_ranges_str += " | ";
+      }
+      first_range = false;
+      replica_ranges_str += fmt::format("{}={}", stat.store_id, stat.replica_range);
+    }
+
+    if (!param.issues_only) {
+      std::cout << replica_ranges_str << std::endl;
+      PrintTableAdaptive(rows);
+      std::cout << std::endl;
+    }
+  }
+
+  // summary of lagging peers and inconsistent regions
+  auto show_empty_summary = [&](const std::string& title) { std::cout << title << ":\nNone\n" << std::endl; };
+
+  auto show_title = [&](const std::string& title) { std::cout << title << ":\n"; };
+
+  auto show_lag_summary = [&](const std::vector<LagInfo>& lags, const std::string& title) {
+    if (lags.empty()) {
+      show_empty_summary(title);
+      return;
+    }
+    show_title(title);
+    std::vector<std::vector<std::string>> rows = {{"RegionId", "StoreId", "RaftLocation", "ApplyLag"}};
+    for (const auto& item : lags) {
+      rows.push_back({fmt::format("{}", item.region_id), fmt::format("{}", item.store_id), item.raft_location,
+                      fmt::format("{}", item.lag)});
+    }
+    PrintTableAdaptive(rows);
+    std::cout << std::endl;
+  };
+
+  auto show_replica_count_issue_summary = [&](const std::vector<ReplicaCountIssueInfo>& issues,
+                                              const std::string& title) {
+    if (issues.empty()) {
+      show_empty_summary(title);
+      return;
+    }
+    show_title(title);
+    std::vector<std::vector<std::string>> rows = {{"RegionId", "Type", "ExpectedReplicaNum", "RegionReplicaNum"}};
+    for (const auto& item : issues) {
+      rows.push_back({fmt::format("{}", item.region_id), item.table_or_index_type, item.expected_replica_num,
+                      fmt::format("{}", item.region_replica_num)});
+    }
+    PrintTableAdaptive(rows);
+    std::cout << std::endl;
+  };
+
+  auto show_peer_status_issue_summary = [&](const std::vector<PeerStatusIssueInfo>& issues, const std::string& title) {
+    if (issues.empty()) {
+      show_empty_summary(title);
+      return;
+    }
+    show_title(title);
+    std::vector<std::vector<std::string>> rows = {
+        {"RegionId", "StoreId", "ServerLocation", "RaftLocation", "RaftRole", "ReplicaState"}};
+    for (const auto& item : issues) {
+      rows.push_back({fmt::format("{}", item.region_id), fmt::format("{}", item.store_id), item.server_location,
+                      item.raft_location, item.raft_role, item.replica_state});
+    }
+    PrintTableAdaptive(rows);
+    std::cout << std::endl;
+  };
+
+  auto show_peer_range_issue_summary = [&](const std::vector<PeerRangeIssueInfo>& issues, const std::string& title) {
+    if (issues.empty()) {
+      show_empty_summary(title);
+      return;
+    }
+    show_title(title);
+    std::vector<std::vector<std::string>> rows = {
+        {"RegionId", "StoreId", "ServerLocation", "RaftLocation", "RaftRole", "ReplicaRange"}};
+    for (const auto& item : issues) {
+      rows.push_back({fmt::format("{}", item.region_id), fmt::format("{}", item.store_id), item.server_location,
+                      item.raft_location, item.raft_role, item.replica_range});
+    }
+    PrintTableAdaptive(rows);
+    std::cout << std::endl;
+  };
+
+  show_lag_summary(severe_lags, "Severe lag peers");
+  show_lag_summary(warn_lags, "Warn lag peers");
+  show_peer_status_issue_summary(peer_status_issue_peers, "PeerStatusConsistent failed regions");
+  show_peer_range_issue_summary(peer_range_issue_peers, "PeerRangeConsistent failed regions");
+  show_replica_count_issue_summary(replica_count_inconsistent_regions, "ReplicaCountCheck failed regions");
+}
+
+Pretty::ShowRegionTreeParam::ShowRegionTreeParam(std::vector<DebugResponse> in_responses,
+                                                 std::vector<int64_t> in_region_ids, bool in_show_ancestor,
+                                                 bool in_dot_format)
+    : show_ancestor(in_show_ancestor),
+      region_ids(std::move(in_region_ids)),
+      dot_format(in_dot_format),
+      responses_(std::move(in_responses)) {
+  // NOTE: region_map and region_children store pointers into responses_.
+  // responses_ is a member field whose vector storage is stable after this move,
+  // and the protobuf messages inside are never moved again, so the pointers remain valid
+  // for the lifetime of this ShowRegionTreeParam object.
+  for (const auto& response : responses_) {
+    for (const auto& region : response.region_meta_details().regions()) {
+      if (region_map.find(region.id()) == region_map.end()) {
+        region_map[region.id()] = &region;
+        if (region.parent_id() > 0) {
+          region_children[region.parent_id()].push_back(&region);
+        }
+      }
+    }
+  }
+}
+
+void Pretty::ShowRegionTreeParam::SetSchema(const dingodb::pb::meta::Schema& in_schema) { schema = in_schema; }
+
+void Pretty::ShowRegionTreeParam::SetTableDefinitionWithId(const TableDefinitionWithId& in_table_def) {
+  table_def = in_table_def;
+}
+
+void Pretty::ShowRegionTreeParam::AddIndexDefinitionWithId(const TableDefinitionWithId& in_index_def) {
+  if (in_index_def.table_id().entity_id() > 0) {
+    index_defs[in_index_def.table_id().entity_id()] = in_index_def;
+  }
+}
+
+class RegionTreeOutputHelper {
+  using Region = dingodb::pb::store_internal::Region;
+
+ public:
+  explicit RegionTreeOutputHelper(const Pretty::ShowRegionTreeParam& param) : param_(param) {
+    if (param_.dot_format) {
+      std::cout << "digraph RegionTree {" << std::endl;
+    }
+  }
+
+  ~RegionTreeOutputHelper() {
+    if (param_.dot_format) {
+      std::cout << "}" << std::endl;
+    }
+  }
+
+ public:
+  void PrintTableHierarchy() const {
+    if (!param_.table_def.has_table_id() || !param_.table_def.has_table_definition()) {
+      return;
+    }
+
+    // tenant, schema
+    int64_t tenant_id = param_.table_def.tenant_id();  // might be 0
+    int64_t schema_id = param_.table_def.table_id().parent_entity_id();
+    std::string schema_name = param_.schema.name();
+
+    // table
+    int64_t table_id = param_.table_def.table_id().entity_id();
+    std::string table_name = param_.table_def.table_definition().name();
+
+    const auto& table_partitions = param_.table_def.table_definition().table_partition().partitions();
+
+    auto build_partition_ids = [](const auto& partitions) {
+      std::string part_ids;
+      for (const auto& partition : partitions) {
+        if (!part_ids.empty()) {
+          part_ids += " ";
+        }
+        part_ids += fmt::format("{}", partition.id().entity_id());
+      }
+      return part_ids;
+    };
+
+    if (param_.dot_format) {
+      // print tenant node
+      std::string tenant_node_name = fmt::format("Tenant_{}", tenant_id);
+      std::cout << fmt::format("{} [label=\"TenantId={}\", color=\"blue\"];", tenant_node_name, tenant_id) << std::endl;
+
+      // print schema node and edge from tenant to schema
+      std::string schema_node_name = fmt::format("Schema_{}", schema_id);
+      std::cout << fmt::format("{} [label=\"SchemaId={}({})\", color=\"blue\"];", schema_node_name, schema_id,
+                               schema_name)
+                << std::endl;
+      std::cout << fmt::format("{} -> {};", tenant_node_name, schema_node_name) << std::endl;
+
+      // print table node and edge from schema to table
+      std::string table_node_name = fmt::format("Table_{}", table_id);
+      std::cout << fmt::format("{} [label=\"TableId={}({})\", color=\"blue\"];", table_node_name, table_id, table_name)
+                << std::endl;
+      std::cout << fmt::format("{} -> {};", schema_node_name, table_node_name) << std::endl;
+
+      for (const auto& partition : table_partitions) {
+        std::string partition_node_name = BuildPartitionNodeName(partition.id().entity_id());
+        std::cout << fmt::format("{} [label=\"PartitionId={}\", color=\"blue\"];", partition_node_name,
+                                 partition.id().entity_id())
+                  << std::endl;
+        std::cout << fmt::format("{} -> {};", table_node_name, partition_node_name) << std::endl;
+      }
+
+      for (const auto& [index_id, index_def] : param_.index_defs) {
+        std::string index_node_name = fmt::format("Index_{}", index_id);
+        std::cout << fmt::format("{} [label=\"IndexId={}({})\", color=\"blue\"];", index_node_name, index_id,
+                                 index_def.table_definition().name())
+                  << std::endl;
+        std::cout << fmt::format("{} -> {};", table_node_name, index_node_name) << std::endl;
+
+        for (const auto& partition : index_def.table_definition().table_partition().partitions()) {
+          std::string partition_node_name = BuildPartitionNodeName(partition.id().entity_id());
+          std::cout << fmt::format("{} [label=\"PartitionId={}\", color=\"blue\"];", partition_node_name,
+                                   partition.id().entity_id())
+                    << std::endl;
+          std::cout << fmt::format("{} -> {};", index_node_name, partition_node_name) << std::endl;
+        }
+      }
+    } else {
+      std::cout << fmt::format("TenantId={}", tenant_id) << std::endl;
+      std::cout << fmt::format("  SchemaId={}({})", schema_id, schema_name) << std::endl;
+      std::cout << fmt::format("    TableId={}({})", table_id, table_name);
+      std::string table_part_ids = build_partition_ids(table_partitions);
+      if (!table_part_ids.empty()) {
+        std::cout << fmt::format(" Partitions[{}]", table_part_ids);
+      }
+      std::cout << std::endl;
+
+      for (const auto& [index_id, index_def] : param_.index_defs) {
+        std::cout << fmt::format("      IndexId={}({})", index_id, index_def.table_definition().name());
+        std::string part_ids = build_partition_ids(index_def.table_definition().table_partition().partitions());
+        if (!part_ids.empty()) {
+          std::cout << fmt::format(" Partitions[{}]", part_ids);
+        }
+        std::cout << std::endl;
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  void PrintRegion(const Region* region) const {
+    auto parent_id = region->parent_id();
+    bool parent_not_found = parent_id > 0 && param_.region_map.find(parent_id) == param_.region_map.end();
+    if (param_.dot_format) {
+      std::string node_name = fmt::format("Region_{}", region->id());
+      std::string label = fmt::format("Id={}\\n State={}", region->id(), RegionStateToString(region->state()));
+      // handle parent relationship
+      if (parent_not_found) {
+        label += fmt::format(" (Parent {} not found)", parent_id);
+      } else {
+        // no parent or parent found, just print the current node
+      }
+      // print current node
+      std::cout << fmt::format("{} [label=\"{}\"];", node_name, label) << std::endl;
+
+      if (parent_not_found || parent_id <= 0) {
+        // if parent not found or parent_id <= 0, try to connect with partition node using part_id
+        std::string partition_node_name = BuildPartitionNodeName(region->definition().part_id());
+        std::cout << fmt::format("{} -> {}[style = dashed];", partition_node_name, node_name) << std::endl;
+      } else {
+        // print edge from parent to current node
+        std::string parent_node_name = fmt::format("Region_{}", parent_id);
+        std::cout << fmt::format("{} -> {};", parent_node_name, node_name) << std::endl;
+      }
+    } else {
+      std::string parent_not_found_str = parent_not_found ? fmt::format(" (Parent {} not found)", parent_id) : "";
+      std::cout << BuildRegionInfo(region) << parent_not_found_str << std::endl;
+    }
+  }
+
+  // parent must be printed before child
+  void PrintChildRegion(const Region* region, const std::string& prefix = "") const {
+    if (param_.dot_format) {
+      // print current node
+      std::string node_name = fmt::format("Region_{}", region->id());
+      std::string label = fmt::format("Id={}\\n State={}", region->id(), RegionStateToString(region->state()));
+      std::cout << fmt::format("{} [label=\"{}\"];", node_name, label) << std::endl;
+      // print edge from parent to child
+      std::string parent_node_name = fmt::format("Region_{}", region->parent_id());
+      std::cout << fmt::format("{} -> {};", parent_node_name, node_name) << std::endl;
+    } else {
+      std::cout << BuildRegionInfo(region, prefix) << std::endl;
+    }
+  }
+
+  void PrintRegionNotFound(int64_t region_id) const {
+    if (param_.dot_format) {
+      std::string node_name = fmt::format("Region_{}", region_id);
+      std::string label = fmt::format("RegionId={} (not found)", region_id);
+      std::cout << fmt::format("{} [label=\"{}\" style=dashed];", node_name, label) << std::endl;
+    } else {
+      std::cout << "Region " << region_id << " not found in debug response." << std::endl;
+    }
+  }
+
+  void PrintRoot2Target(const std::vector<const Region*>& ancestors) const {
+    if (!param_.dot_format) {
+      std::cout << "Region path (root -> target):" << std::endl;
+    }
+    for (auto iter = ancestors.rbegin(); iter != ancestors.rend(); ++iter) {
+      PrintRegion(*iter);
+    }
+  }
+
+  void PrintChildTreeTitle() const {
+    if (!param_.dot_format) {
+      std::cout << "Child tree:" << std::endl;
+    }
+  }
+
+  void PrintTargetTreeEnd() const {
+    if (!param_.dot_format) {
+      std::cout << std::endl;
+    }
+  }
+
+ private:
+  std::string BuildRegionInfo(const Region* region, const std::string& prefix = "") const {
+    return fmt::format("{}RegionId={} ParentId={} PartId={} State={}", prefix, region->id(), region->parent_id(),
+                       region->definition().part_id(), RegionStateToString(region->state()));
+  }
+
+  std::string RegionStateToString(int state) const { return dingodb::pb::common::StoreRegionState_Name(state); }
+
+  std::string BuildPartitionNodeName(int64_t partition_id) const { return fmt::format("Partition_{}", partition_id); }
+
+ private:
+  const Pretty::ShowRegionTreeParam& param_;
+};
+
+static void Show(const Pretty::ShowRegionTreeParam& param, const RegionTreeOutputHelper& helper, int64_t region_id,
+                 std::set<int64_t>& shown_region_ids) {
+  shown_region_ids.insert(region_id);
+
+  auto region_iter = param.region_map.find(region_id);
+  if (region_iter == param.region_map.end()) {
+    helper.PrintRegionNotFound(region_id);
+    return;
+  }
+
+  if (param.show_ancestor) {
+    // find parent path to root (target region -> parent -> ... -> root)
+    std::vector<const dingodb::pb::store_internal::Region*> parents;
+    const dingodb::pb::store_internal::Region* current_region = region_iter->second;
+    while (current_region != nullptr) {
+      parents.push_back(current_region);
+      auto parent_iter = param.region_map.find(current_region->parent_id());
+      if (parent_iter == param.region_map.end()) {
+        break;
+      }
+      current_region = parent_iter->second;
+      shown_region_ids.insert(current_region->id());
+    }
+
+    // print region path from root to target region (root -> ... -> parent -> target region)
+    helper.PrintRoot2Target(parents);
+  } else {
+    // just print the target region
+    helper.PrintRegion(region_iter->second);
+  }
+
+  // print child tree using DFS
+  std::vector<std::pair<const dingodb::pb::store_internal::Region*, int>> stack;
+  auto add_children = [&](int64_t parent_id, int depth) {
+    auto child_iter = param.region_children.find(parent_id);
+    if (child_iter == param.region_children.end()) {
+      return;
+    }
+    const auto& children = child_iter->second;
+    for (auto iter = children.rbegin(); iter != children.rend(); ++iter) {
+      stack.emplace_back(*iter, depth);
+    }
+  };
+
+  add_children(region_id, 1);
+  if (!stack.empty()) {
+    helper.PrintChildTreeTitle();
+  }
+  while (!stack.empty()) {
+    auto [child, depth] = stack.back();
+    stack.pop_back();
+    helper.PrintChildRegion(child, std::string(depth * 2, ' '));
+    shown_region_ids.insert(child->id());
+    add_children(child->id(), depth + 1);
+  }
+  helper.PrintTargetTreeEnd();
+}
+
+void Pretty::Show(const ShowRegionTreeParam& param) {
+  RegionTreeOutputHelper output_helper(param);
+  output_helper.PrintTableHierarchy();
+
+  std::set<int64_t> shown_region_ids;
+
+  for (const auto& region_id : param.region_ids) {
+    auto iter = param.region_map.find(region_id);
+    if (iter == param.region_map.end()) {
+      client_v2::Show(param, output_helper, region_id, shown_region_ids);
+      continue;
+    }
+    auto parent_id = iter->second->parent_id();
+    if (parent_id <= 0 || param.region_map.find(parent_id) == param.region_map.end()) {
+      // is root region or parent region not found, just show the region and its child tree
+      client_v2::Show(param, output_helper, region_id, shown_region_ids);
+    }
+  }
+
+  for (const auto& region_id : param.region_ids) {
+    if (shown_region_ids.find(region_id) == shown_region_ids.end()) {
+      // this region is not shown yet, show it with child tree
+      client_v2::Show(param, output_helper, region_id, shown_region_ids);
+    }
+  }
 }
 
 }  // namespace client_v2
