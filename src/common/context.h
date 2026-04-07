@@ -126,6 +126,11 @@ class Context {
   bool Flush() const { return flush_; }
   void SetFlush(bool flush) { flush_ = flush; }
 
+  bool EnableTxnGcTaskTracker() const { return enable_txn_gc_task_tracker_; }
+  void SetEnableTxnGcTaskTracker(bool enable_txn_gc_task_tracker) {
+    enable_txn_gc_task_tracker_ = enable_txn_gc_task_tracker;
+  }
+
   BthreadCondPtr CreateSyncModeCond() {
     BAIDU_SCOPED_LOCK(cond_mutex_);
     cond_ = std::make_shared<BthreadCond>();
@@ -179,6 +184,9 @@ class Context {
   bool delete_files_in_range_{false};
   // Flush data to persistence.
   bool flush_{false};
+
+  // Whether to report txn GC info
+  bool enable_txn_gc_task_tracker_{false};
 
   BthreadCondPtr cond_{nullptr};
   bthread_mutex_t cond_mutex_;

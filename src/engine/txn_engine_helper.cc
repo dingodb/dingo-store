@@ -40,6 +40,7 @@
 #include "coprocessor/coprocessor_v2.h"
 #include "document/codec.h"
 #include "engine/gc_safe_point.h"
+#include "engine/gc_task_tracker.h"
 #include "engine/rocks_raw_engine.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -73,6 +74,7 @@ DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
 DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
 DEFINE_bool(dingo_log_switch_backup_detail, false, "backup detail log");
+DEFINE_bool(enable_gc_task_tracker, true, "enable gc task tracker");
 
 DEFINE_int64(max_restore_data_memory_size, 10 * 1024 * 1024, "max restore data memory size");
 BRPC_VALIDATE_GFLAG(max_restore_data_memory_size, brpc::PositiveInteger);
@@ -85,6 +87,7 @@ DECLARE_int64(stream_message_max_limit_size);
 DEFINE_validator(dingo_log_switch_txn_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_txn_gc_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_backup_detail, &PassBool);
+DEFINE_validator(enable_gc_task_tracker, &PassBool);
 DEFINE_validator(enable_rocksdb_perf_metric, &PassBool);
 
 DEFINE_int64(txn_iterator_elapse_time_threshold_ms, 5, "txn iterator elapse time ms threshold");
@@ -5075,6 +5078,11 @@ _interrupt1:
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
 
+  if (ctx->EnableTxnGcTaskTracker()) {
+    GcTaskTracker::GetInstance().AddRegionStats(region_id, start_time_ms, end_time_ms, total_iter_count,
+                                                total_delete_count, safe_point_ts);
+  }
+
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][txn] end region start_key: {} end_key: {} safe_point_ts "
       ": {} time consuming : {} ms total_delete_count : {} total_iter_count : {} ",
@@ -5371,6 +5379,11 @@ _interrupt1:
 
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
+
+  if (ctx->EnableTxnGcTaskTracker()) {
+    GcTaskTracker::GetInstance().AddRegionStats(region_id, start_time_ms, end_time_ms, total_iter_count,
+                                                total_delete_count, safe_point_ts);
+  }
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
@@ -6011,6 +6024,11 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     return;
   }
 
+  std::optional<ScopedGcTaskTracker> gc_task_run;
+  if (FLAGS_enable_gc_task_tracker) {
+    gc_task_run.emplace();
+  }
+
   std::vector<store::RegionPtr> region_ptrs = Server::GetInstance().GetAllAliveRegion();
 
   std::vector<store::RegionPtr> leader_region_ptrs;
@@ -6046,6 +6064,20 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
       DINGO_LOG(INFO) << fmt::format("[txn_gc][tenant({})][region({})]  start_key : {} end_key : {}", tenant_id,
                                      region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
                                      Helper::StringToHex(region_ptr->Range().end_key()));
+    }
+  }
+
+  if (FLAGS_enable_gc_task_tracker) {
+    if (!leader_region_ptrs.empty()) {
+      std::unordered_set<int64_t> alive_region_ids;
+      alive_region_ids.reserve(leader_region_ptrs.size());
+      for (const auto &region_ptr : leader_region_ptrs) {
+        alive_region_ids.insert(region_ptr->Id());
+      }
+      GcTaskTracker::GetInstance().RemoveMissingRegionStats(alive_region_ids);
+    } else {
+      // No leader region found, clear all region stats
+      GcTaskTracker::GetInstance().ClearRegionStats();
     }
   }
 
@@ -6108,6 +6140,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);
     ctx->SetRawEngineType(region_ptr->GetRawEngineType());
     ctx->SetStoreEngineType(region_ptr->GetStoreEngineType());
+    ctx->SetEnableTxnGcTaskTracker(FLAGS_enable_gc_task_tracker);
 
     auto writer = storage->GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
