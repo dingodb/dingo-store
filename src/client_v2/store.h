@@ -31,6 +31,7 @@
 #include "client_v2/interation.h"
 #include "coordinator/coordinator_interaction.h"
 #include "proto/coordinator.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
@@ -416,6 +417,15 @@ struct TxnGCOptions {
 void SetUpTxnGC(CLI::App &app);
 void RunTxnGC(TxnGCOptions const &opt);
 
+struct GetGCMetricsOptions {
+  std::string coor_url;
+  std::string store_addrs;
+  bool include_region{false};
+  std::vector<int64_t> region_ids;
+};
+void SetUpGetGCMetrics(CLI::App &app);
+void RunGetGCMetrics(GetGCMetricsOptions const &opt);
+
 struct TxnCountOptions {
   std::string coor_url;
   int64_t id;
@@ -576,6 +586,26 @@ struct QueryRegionStatusOptions {
 void SetUpQueryRegionStatusMetrics(CLI::App &app);
 void RunQueryRegionStatus(QueryRegionStatusOptions const &opt);
 
+struct QueryRegionPeersOptions {
+  std::string coor_url;
+  std::string store_addrs;
+  std::vector<int64_t> region_ids;
+  int64_t apply_lag_severe{0};
+  int64_t apply_lag_warn{0};
+  bool issues_only{false};
+};
+void SetUpQueryRegionPeers(CLI::App &app);
+void RunQueryRegionPeers(QueryRegionPeersOptions const &opt);
+
+struct ShowRegionTreeOptions {
+  std::string coor_url;
+  int64_t region_id{0};
+  int64_t table_id{0};
+  bool dot_format{false};
+};
+void SetUpShowRegionTree(CLI::App &app);
+void RunShowRegionTree(ShowRegionTreeOptions const &opt);
+
 struct ModifyRegionMetaOptions {
   std::string coor_url;
   std::string store_addrs;
@@ -645,6 +675,7 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const &opt);
 void SendTxnScanLock(TxnScanLockOptions const &opt);
 void SendTxnHeartBeat(TxnHeartBeatOptions const &opt);
 void SendTxnGc(TxnGCOptions const &opt);
+void SendGetGCMetrics(GetGCMetricsOptions const &opt, const std::vector<int64_t> &region_ids = {});
 dingodb::pb::store::TxnScanResponse SendTxnCount(dingodb::pb::common::Region region,
                                                  const dingodb::pb::common::Range &range, int64_t start_ts,
                                                  int64_t resolve_locks = 0);
@@ -669,6 +700,11 @@ void SendCompact(const std::string &cf_name);
 void GetMemoryStats();
 void ReleaseFreeMemory(ReleaseFreeMemoryOptions const &opt);
 std::vector<dingodb::pb::coordinator::ScanRegionInfo> GetRegionsByRange(const dingodb::pb::common::Range &range);
+
+// debug
+dingodb::pb::debug::DebugResponse SendDebugRequest(dingodb::pb::debug::DebugType debug_type,
+                                                   const std::string &store_addr,
+                                                   const std::vector<int64_t> &region_ids);
 
 dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common::Region region,
                                                             const dingodb::pb::common::Range &range, size_t limit,
