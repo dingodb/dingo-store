@@ -2676,6 +2676,63 @@ butil::Status TxnEngineHelper::DoPreWrite(std::shared_ptr<Engine> raft_engine, s
   return ret;
 }
 
+struct PhaseTimer {
+  Tracker::ElapsedTime &accum;
+  TxnReader &txn_reader;
+  int64_t start_ts;
+  const std::string &key;
+  const char *phase_name;
+  const char *op_name;
+  uint64_t start_us;
+  rocksdb::PerfContext *perf_ctx;
+  bool perf_enabled;
+
+  PhaseTimer(Tracker::ElapsedTime &acc, TxnReader &reader, int64_t ts, const std::string &k, const char *name,
+             const char *op = "PreWrite")
+      : accum(acc),
+        txn_reader(reader),
+        start_ts(ts),
+        key(k),
+        phase_name(name),
+        op_name(op),
+        start_us(Helper::TimestampUs()),
+        perf_ctx(nullptr),
+        perf_enabled(FLAGS_enable_rocksdb_perf_metric) {
+    if (perf_enabled) {
+      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+      perf_ctx = rocksdb::get_perf_context();
+      perf_ctx->Reset();
+    }
+  }
+
+  ~PhaseTimer() {
+    uint64_t elapsed = Helper::TimestampUs() - start_us;
+    accum.elapsed_time_us += elapsed;
+    accum.skip_versions += txn_reader.GetSkippedVersions();
+    if (perf_enabled) {
+      accum.rocksdb_perf.block_cache_hit_count += perf_ctx->block_cache_hit_count;
+      accum.rocksdb_perf.block_read_count += perf_ctx->block_read_count;
+      accum.rocksdb_perf.block_read_time_ns += perf_ctx->block_read_time;
+      accum.rocksdb_perf.block_decompress_time_ns += perf_ctx->block_decompress_time;
+      accum.rocksdb_perf.internal_key_skipped_count += perf_ctx->internal_key_skipped_count;
+      accum.rocksdb_perf.internal_delete_skipped_count += perf_ctx->internal_delete_skipped_count;
+      accum.rocksdb_perf.user_key_comparison_count += perf_ctx->user_key_comparison_count;
+      accum.rocksdb_perf.block_read_byte += perf_ctx->block_read_byte;
+      accum.rocksdb_perf.seek_internal_seek_time_ns += perf_ctx->seek_internal_seek_time;
+      accum.rocksdb_perf.find_next_user_entry_time_ns += perf_ctx->find_next_user_entry_time;
+      rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+    }
+
+    if (elapsed > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn]{} start_ts:{}, key:{}, {}, skip_versions:{} time:{} us, perf:[{}]", op_name, start_ts,
+                         Helper::StringToHex(key), phase_name, txn_reader.GetSkippedVersions(), elapsed,
+                         accum.rocksdb_perf.ToString());
+    }
+    txn_reader.ResetSkippedVersions();
+  }
+};
+
 butil::Status TxnEngineHelper::Prewrite(
     RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region,
     const std::vector<pb::store::Mutation> &mutations, const std::string &primary_lock, int64_t start_ts,
@@ -2731,60 +2788,6 @@ butil::Status TxnEngineHelper::Prewrite(
   auto tracker = ctx->Tracker();
   tracker->SetStartTs(start_ts);
   uint64_t start_time = Helper::TimestampUs();
-
-  struct PhaseTimer {
-    Tracker::ElapsedTime &accum;
-    TxnReader &txn_reader;
-    int64_t start_ts;
-    const std::string &key;
-    const char *phase_name;
-    uint64_t start_us;
-    rocksdb::PerfContext *perf_ctx;
-    bool perf_enabled;
-
-    PhaseTimer(Tracker::ElapsedTime &acc, TxnReader &reader, int64_t ts, const std::string &k, const char *name)
-        : accum(acc),
-          txn_reader(reader),
-          start_ts(ts),
-          key(k),
-          phase_name(name),
-          start_us(Helper::TimestampUs()),
-          perf_ctx(nullptr),
-          perf_enabled(FLAGS_enable_rocksdb_perf_metric) {
-      if (perf_enabled) {
-        rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
-        perf_ctx = rocksdb::get_perf_context();
-        perf_ctx->Reset();
-      }
-    }
-
-    ~PhaseTimer() {
-      uint64_t elapsed = Helper::TimestampUs() - start_us;
-      accum.elapsed_time_us += elapsed;
-      accum.skip_versions += txn_reader.GetSkippedVersions();
-      if (perf_enabled) {
-        accum.rocksdb_perf.block_cache_hit_count += perf_ctx->block_cache_hit_count;
-        accum.rocksdb_perf.block_read_count += perf_ctx->block_read_count;
-        accum.rocksdb_perf.block_read_time_ns += perf_ctx->block_read_time;
-        accum.rocksdb_perf.block_decompress_time_ns += perf_ctx->block_decompress_time;
-        accum.rocksdb_perf.internal_key_skipped_count += perf_ctx->internal_key_skipped_count;
-        accum.rocksdb_perf.internal_delete_skipped_count += perf_ctx->internal_delete_skipped_count;
-        accum.rocksdb_perf.user_key_comparison_count += perf_ctx->user_key_comparison_count;
-        accum.rocksdb_perf.block_read_byte += perf_ctx->block_read_byte;
-        accum.rocksdb_perf.seek_internal_seek_time_ns += perf_ctx->seek_internal_seek_time;
-        accum.rocksdb_perf.find_next_user_entry_time_ns += perf_ctx->find_next_user_entry_time;
-        rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
-      }
-
-      if (elapsed > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn]PreWrite start_ts:{}, key:{}, {}, skip_versions:{} time:{} us, perf:[{}]", start_ts,
-                           Helper::StringToHex(key), phase_name, txn_reader.GetSkippedVersions(), elapsed,
-                           accum.rocksdb_perf.ToString());
-      }
-      txn_reader.ResetSkippedVersions();
-    }
-  };
 
   bool use_async_commit = false;
   if (!secondaries.empty()) {
@@ -3314,33 +3317,28 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   auto *error = response->mutable_error();
   auto *txn_result = response->mutable_txn_result();
 
+  auto tracker = ctx->Tracker();
+  tracker->SetStartTs(start_ts);
+
+  Tracker::ElapsedTime lock_et{"check_lock"};
+  Tracker::ElapsedTime already_commit_et{"check_already_commit"};
+  Tracker::ElapsedTime rollback_et{"check_rollback"};
   // for every key, check and do commit, if primary key is failed, the whole commit is failed
   std::vector<pb::store::LockInfo> lock_infos;
   for (const auto &key : keys) {
     pb::store::LockInfo lock_info;
-    auto ret = txn_reader.GetLockInfo(key, lock_info);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                      commit_ts)
-                       << ", get lock info failed, status: " << ret.error_str();
-      error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-      error->set_errmsg(ret.error_str());
-      return ret;
+    {
+      PhaseTimer t(lock_et, txn_reader, start_ts, key, "check lock", "Commit");
+      auto ret = txn_reader.GetLockInfo(key, lock_info);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", get lock info failed, status: " << ret.error_str();
+        error->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        error->set_errmsg(ret.error_str());
+        return ret;
+      }
     }
-
-    // // if lock is not exist, return TxnNotFound
-    // if (lock_info.primary_lock().empty()) {
-    //   DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-    //   start_ts,
-    //                                     commit_ts)
-    //                      << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key) << ",
-    //                      start_ts: " << start_ts;
-
-    //   auto *txn_not_found = txn_result->mutable_txn_not_found();
-    //   txn_not_found->set_start_ts(start_ts);
-
-    //   return butil::Status::OK();
-    // }
 
     if (lock_info.lock_ts() == start_ts) {
       // lock_ts match start_ts, check if lock_type is Put/Delete/PutIfAbsent
@@ -3379,16 +3377,19 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
       // check if the key is already committed, if it is committed can skip it
       pb::store::WriteInfo write_info;
       int64_t prev_commit_ts = 0;
-      auto ret2 =
-          txn_reader.GetWriteInfo(start_ts, commit_ts, start_ts, key, false, true, true, write_info, prev_commit_ts);
-      if (!ret2.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                        commit_ts)
-                         << ", get write info failed, key: " << Helper::StringToHex(key)
-                         << ", status: " << ret2.error_str();
-        error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-        error->set_errmsg(ret2.error_str());
-        return ret2;
+      {
+        PhaseTimer t(already_commit_et, txn_reader, start_ts, key, "check already commit", "Commit");
+        auto ret2 =
+            txn_reader.GetWriteInfo(start_ts, commit_ts, start_ts, key, false, true, true, write_info, prev_commit_ts);
+        if (!ret2.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", get write info failed, key: " << Helper::StringToHex(key)
+                           << ", status: " << ret2.error_str();
+          error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+          error->set_errmsg(ret2.error_str());
+          return ret2;
+        }
       }
 
       // if prev_commit_ts == commit_ts, means this key of start_ts is already committed, can skip it
@@ -3401,12 +3402,15 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
 
       // check if the key is already rollbacked, if it is rollbacked, return WriteConflict
       // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
-      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
-      if (!ret1.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                        commit_ts)
-                         << ", get rollback info failed, key: " << Helper::StringToHex(key)
-                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      {
+        PhaseTimer t(rollback_et, txn_reader, start_ts, key, "check rollback", "Commit");
+        auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
+        if (!ret1.ok()) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", get rollback info failed, key: " << Helper::StringToHex(key)
+                           << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+        }
       }
 
       if (write_info.start_ts() == start_ts) {
@@ -3458,6 +3462,10 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
     // now txn is match, prepare to commit
     lock_infos.push_back(lock_info);
   }
+
+  tracker->RecordElapsedTime(std::move(lock_et));
+  tracker->RecordElapsedTime(std::move(already_commit_et));
+  tracker->RecordElapsedTime(std::move(rollback_et));
 
   auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos, start_ts, commit_ts);
   if (!ret.ok()) {

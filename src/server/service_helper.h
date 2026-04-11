@@ -244,14 +244,25 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
       mut_elapsed_time->set_skip_version(et.skip_versions);
 
       auto summary = et.rocksdb_perf.ToSummary();
-      auto* perf_summary = mut_elapsed_time->mutable_rocksdb_perf_summary();
+      auto* perf_summary = mut_elapsed_time->mutable_storage_engine_perf_summary();
       perf_summary->set_io_time_ns(summary.io_time_ns);
-      perf_summary->set_cache_hit_count(summary.cache_hit_count);
+      perf_summary->set_miss_block_count(summary.miss_block_cache_count);
       perf_summary->set_internal_skipped_count(summary.internal_skipped_count);
+      perf_summary->set_internal_tombstone_count(summary.internal_tombstone_count);
+      // auto* perf_context = mut_elapsed_time->mutable_rocksdb_perf_context();
+      // perf_context->set_block_cache_hit_count(et.rocksdb_perf.block_cache_hit_count);
+      // perf_context->set_block_read_count(et.rocksdb_perf.block_read_count);
+      // perf_context->set_block_read_time_ns(et.rocksdb_perf.block_read_time_ns);
+      // perf_context->set_block_decompress_time_ns(et.rocksdb_perf.block_decompress_time_ns);
+      // perf_context->set_internal_key_skipped_count(et.rocksdb_perf.internal_key_skipped_count);
+      // perf_context->set_internal_delete_skipped_count(et.rocksdb_perf.internal_delete_skipped_count);
+      // perf_context->set_user_key_comparison_count(et.rocksdb_perf.user_key_comparison_count);
+      // perf_context->set_block_read_byte(et.rocksdb_perf.block_read_byte);
+      // perf_context->set_seek_internal_seek_time_ns(et.rocksdb_perf.seek_internal_seek_time_ns);
+      // perf_context->set_find_next_user_entry_time_ns(et.rocksdb_perf.find_next_user_entry_time_ns);
 
-      DINGO_LOG(INFO) << fmt::format("[perf][start_ts:{}][{}] time_us={} skip_version={} {}",
-                                        tracker->StartTs(), et.name, et.elapsed_time_us, et.skip_versions,
-                                        et.rocksdb_perf.ToString());
+      DINGO_LOG(INFO) << fmt::format("[perf][start_ts:{}][{}] time_us={} skip_version={} {}", tracker->StartTs(),
+                                     et.name, et.elapsed_time_us, et.skip_versions, et.rocksdb_perf.ToString());
     }
   }
 }
