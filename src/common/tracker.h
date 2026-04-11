@@ -54,13 +54,16 @@ class Tracker {
   };
   struct RocksDBPerfSummary {
     uint64_t io_time_ns{0};
-    uint64_t cache_hit_count{0};
+    uint64_t miss_block_cache_count{0};
     uint64_t internal_skipped_count{0};
+    uint64_t internal_tombstone_count{0};
 
     RocksDBPerfSummary& operator+=(const RocksDBPerfSummary& other) {
       io_time_ns += other.io_time_ns;
-      cache_hit_count += other.cache_hit_count;
+      miss_block_cache_count += other.miss_block_cache_count;
       internal_skipped_count += other.internal_skipped_count;
+      internal_tombstone_count += other.internal_tombstone_count;
+
       return *this;
     }
   };
@@ -94,8 +97,9 @@ class Tracker {
     RocksDBPerfSummary ToSummary() const {
       return {
           block_read_time_ns + block_decompress_time_ns + seek_internal_seek_time_ns + find_next_user_entry_time_ns,
-          block_cache_hit_count,
-          internal_key_skipped_count + internal_delete_skipped_count,
+          block_read_count,
+          internal_key_skipped_count,
+          internal_delete_skipped_count,
       };
     }
 
@@ -211,9 +215,7 @@ class Tracker {
     time_.elapsed_times.push_back({name, elapsed_time, skip_versions, perf});
   }
 
-  void RecordElapsedTime(ElapsedTime&& et) {
-    time_.elapsed_times.push_back(std::move(et));
-  }
+  void RecordElapsedTime(ElapsedTime&& et) { time_.elapsed_times.push_back(std::move(et)); }
 
   // latency statistics
   static bvar::LatencyRecorder service_queue_latency;
