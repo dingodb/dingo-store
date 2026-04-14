@@ -82,3 +82,7 @@ docker/rocky8/rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz
 
 # claude
 CLAUDE.md
+
+
+#codex
+.codex
