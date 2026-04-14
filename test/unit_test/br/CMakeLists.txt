@@ -1,6 +1,6 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 
-file(GLOB UNIT_TEST_BR_SRCS "./*.cc")
+file(GLOB UNIT_TEST_BR_SRCS CONFIGURE_DEPENDS "./*.cc")
 
 add_library(UNIT_TEST_BR_OBJS OBJECT ${UNIT_TEST_BR_SRCS})
 
