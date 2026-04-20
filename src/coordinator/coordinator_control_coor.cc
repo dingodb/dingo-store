@@ -2136,7 +2136,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);
   region_definition->set_part_id(part_id);
-  region_definition->set_part_id(tenant_id);
+  region_definition->set_tenant_id(tenant_id);
   region_definition->set_raw_engine(raw_engine);
   region_definition->set_store_engine(store_engine);
   if (new_index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
