@@ -1,4 +1,3 @@
-# FROM rockylinux/rockylinux:8.9
 FROM dingodatabase/dingo-eureka:rocky8-store
 
 ENV TZ=Asia/Shanghai
