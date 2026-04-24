@@ -38,6 +38,7 @@ ExternalProject_Add(
              -DBUILD_TESTS=OFF
              -DBUILD_BENCHMARK=OFF
              -DBUILD_EXAMPLES=OFF
+             -DRust_RESOLVE_RUSTUP_TOOLCHAINS=OFF
              ${EXTERNAL_OPTIONAL_ARGS}
   LIST_SEPARATOR |
   CMAKE_CACHE_ARGS
