@@ -1587,22 +1587,200 @@ void Pretty::Show(dingodb::pb::coordinator::GetGCSafePointResponse& response) {
   }
 }
 
-void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool is_interactive) {
+void Pretty::Show(const dingodb::pb::debug::DebugResponse::GCMetrics& gc_metrics, bool include_region,
+                  bool region_only) {
+  auto format_time = [](int64_t ts_ms) -> std::string {
+    if (ts_ms <= 0) {
+      return "-";
+    }
+    return dingodb::Helper::FormatMsTime(ts_ms);
+  };
+
+  auto build_region_rows = [&]() {
+    std::vector<std::vector<std::string>> region_rows = {
+        {"RegionId", "LastStart", "LastEnd", "SafePointTs", "IterCount", "DeleteCount", "InfoType"}};
+    for (const auto& region_history : gc_metrics.region_histories()) {
+      if (region_history.has_last_history()) {
+        const auto& last = region_history.last_history();
+        region_rows.push_back({fmt::format("{}", region_history.region_id()), format_time(last.start_time_ms()),
+                               format_time(last.end_time_ms()), fmt::format("{}", last.safe_point_ts()),
+                               fmt::format("{}", last.iter_count()), fmt::format("{}", last.delete_count()), "LastGc"});
+      }
+
+      if (region_history.has_last_delete_history()) {
+        const auto& last_delete = region_history.last_delete_history();
+        region_rows.push_back({fmt::format("{}", region_history.region_id()), format_time(last_delete.start_time_ms()),
+                               format_time(last_delete.end_time_ms()), fmt::format("{}", last_delete.safe_point_ts()),
+                               fmt::format("{}", last_delete.iter_count()),
+                               fmt::format("{}", last_delete.delete_count()), "LastWithDelete"});
+      }
+    }
+    return region_rows;
+  };
+
+  if (region_only) {
+    std::cout << "Region GC Metrics:" << std::endl;
+    auto region_rows = build_region_rows();
+    if (region_rows.size() == 1) {
+      std::cout << "No region gc metrics found." << std::endl;
+      return;
+    }
+    PrintTableAdaptive(region_rows);
+    std::cout << std::endl;
+    return;
+  }
+
+  std::vector<std::vector<std::string>> metric_rows = {
+      {"FirstGcStart", "LastGcEnd", "GCRunCount", "TotalIterCount", "TotalDeleteCount"},
+      {format_time(gc_metrics.first_start_time_ms()), format_time(gc_metrics.last_end_time_ms()),
+       fmt::format("{}", gc_metrics.run_count()), fmt::format("{}", gc_metrics.total_iter_count()),
+       fmt::format("{}", gc_metrics.total_delete_count())},
+  };
+  PrintTableAdaptive(metric_rows);
+
+  const dingodb::pb::debug::DebugResponse::TxnGcHistoryItem* last_gc = nullptr;
+  const dingodb::pb::debug::DebugResponse::TxnGcHistoryItem* last_gc_with_delete = nullptr;
+
+  if (gc_metrics.history_size() > 0) {
+    last_gc = &gc_metrics.history(0);
+  }
+
+  if (gc_metrics.has_last_with_delete_history()) {
+    last_gc_with_delete = &gc_metrics.last_with_delete_history();
+  }
+
+  if (last_gc_with_delete == nullptr) {
+    for (const auto& item : gc_metrics.history()) {
+      if (item.delete_count() > 0) {
+        last_gc_with_delete = &item;
+        break;
+      }
+    }
+  }
+
+  auto format_item = [&](const dingodb::pb::debug::DebugResponse::TxnGcHistoryItem* item) -> std::string {
+    if (item == nullptr) {
+      return "StartTime=- EndTime=- IterCount=0 DeleteCount=0";
+    }
+    return fmt::format("StartTime={} EndTime={} IterCount={} DeleteCount={}", format_time(item->start_time_ms()),
+                       format_time(item->end_time_ms()), item->iter_count(), item->delete_count());
+  };
+
+  std::cout << "Last GC With Deletions: " << format_item(last_gc_with_delete) << std::endl;
+  std::cout << "Last GC: " << format_item(last_gc) << std::endl;
+
+  std::cout << std::endl << "GC History:" << std::endl;
+  std::vector<std::vector<std::string>> history_rows = {{"Index", "StartTime", "EndTime", "IterCount", "DeleteCount"}};
+
+  for (int i = 0; i < gc_metrics.history_size(); ++i) {
+    const auto& item = gc_metrics.history(i);
+    history_rows.push_back({fmt::format("{}", gc_metrics.history_size() - i), format_time(item.start_time_ms()),
+                            format_time(item.end_time_ms()), fmt::format("{}", item.iter_count()),
+                            fmt::format("{}", item.delete_count())});
+  }
+  PrintTableAdaptive(history_rows);
+
+  if (include_region) {
+    std::cout << std::endl << "Last GC Per Region:" << std::endl;
+    PrintTableAdaptive(build_region_rows());
+  }
+}
+
+void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool is_interactive, bool show_region_ids) {
   if (ShowError(response.error())) {
     return;
   }
-  std::vector<std::vector<ftxui::Element>> rows = {{
-      ftxui::paragraph("Id"),
-      ftxui::paragraph("Name"),
-      ftxui::paragraph("NextStep"),
-      ftxui::paragraph("TaskSize"),
-      ftxui::paragraph("CreateTime"),
-      ftxui::paragraph("FinishTime"),
-  }};
+
+  // Header. Append region1/region2 columns only when the user asked for them.
+  std::vector<ftxui::Element> header = {
+      ftxui::paragraph("Id"),       ftxui::paragraph("Name"),       ftxui::paragraph("NextStep"),
+      ftxui::paragraph("TaskSize"), ftxui::paragraph("CreateTime"), ftxui::paragraph("FinishTime"),
+  };
+  if (show_region_ids) {
+    header.push_back(ftxui::paragraph("regions"));
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {header};
+
   if (response.job_list_size() == 0) {
     std::cout << "Task list is empty." << std::endl;
     return;
   }
+
+  // Helper: collect distinct non-zero region_ids from a job by exhaustively scanning
+  // every place a region_id can appear:
+  //   task -> store_operations[].pre_check (TaskPreCheck oneof)
+  //   task -> store_operations[].region_cmds[].region_id
+  //   task -> store_operations[].region_cmds[].<oneof Request payload region_ids>
+  //   task -> coordinator_operations[].<oneof Operation payload region_id>
+  // Skipped on purpose:
+  //   SnapshotVectorIndexRequest.vector_index_id (semantically the same int64 as a
+  //     region_id but the field is named differently — exclude to avoid surprise).
+  //   TransferLeaderRequest / DeleteDataRequest (carry no region_id field).
+  auto collect_region_ids = [](const dingodb::pb::coordinator::Job& job) {
+    std::vector<int64_t> region_ids;
+    auto try_push = [&region_ids](int64_t id) {
+      if (id == 0) return;
+      if (std::find(region_ids.begin(), region_ids.end(), id) != region_ids.end()) return;
+      region_ids.push_back(id);
+    };
+
+    for (const auto& task : job.tasks()) {
+      for (const auto& store_op : task.store_operations()) {
+        // TaskPreCheck oneof — both pre-check shapes carry region_id.
+        const auto& pre_check = store_op.pre_check();
+        if (pre_check.has_region_check()) {
+          try_push(pre_check.region_check().region_id());
+        }
+        if (pre_check.has_store_region_check()) {
+          try_push(pre_check.store_region_check().region_id());
+        }
+
+        for (const auto& cmd : store_op.region_cmds()) {
+          try_push(cmd.region_id());
+
+          // RegionCmd's oneof Request — many sub-messages embed extra region_ids
+          // (e.g. split has from/to, merge has source/target). Duplicates with
+          // cmd.region_id() are filtered by try_push.
+          if (cmd.has_create_request()) {
+            try_push(cmd.create_request().region_definition().id());
+            try_push(cmd.create_request().split_from_region_id());
+          } else if (cmd.has_delete_request()) {
+            try_push(cmd.delete_request().region_id());
+          } else if (cmd.has_split_request()) {
+            try_push(cmd.split_request().split_from_region_id());
+            try_push(cmd.split_request().split_to_region_id());
+          } else if (cmd.has_merge_request()) {
+            try_push(cmd.merge_request().source_region_id());
+            try_push(cmd.merge_request().target_region_id());
+          } else if (cmd.has_change_peer_request()) {
+            try_push(cmd.change_peer_request().region_definition().id());
+          } else if (cmd.has_update_definition_request()) {
+            try_push(cmd.update_definition_request().new_region_definition().id());
+          } else if (cmd.has_purge_request()) {
+            try_push(cmd.purge_request().region_id());
+          } else if (cmd.has_switch_split_request()) {
+            try_push(cmd.switch_split_request().region_id());
+          } else if (cmd.has_hold_vector_index_request()) {
+            try_push(cmd.hold_vector_index_request().region_id());
+          } else if (cmd.has_stop_request()) {
+            try_push(cmd.stop_request().region_id());
+          } else if (cmd.has_destroy_executor_request()) {
+            try_push(cmd.destroy_executor_request().region_id());
+          }
+          // Future: extend here when RegionCmd grows new oneof variants.
+        }
+      }
+
+      for (const auto& coord_op : task.coordinator_operations()) {
+        if (coord_op.has_drop_region_operation()) {
+          try_push(coord_op.drop_region_operation().region_id());
+        }
+        // Future: extend here when CoordinatorOperation grows new oneof variants.
+      }
+    }
+    return region_ids;
+  };
+
   for (auto const& job : response.job_list()) {
     std::vector<ftxui::Element> row = {
         ftxui::paragraph(fmt::format("{}", job.id())),
@@ -1612,6 +1790,9 @@ void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool i
         ftxui::paragraph(job.create_time()),
         ftxui::paragraph(job.finish_time()),
     };
+    if (show_region_ids) {
+      row.push_back(ftxui::paragraph(FormatRegionIdsCell(collect_region_ids(job))));
+    }
     rows.push_back(row);
   }
 
@@ -1664,9 +1845,8 @@ void Pretty::Show(dingodb::pb::coordinator::QueryRegionResponse& response) {
   if (ShowError(response.error())) {
     return;
   }
-  std::vector<std::vector<std::string>> rows = {
-      {"Id", "Epoch", "Type", "State", "LeaderStoreId", "CreateTime", "StartKey", "EndKey", "TableId", "SchemaId",
-       "TenantId"}};
+  std::vector<std::vector<std::string>> rows = {{"Id", "Epoch", "Type", "State", "LeaderStoreId", "CreateTime",
+                                                 "StartKey", "EndKey", "TableId", "SchemaId", "TenantId"}};
   const auto& region = response.region();
   std::vector<std::string> row = {
       fmt::format("{}", region.id()),

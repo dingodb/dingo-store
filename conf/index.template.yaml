@@ -25,6 +25,7 @@ region:
   merge_size_ratio: 0.2
   merge_keys_ratio: 0.2
   merge_check_concurrency: 3
+  split_strategy: POST_CREATE_REGION
 raft:
   listen_host: $RAFT_LISTEN_HOST$
   host: $RAFT_HOST$
