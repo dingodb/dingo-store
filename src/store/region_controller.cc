@@ -229,8 +229,16 @@ void CreateRegionTask::Run() {
 
 butil::Status DeleteRegionTask::PreValidateDeleteRegion(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-  return ValidateDeleteRegion(store_meta_manager,
-                              store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+  butil::Status status = ValidateDeleteRegion(store_meta_manager,
+                                              store_meta_manager->GetStoreRegionMeta()->GetRegion(command.region_id()));
+  if (!status.ok()) {
+    std::string s = fmt::format("[control.region][region({})] job_id : {} delete region pre validate failed, error: {}",
+                                command.region_id(), command.job_id(), status.error_str());
+    DINGO_LOG(ERROR) << pb::error::Errno_Name(status.error_code()) << " : " << s;
+
+    return butil::Status(status.error_code(), s);
+  }
+  return status;
 }
 
 butil::Status DeleteRegionTask::ValidateDeleteRegion(std::shared_ptr<StoreMetaManager> /*store_meta_manager*/,
@@ -260,6 +268,8 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   // Valiate region
   auto status = ValidateDeleteRegion(store_meta_manager, region);
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] delete region pre validate failed, error: {}",
+                                    region_id, status.error_str());
     return status;
   }
 
@@ -503,6 +513,9 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
 
   auto status = Helper::ValidateRaftStatusForSplitMerge(node->GetStatus());
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[control.region][region({})] validate raft status for split failed, child_region_id: {} error: {}",
+        parent_region_id, child_region_id, status.error_str());
     return status;
   }
 

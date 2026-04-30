@@ -1688,22 +1688,101 @@ void Pretty::Show(const dingodb::pb::debug::DebugResponse::GCMetrics& gc_metrics
   }
 }
 
-void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool is_interactive) {
+void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool is_interactive, bool show_region_ids) {
   if (ShowError(response.error())) {
     return;
   }
-  std::vector<std::vector<ftxui::Element>> rows = {{
-      ftxui::paragraph("Id"),
-      ftxui::paragraph("Name"),
-      ftxui::paragraph("NextStep"),
-      ftxui::paragraph("TaskSize"),
-      ftxui::paragraph("CreateTime"),
-      ftxui::paragraph("FinishTime"),
-  }};
+
+  // Header. Append region1/region2 columns only when the user asked for them.
+  std::vector<ftxui::Element> header = {
+      ftxui::paragraph("Id"),         ftxui::paragraph("Name"),       ftxui::paragraph("NextStep"),
+      ftxui::paragraph("TaskSize"),   ftxui::paragraph("CreateTime"), ftxui::paragraph("FinishTime"),
+  };
+  if (show_region_ids) {
+    header.push_back(ftxui::paragraph("regions"));
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {header};
+
   if (response.job_list_size() == 0) {
     std::cout << "Task list is empty." << std::endl;
     return;
   }
+
+  // Helper: collect distinct non-zero region_ids from a job by exhaustively scanning
+  // every place a region_id can appear:
+  //   task -> store_operations[].pre_check (TaskPreCheck oneof)
+  //   task -> store_operations[].region_cmds[].region_id
+  //   task -> store_operations[].region_cmds[].<oneof Request payload region_ids>
+  //   task -> coordinator_operations[].<oneof Operation payload region_id>
+  // Skipped on purpose:
+  //   SnapshotVectorIndexRequest.vector_index_id (semantically the same int64 as a
+  //     region_id but the field is named differently — exclude to avoid surprise).
+  //   TransferLeaderRequest / DeleteDataRequest (carry no region_id field).
+  auto collect_region_ids = [](const dingodb::pb::coordinator::Job& job) {
+    std::vector<int64_t> region_ids;
+    auto try_push = [&region_ids](int64_t id) {
+      if (id == 0) return;
+      if (std::find(region_ids.begin(), region_ids.end(), id) != region_ids.end()) return;
+      region_ids.push_back(id);
+    };
+
+    for (const auto& task : job.tasks()) {
+      for (const auto& store_op : task.store_operations()) {
+        // TaskPreCheck oneof — both pre-check shapes carry region_id.
+        const auto& pre_check = store_op.pre_check();
+        if (pre_check.has_region_check()) {
+          try_push(pre_check.region_check().region_id());
+        }
+        if (pre_check.has_store_region_check()) {
+          try_push(pre_check.store_region_check().region_id());
+        }
+
+        for (const auto& cmd : store_op.region_cmds()) {
+          try_push(cmd.region_id());
+
+          // RegionCmd's oneof Request — many sub-messages embed extra region_ids
+          // (e.g. split has from/to, merge has source/target). Duplicates with
+          // cmd.region_id() are filtered by try_push.
+          if (cmd.has_create_request()) {
+            try_push(cmd.create_request().region_definition().id());
+            try_push(cmd.create_request().split_from_region_id());
+          } else if (cmd.has_delete_request()) {
+            try_push(cmd.delete_request().region_id());
+          } else if (cmd.has_split_request()) {
+            try_push(cmd.split_request().split_from_region_id());
+            try_push(cmd.split_request().split_to_region_id());
+          } else if (cmd.has_merge_request()) {
+            try_push(cmd.merge_request().source_region_id());
+            try_push(cmd.merge_request().target_region_id());
+          } else if (cmd.has_change_peer_request()) {
+            try_push(cmd.change_peer_request().region_definition().id());
+          } else if (cmd.has_update_definition_request()) {
+            try_push(cmd.update_definition_request().new_region_definition().id());
+          } else if (cmd.has_purge_request()) {
+            try_push(cmd.purge_request().region_id());
+          } else if (cmd.has_switch_split_request()) {
+            try_push(cmd.switch_split_request().region_id());
+          } else if (cmd.has_hold_vector_index_request()) {
+            try_push(cmd.hold_vector_index_request().region_id());
+          } else if (cmd.has_stop_request()) {
+            try_push(cmd.stop_request().region_id());
+          } else if (cmd.has_destroy_executor_request()) {
+            try_push(cmd.destroy_executor_request().region_id());
+          }
+          // Future: extend here when RegionCmd grows new oneof variants.
+        }
+      }
+
+      for (const auto& coord_op : task.coordinator_operations()) {
+        if (coord_op.has_drop_region_operation()) {
+          try_push(coord_op.drop_region_operation().region_id());
+        }
+        // Future: extend here when CoordinatorOperation grows new oneof variants.
+      }
+    }
+    return region_ids;
+  };
+
   for (auto const& job : response.job_list()) {
     std::vector<ftxui::Element> row = {
         ftxui::paragraph(fmt::format("{}", job.id())),
@@ -1713,6 +1792,9 @@ void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool i
         ftxui::paragraph(job.create_time()),
         ftxui::paragraph(job.finish_time()),
     };
+    if (show_region_ids) {
+      row.push_back(ftxui::paragraph(FormatRegionIdsCell(collect_region_ids(job))));
+    }
     rows.push_back(row);
   }
 

@@ -38,6 +38,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/push.pb.h"
@@ -311,7 +312,47 @@ class CoordinatorControl : public MetaControl {
 
   // change peer region
   butil::Status ChangePeerRegionWithJob(int64_t region_id, std::vector<int64_t> &new_store_ids,
-                                        pb::coordinator_internal::MetaIncrement &meta_increment);
+                                        pb::coordinator_internal::MetaIncrement &meta_increment,
+                                        bool verify_peer_on_store);
+
+  // Query every peer in the region and split their store_ids into those that
+  // currently have the region on their store and those that do not. Returns a
+  // non-OK status only when a peer query hits a real error (not EREGION_NOT_FOUND).
+  static butil::Status VerifyPeersOnStore(const pb::coordinator_internal::RegionInternal &region,
+                                          std::vector<int64_t> &exist_store_ids,
+                                          std::vector<int64_t> &not_exist_store_ids);
+
+  // Pure-function output of the shadow-peer maintenance algorithm. Given the four
+  // input vectors (new, old, exist, not_exist), it determines exactly one outcome:
+  // reject / no-op / activate one shadow / clean up one shadow. Public so unit
+  // tests can drive the 4-step algorithm directly without touching CoordinatorControl
+  // state or the RPC layer.
+  struct ShadowDecision {
+    enum Action { kReject, kNoOp, kAddShadow, kRemoveShadow };
+    Action action = kReject;
+    int reject_step = 0;  // 1 / 3 / 4 when action == kReject; 0 otherwise
+
+    // Step2 buckets, populated only after step1 passes.
+    std::vector<int64_t> to_add;
+    std::vector<int64_t> to_remove_real;
+    std::vector<int64_t> shadow_dropped;
+
+    // Action target, valid only for kAddShadow / kRemoveShadow.
+    int64_t target_store_id = 0;
+
+    // Reject details, valid only for kReject.
+    pb::error::Errno error_code = pb::error::Errno::OK;
+    std::string error_msg;
+  };
+
+  // Run the 4-step shadow maintenance algorithm. Pure function: no RPCs, no
+  // CoordinatorControl state, no logging. See plan precious-plotting-dewdrop.md
+  // for the algorithm and the 15-row case matrix this is designed to satisfy.
+  static ShadowDecision DecideShadowAction(int64_t region_id, const std::vector<int64_t> &new_store_ids,
+                                           const std::vector<int64_t> &old_store_ids,
+                                           const std::vector<int64_t> &exist_store_ids,
+                                           const std::vector<int64_t> &not_exist_store_ids);
+
   butil::Status ChangePairPeerRegionWithJob(int64_t region_id, std::vector<int64_t> &new_store_ids,
                                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
@@ -547,6 +588,10 @@ class CoordinatorControl : public MetaControl {
   static butil::Status RpcSendPushStoreOperation(const pb::common::Location &location,
                                                  pb::push::PushStoreOperationRequest &request,
                                                  pb::push::PushStoreOperationResponse &response);
+
+  static butil::Status RpcSendQueryRegionStatus(const pb::common::Location &location,
+                                                dingodb::pb::debug::DebugRequest &request,
+                                                dingodb::pb::debug::DebugResponse &response);
 
   // get store operation
   int GetStoreOperation(int64_t store_id, pb::coordinator::StoreOperation &store_operation);

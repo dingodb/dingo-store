@@ -15,6 +15,7 @@
 #ifndef DINGODB_CLIENT_PRETTY_H_
 #define DINGODB_CLIENT_PRETTY_H_
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -153,7 +154,37 @@ class Pretty {
   static void Show(dingodb::pb::coordinator::GetGCSafePointResponse &response);
   static void Show(const dingodb::pb::debug::DebugResponse::GCMetrics &gc_metrics, bool include_region,
                    bool region_only = false);
-  static void Show(dingodb::pb::coordinator::GetJobListResponse &response, bool is_interactive);
+  static void Show(dingodb::pb::coordinator::GetJobListResponse &response, bool is_interactive,
+                   bool show_region_ids = false);
+
+  // Format a deduped vector of region_ids for the "regions" cell of GetJobList.
+  // - sorts ascending internally (caller need not pre-sort)
+  // - returns "" for empty input
+  // - returns the full comma-joined list when size <= 5
+  // - truncates to first 5 sorted values, appends "...<total>" when size > 5
+  //
+  // Inline so the unit test binary (which links DINGODB_OBJS but not the
+  // client_v2 sources) can pick up the symbol without extra CMake plumbing.
+  static inline std::string FormatRegionIdsCell(std::vector<int64_t> region_ids) {
+    if (region_ids.empty()) return "";
+
+    std::sort(region_ids.begin(), region_ids.end());
+
+    constexpr size_t kMaxDisplayed = 5;
+    const size_t total = region_ids.size();
+    const size_t shown = std::min(total, kMaxDisplayed);
+
+    std::string out;
+    for (size_t i = 0; i < shown; ++i) {
+      if (i > 0) out += ",";
+      out += std::to_string(region_ids[i]);
+    }
+    if (total > kMaxDisplayed) {
+      out += "...";
+      out += std::to_string(total);
+    }
+    return out;
+  }
 
   static void Show(dingodb::pb::coordinator::GetExecutorMapResponse &response);
   static void Show(dingodb::pb::coordinator::QueryRegionResponse &response);

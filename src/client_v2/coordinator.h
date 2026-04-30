@@ -357,6 +357,7 @@ struct AddPeerRegionOption {
   std::string coor_url;
   int64_t store_id;
   int64_t region_id;
+  bool verify_peer_on_store;
 };
 void SetUpAddPeerRegion(CLI::App &app);
 void RunAddPeerRegion(AddPeerRegionOption const &opt);
@@ -365,6 +366,7 @@ struct RemovePeerRegionOption {
   std::string coor_url;
   int64_t store_id;
   int64_t region_id;
+  bool verify_peer_on_store;
 };
 void SetUpRemovePeerRegion(CLI::App &app);
 void RunRemovePeerRegion(RemovePeerRegionOption const &opt);
@@ -420,6 +422,7 @@ struct GetJobListOptions {
   std::string name_only;  // "All" BalanceLeader" "RecycleOrphanRegion" "DropRegion" "SplitRegion" "MergeRegion"
                           // "ChangePeer" "TransferLeader" "CreateRegion "
   bool is_interactive;    // whether to show interactive table. default false.
+  bool show_region_ids;   // whether to add region1/region2 columns derived from job tasks. default false.
 };
 void SetUpGetJobList(CLI::App &app);
 void RunGetJobList(GetJobListOptions const &opt);

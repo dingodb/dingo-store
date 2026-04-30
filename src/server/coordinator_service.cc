@@ -1623,19 +1623,29 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
 
   // validate region_cmd
   if (!request->has_change_peer_request()) {
+    std::string error_msg = "missing change_peer_request";
+    DINGO_LOG(ERROR) << error_msg;
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg(error_msg);
     return;
   }
 
   const auto &change_peer_request = request->change_peer_request();
   if (!change_peer_request.has_region_definition()) {
+    std::string error_msg = "change_peer_request missing region_definition";
+    DINGO_LOG(ERROR) << error_msg;
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg(error_msg);
     return;
   }
 
   const auto &region_definition = change_peer_request.region_definition();
   if (region_definition.peers_size() == 0) {
+    std::string error_msg =
+        fmt::format("change_peer_request region_definition peers_size is empty, region_id:{}", region_definition.id());
+    DINGO_LOG(ERROR) << error_msg;
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg(error_msg);
     return;
   }
 
@@ -1644,7 +1654,8 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
     new_store_ids.push_back(it.store_id());
   }
 
-  auto ret = coordinator_control->ChangePeerRegionWithJob(region_definition.id(), new_store_ids, meta_increment);
+  auto ret = coordinator_control->ChangePeerRegionWithJob(region_definition.id(), new_store_ids, meta_increment,
+                                                          change_peer_request.verify_peer_on_store());
 
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ChangePeerRegionWithJob failed, error:{}", Helper::PrintStatus(ret));

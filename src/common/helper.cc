@@ -1722,12 +1722,17 @@ butil::Status Helper::ValidateRaftStatusForSplitMerge(std::shared_ptr<pb::common
 
   for (const auto& [peer, follower] : raft_status->stable_followers()) {
     if (follower.consecutive_error_times() > 0) {
-      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal.", peer.c_str());
+      // Diagnostic note: the trailing `consecutive_error_times=N` was added (previously the
+      // message ended at "abnormal."). The added field is purely informational. The prefix
+      // "follower %s abnormal" is preserved so any internal log greps keyed on it still match.
+      return butil::Status(pb::error::EINTERNAL, "follower %s abnormal, consecutive_error_times=%d.", peer.c_str(),
+                           follower.consecutive_error_times());
     }
 
     if (follower.next_index() + Constant::kRaftLogFallBehindThreshold < raft_status->last_index()) {
-      return butil::Status(pb::error::EINTERNAL, "Follower %s log fall behind exceed %d.", peer.c_str(),
-                           Constant::kRaftLogFallBehindThreshold);
+      return butil::Status(pb::error::EINTERNAL,
+                           "Follower %s log fall behind exceed %d, next_index=%ld, last_index=%ld.", peer.c_str(),
+                           Constant::kRaftLogFallBehindThreshold, follower.next_index(), raft_status->last_index());
     }
   }
 

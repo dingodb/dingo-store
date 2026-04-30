@@ -1863,6 +1863,10 @@ void SetUpAddPeerRegion(CLI::App &app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
+  cmd->add_flag("--verify_peer_on_store", opt->verify_peer_on_store,
+                "Use verify-on-store path for shadow peer activation. Default: false.")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunAddPeerRegion(*opt); });
 }
 
@@ -1870,6 +1874,24 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
+
+  // Local helper: format a peers field as comma-joined store_ids for log/diagnostic output.
+  // Defined again in RunRemovePeerRegion below — kept inline in both because lifting it to
+  // a file-level helper would only save ~7 lines and add a header dependency for two CLI
+  // commands that already live next to each other.
+  auto fmt_peer_store_ids = [](const auto &peers) {
+    std::string out;
+    for (int i = 0; i < peers.size(); i++) {
+      if (i > 0) out += ",";
+      out += std::to_string(peers[i].store_id());
+    }
+    return out;
+  };
+  const std::string mode_desc = opt.verify_peer_on_store ? "verify (shadow activation)" : "legacy (add new peer)";
+
+  std::cout << "[AddPeerRegion] start, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+            << ", mode=" << mode_desc << std::endl;
+
   // get StoreMap
   dingodb::pb::coordinator::GetStoreMapRequest request;
   dingodb::pb::coordinator::GetStoreMapResponse response;
@@ -1879,9 +1901,9 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreMap", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get store map failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg() << std::endl;
+    std::cout << "[AddPeerRegion] get store map failed, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+              << ", error_code=" << dingodb::pb::error::Errno_Name(response.error().errcode())
+              << ", error_msg=" << response.error().errmsg() << std::endl;
     return;
   }
   dingodb::pb::common::Peer new_peer;
@@ -1895,9 +1917,14 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   }
 
   if (new_peer.store_id() == 0) {
-    std::cout << "store_id not found";
+    std::cout << "[AddPeerRegion] store_id=" << opt.store_id
+              << " not registered in coordinator's storemap, region_id=" << opt.region_id << std::endl;
     return;
   }
+
+  std::cout << "[AddPeerRegion] target store found, store_id=" << opt.store_id
+            << ", server_location=" << new_peer.server_location().host() << ":" << new_peer.server_location().port()
+            << std::endl;
 
   // query region
   dingodb::pb::coordinator::QueryRegionRequest query_request;
@@ -1908,23 +1935,45 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "QueryRegion", query_request, query_response);
   if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "query region failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
-              << " " << query_response.error().errmsg() << std::endl;
+    std::cout << "[AddPeerRegion] query region failed, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+              << ", error_code=" << dingodb::pb::error::Errno_Name(query_response.error().errcode())
+              << ", error_msg=" << query_response.error().errmsg() << std::endl;
     return;
   }
 
   if (query_response.region().definition().peers_size() == 0) {
-    std::cout << "region not found";
+    std::cout << "[AddPeerRegion] region not found, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+              << std::endl;
     return;
   }
 
-  // validate peer not exists in region peers
+  const std::string current_peers = fmt_peer_store_ids(query_response.region().definition().peers());
+  std::cout << "[AddPeerRegion] region_id=" << opt.region_id << " currently has "
+            << query_response.region().definition().peers_size() << " peer(s): [" << current_peers << "]" << std::endl;
+
+  // Single membership check, then branch on mode. Validation flips:
+  //   legacy mode  -> reject if the peer is already in region.peers (introducing a brand new one).
+  //   verify mode  -> reject if the peer is NOT in region.peers (activating must target a shadow).
+  bool peer_already_registered = false;
   for (const auto &peer : query_response.region().definition().peers()) {
     if (peer.store_id() == opt.store_id) {
-      std::cout << "peer already exists";
-      return;
+      peer_already_registered = true;
+      break;
     }
+  }
+
+  if (!opt.verify_peer_on_store && peer_already_registered) {
+    std::cout << "[AddPeerRegion] reject (legacy mode): store_id=" << opt.store_id
+              << " is already a peer of region_id=" << opt.region_id << ", current peers=[" << current_peers << "]"
+              << std::endl;
+    return;
+  }
+  if (opt.verify_peer_on_store && !peer_already_registered) {
+    std::cout << "[AddPeerRegion] reject (verify mode): store_id=" << opt.store_id
+              << " is not registered as a peer of region_id=" << opt.region_id
+              << " (shadow activation requires the peer to already be registered)" << ", current peers=["
+              << current_peers << "]" << std::endl;
+    return;
   }
 
   // generate change peer
@@ -1933,19 +1982,31 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
 
   auto *new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
   *new_definition = query_response.region().definition();
-  auto *new_peer_to_add = new_definition->add_peers();
-  *new_peer_to_add = new_peer;
+  if (!opt.verify_peer_on_store) {
+    // legacy path: append a brand new peer entry for the target store.
+    auto *new_peer_to_add = new_definition->add_peers();
+    *new_peer_to_add = new_peer;
+  }
+  // verify path: shadow is already in region.peers; do not alter the peers list.
+  // The server's verify path will compute to_add={shadow_id} from (new, exist).
+
+  change_peer_request.mutable_change_peer_request()->set_verify_peer_on_store(opt.verify_peer_on_store);
+
+  std::cout << "[AddPeerRegion] sending ChangePeer to coordinator, region_id=" << opt.region_id
+            << ", target_store_id=" << opt.store_id << ", mode=" << mode_desc << ", new peers=["
+            << fmt_peer_store_ids(new_definition->peers()) << "]" << std::endl;
 
   auto status3 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "ChangePeerRegion", change_peer_request, change_peer_response);
   if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout
-        << "change peer region failed, error: "
-        << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(change_peer_response.error().errcode())->name()
-        << " " << change_peer_response.error().errmsg() << std::endl;
+    std::cout << "[AddPeerRegion] change peer region failed, region_id=" << opt.region_id
+              << ", store_id=" << opt.store_id << ", mode=" << mode_desc
+              << ", error_code=" << dingodb::pb::error::Errno_Name(change_peer_response.error().errcode())
+              << ", error_msg=" << change_peer_response.error().errmsg() << std::endl;
     return;
   }
-  std::cout << "change peer success" << std::endl;
+  std::cout << "[AddPeerRegion] success, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+            << ", mode=" << mode_desc << std::endl;
 }
 
 void SetUpRemovePeerRegion(CLI::App &app) {
@@ -1954,6 +2015,10 @@ void SetUpRemovePeerRegion(CLI::App &app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
+  cmd->add_flag("--verify_peer_on_store", opt->verify_peer_on_store,
+                "Use verify-on-store path for shadow peer cleanup. Default: false.")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunRemovePeerRegion(*opt); });
 }
 
@@ -1961,6 +2026,21 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
+
+  // Local helper: format a peers field as comma-joined store_ids for log/diagnostic output.
+  // Identical copy lives in RunAddPeerRegion above — see the note there.
+  auto fmt_peer_store_ids = [](const auto &peers) {
+    std::string out;
+    for (int i = 0; i < peers.size(); i++) {
+      if (i > 0) out += ",";
+      out += std::to_string(peers[i].store_id());
+    }
+    return out;
+  };
+  const std::string mode_desc = opt.verify_peer_on_store ? "verify (shadow cleanup)" : "legacy (remove real peer)";
+
+  std::cout << "[RemovePeerRegion] start, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+            << ", mode=" << mode_desc << std::endl;
 
   // query region
   dingodb::pb::coordinator::QueryRegionRequest query_request;
@@ -1971,28 +2051,35 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "QueryRegion", query_request, query_response);
   if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "query region failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
-              << " " << query_response.error().errmsg() << std::endl;
+    std::cout << "[RemovePeerRegion] query region failed, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+              << ", error_code=" << dingodb::pb::error::Errno_Name(query_response.error().errcode())
+              << ", error_msg=" << query_response.error().errmsg() << std::endl;
     return;
   }
 
   if (query_response.region().definition().peers_size() == 0) {
-    std::cout << "region not found" << std::endl;
+    std::cout << "[RemovePeerRegion] region not found, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+              << std::endl;
     return;
   }
 
-  // validate peer not exists in region peers
-  bool found = false;
-  for (const auto &peer : query_response.region().definition().peers()) {
-    if (peer.store_id() == opt.store_id) {
-      found = true;
+  const std::string current_peers = fmt_peer_store_ids(query_response.region().definition().peers());
+  std::cout << "[RemovePeerRegion] region_id=" << opt.region_id << " currently has "
+            << query_response.region().definition().peers_size() << " peer(s): [" << current_peers << "]" << std::endl;
+
+  // Locate target peer once; reuse the index in the construction step below.
+  int peer_index = -1;
+  for (int i = 0; i < query_response.region().definition().peers_size(); i++) {
+    if (query_response.region().definition().peers(i).store_id() == opt.store_id) {
+      peer_index = i;
       break;
     }
   }
 
-  if (!found) {
-    std::cout << "peer not found" << std::endl;
+  if (peer_index < 0) {
+    std::cout << "[RemovePeerRegion] reject: store_id=" << opt.store_id
+              << " is not a peer of region_id=" << opt.region_id << ", current peers=[" << current_peers << "]"
+              << std::endl;
     return;
   }
 
@@ -2002,25 +2089,27 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
 
   auto *new_definition = change_peer_request.mutable_change_peer_request()->mutable_region_definition();
   *new_definition = query_response.region().definition();
-  for (int i = 0; i < new_definition->peers_size(); i++) {
-    if (new_definition->peers(i).store_id() == opt.store_id) {
-      new_definition->mutable_peers()->SwapElements(i, new_definition->peers_size() - 1);
-      new_definition->mutable_peers()->RemoveLast();
-      break;
-    }
-  }
+  new_definition->mutable_peers()->SwapElements(peer_index, new_definition->peers_size() - 1);
+  new_definition->mutable_peers()->RemoveLast();
+
+  change_peer_request.mutable_change_peer_request()->set_verify_peer_on_store(opt.verify_peer_on_store);
+
+  std::cout << "[RemovePeerRegion] sending ChangePeer to coordinator, region_id=" << opt.region_id
+            << ", target_store_id=" << opt.store_id << ", mode=" << mode_desc << ", new peers=["
+            << fmt_peer_store_ids(new_definition->peers()) << "]" << std::endl;
 
   auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "ChangePeerRegion", change_peer_request, change_peer_response);
 
   if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout
-        << "change peer region failed, error: "
-        << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(change_peer_response.error().errcode())->name()
-        << " " << change_peer_response.error().errmsg() << std::endl;
+    std::cout << "[RemovePeerRegion] change peer region failed, region_id=" << opt.region_id
+              << ", store_id=" << opt.store_id << ", mode=" << mode_desc
+              << ", error_code=" << dingodb::pb::error::Errno_Name(change_peer_response.error().errcode())
+              << ", error_msg=" << change_peer_response.error().errmsg() << std::endl;
     return;
   }
-  std::cout << "change peer success" << std::endl;
+  std::cout << "[RemovePeerRegion] success, region_id=" << opt.region_id << ", store_id=" << opt.store_id
+            << ", mode=" << mode_desc << std::endl;
 }
 
 void SetUpTransferLeaderRegion(CLI::App &app) {
@@ -2233,6 +2322,10 @@ void SetUpGetJobList(CLI::App &app) {
       ->default_val("All")
       ->default_str("All");
   cmd->add_option("--is_interactive", opt->is_interactive, "Request parameter is_interactive")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_flag("--show_region_ids", opt->show_region_ids,
+                "Show region1/region2 columns derived from job tasks. Default: false.")
       ->default_val(false)
       ->default_str("false");
   cmd->callback([opt]() { RunGetJobList(*opt); });
@@ -2474,7 +2567,7 @@ void RunGetJobList(GetJobListOptions const &opt) {
       std::cout << "job: " << job.DebugString() << std::endl;
     }
   } else {
-    Pretty::Show(response, is_interactive);
+    Pretty::Show(response, is_interactive, opt.show_region_ids);
   }
 }
 
