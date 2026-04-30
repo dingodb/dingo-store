@@ -737,15 +737,6 @@ add_definitions(-DDINGO_CONTRIB_BUILD_TYPE="${THIRD_PARTY_BUILD_TYPE}")
 string(REPLACE "\n" "\t" GIT_SUBMODULE "${GIT_SUBMODULE}")
 add_definitions(-DGIT_SUBMODULE="${GIT_SUBMODULE}")
 
-if(WITH_DISKANN)
-  execute_process(
-    COMMAND make -C ${CMAKE_SOURCE_DIR}/contrib/libaio clean
-    OUTPUT_VARIABLE output
-    ERROR_VARIABLE error
-    RESULT_VARIABLE result
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-endif()
-
 if(ENABLE_FAILPOINT)
   message(STATUS "Enable failpoint")
   add_definitions(-DENABLE_FAILPOINT="ON")
