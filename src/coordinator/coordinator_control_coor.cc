@@ -26,6 +26,7 @@
 
 #include "braft/configuration.h"
 #include "brpc/reloadable_flags.h"
+#include "bthread/bthread.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
@@ -42,6 +43,7 @@
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
@@ -2854,11 +2856,15 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
     }
   }
 
-  // build create_region task
-  auto* create_region_task = new_job->add_tasks();
-  for (const auto& it : store_operations) {
-    auto* new_store_operation = create_region_task->add_store_operations();
-    *new_store_operation = it;
+  // if the split is performed using the post-filtering method—specifically when store_create_region = true and
+  // store_operations is empty—it is ignored.
+  if (!store_operations.empty()) {
+    // build create_region task
+    auto* create_region_task = new_job->add_tasks();
+    for (const auto& it : store_operations) {
+      auto* new_store_operation = create_region_task->add_store_operations();
+      *new_store_operation = it;
+    }
   }
 
   // update region_map for new_region_id
@@ -2867,11 +2873,15 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
     *new_region = it;
   }
 
-  auto* check_region_task = new_job->add_tasks();
-  // build split_region pre_check for each store region
-  for (const auto& it : store_operations) {
-    AddCheckSplitChildRegionTask(check_region_task, it.store_id(), new_region_id);
-    // AddCheckStoreRegionTask(check_region_task, it.store_id(), new_region_id);
+  // if the split is performed using the post-filtering method—specifically when store_create_region = true and
+  // store_operations is empty—it is ignored.
+  if (!store_operations.empty()) {
+    auto* check_region_task = new_job->add_tasks();
+    // build split_region pre_check for each store region
+    for (const auto& it : store_operations) {
+      AddCheckSplitChildRegionTask(check_region_task, it.store_id(), new_region_id);
+      // AddCheckStoreRegionTask(check_region_task, it.store_id(), new_region_id);
+    }
   }
 
   auto* check_parent_region_task = new_job->add_tasks();
@@ -2883,10 +2893,12 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
   AddSplitTask(new_job, leader_store_id, split_from_region_id, new_region_id, split_watershed_key, store_create_region,
                meta_increment);
 
-  // check if split_to_region'state change to NORMAL, this state change means split is fininshed.
-  auto* check_split_result_task = new_job->add_tasks();
-  for (const auto& it : store_operations) {
-    AddCheckSplitResultTask(check_split_result_task, it.store_id(), new_region_id);
+  if (!store_operations.empty()) {
+    // check if split_to_region'state change to NORMAL, this state change means split is finished.
+    auto* check_split_result_task = new_job->add_tasks();
+    for (const auto& it : store_operations) {
+      AddCheckSplitResultTask(check_split_result_task, it.store_id(), new_region_id);
+    }
   }
 
   return butil::Status::OK();
@@ -3146,9 +3158,107 @@ butil::Status CoordinatorControl::MergeRegionWithJob(int64_t merge_from_region_i
   return butil::Status::OK();
 }
 
+// DecideShadowAction implements the 4-step shadow-peer maintenance algorithm as a
+// pure function. It is unit-testable in isolation (no RPCs, no CoordinatorControl
+// state, no logging side effects). The caller is responsible for logging and for
+// translating the outcome into downstream Raft change_peer / delete_region tasks.
+//
+// See plan precious-plotting-dewdrop.md for the case matrix this satisfies.
+CoordinatorControl::ShadowDecision CoordinatorControl::DecideShadowAction(
+    int64_t region_id, const std::vector<int64_t>& new_store_ids, const std::vector<int64_t>& old_store_ids,
+    const std::vector<int64_t>& exist_store_ids, const std::vector<int64_t>& not_exist_store_ids) {
+  ShadowDecision decision;
+
+  auto lambda_contains_function = [](const std::vector<int64_t>& store_ids, int64_t id) {
+    return std::find(store_ids.begin(), store_ids.end(), id) != store_ids.end();
+  };
+
+  // Inlined intentionally: keeping `DecideShadowAction` self-contained (no external
+  // helpers) preserves its "pure function" property and keeps the 439-line case-matrix
+  // unit test free of extra header dependencies. ChangePeerRegionWithJob has its own
+  // identical copy below; this minor duplication is the cost of that isolation.
+  auto lambda_join_store_ids = [](const std::vector<int64_t>& store_ids) {
+    std::string out;
+    for (size_t i = 0; i < store_ids.size(); ++i) {
+      if (i > 0) out += ",";
+      out += std::to_string(store_ids[i]);
+    }
+    return out;
+  };
+
+  // step1: reject any store_id the user supplied that coordinator never registered for this region.
+  for (int64_t id : new_store_ids) {
+    if (!lambda_contains_function(old_store_ids, id)) {
+      decision.action = ShadowDecision::kReject;
+      decision.reject_step = 1;
+      decision.error_code = pb::error::Errno::EILLEGAL_PARAMTETERS;
+      decision.error_msg = fmt::format(
+          "[verify_peer] ChangePeerRegion region_id:{} new_store_ids contains store_id:{} not in coordinator "
+          "definition; new_store_ids:[{}], old_store_ids:[{}]",
+          region_id, id, lambda_join_store_ids(new_store_ids), lambda_join_store_ids(old_store_ids));
+      return decision;
+    }
+  }
+
+  // step2: split the user's request into three buckets, all measured against what really runs on stores.
+  for (int64_t id : new_store_ids) {
+    if (!lambda_contains_function(exist_store_ids, id)) decision.to_add.push_back(id);
+  }
+  for (int64_t id : exist_store_ids) {
+    if (!lambda_contains_function(new_store_ids, id)) decision.to_remove_real.push_back(id);
+  }
+  for (int64_t id : not_exist_store_ids) {
+    if (!lambda_contains_function(new_store_ids, id)) decision.shadow_dropped.push_back(id);
+  }
+
+  // step3: this path never takes down a really-running peer; redirect such requests to the regular flow.
+  if (!decision.to_remove_real.empty()) {
+    decision.action = ShadowDecision::kReject;
+    decision.reject_step = 3;
+    decision.error_code = pb::error::Errno::EILLEGAL_PARAMTETERS;
+    decision.error_msg = fmt::format(
+        "[verify_peer] ChangePeerRegion region_id:{} cannot remove real peer (first store_id:{}) via verify path, "
+        "use verify_peer_on_store=false instead; new_store_ids:[{}], old_store_ids:[{}], to_remove_real:[{}]",
+        region_id, decision.to_remove_real.front(), lambda_join_store_ids(new_store_ids),
+        lambda_join_store_ids(old_store_ids), lambda_join_store_ids(decision.to_remove_real));
+    return decision;
+  }
+
+  // step4: a single call may carry at most one shadow operation (activate or clean), or zero (no-op).
+  const size_t n = decision.to_add.size() + decision.shadow_dropped.size();
+  if (n == 0) {
+    decision.action = ShadowDecision::kNoOp;
+    return decision;
+  }
+  if (n >= 2) {
+    decision.action = ShadowDecision::kReject;
+    decision.reject_step = 4;
+    decision.error_code = pb::error::Errno::EILLEGAL_PARAMTETERS;
+    decision.error_msg = fmt::format(
+        "[verify_peer] ChangePeerRegion region_id:{} allows only one shadow operation per call, "
+        "to_add.size()={}, shadow_dropped.size()={}; new_store_ids:[{}], old_store_ids:[{}], "
+        "to_add:[{}], shadow_dropped:[{}]",
+        region_id, decision.to_add.size(), decision.shadow_dropped.size(), lambda_join_store_ids(new_store_ids),
+        lambda_join_store_ids(old_store_ids), lambda_join_store_ids(decision.to_add),
+        lambda_join_store_ids(decision.shadow_dropped));
+    return decision;
+  }
+
+  // exactly one action remains.
+  if (decision.to_add.size() == 1) {
+    decision.action = ShadowDecision::kAddShadow;
+    decision.target_store_id = decision.to_add.front();
+  } else {
+    decision.action = ShadowDecision::kRemoveShadow;
+    decision.target_store_id = decision.shadow_dropped.front();
+  }
+  return decision;
+}
+
 // ChangePeerRegionWithJob
 butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std::vector<int64_t>& new_store_ids,
-                                                          pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                                          pb::coordinator_internal::MetaIncrement& meta_increment,
+                                                          bool verify_peer_on_store) {
   auto validate_ret = ValidateJobConflict(region_id, region_id);
   if (!validate_ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("ChangePeerRegionWithJob validate job conflict failed, validate_ret:{}",
@@ -3189,24 +3299,85 @@ butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std
                                      leader_store_status.error_cstr()));
   }
 
-  // validate new_store_ids
-  if (new_store_ids.size() != (region.definition().peers_size() + 1) &&
-      new_store_ids.size() != (region.definition().peers_size() - 1) && (!new_store_ids.empty())) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "ChangePeerRegion, region_id:{}, new_store_ids size not match, old_size:{}, new_size:{}", region_id,
-        region.definition().peers_size(), new_store_ids.size());
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "ChangePeerRegion new_store_ids size not match");
+  // validate new_store_ids size — semantics differs by mode:
+  //   legacy mode  -> size must be old_size+1 (add), old_size-1 (remove), or empty (special flow).
+  //   verify mode  -> size must be <= old_size (Principle 1: new must be a subset of old).
+  //                   Tighter shape checks are handled later by DecideShadowAction.
+  if (!verify_peer_on_store) {
+    if (new_store_ids.size() != (region.definition().peers_size() + 1) &&
+        new_store_ids.size() != (region.definition().peers_size() - 1) && (!new_store_ids.empty())) {
+      std::string error_msg = fmt::format(
+          "ChangePeerRegion (legacy mode), region_id:{}, new_store_ids size must be old_size+1, old_size-1, or empty; "
+          "old_size:{}, new_size:{}",
+          region_id, region.definition().peers_size(), new_store_ids.size());
+      DINGO_LOG(ERROR) << error_msg;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+    }
+  } else {
+    if (new_store_ids.size() > static_cast<size_t>(region.definition().peers_size())) {
+      std::string error_msg = fmt::format(
+          "ChangePeerRegion (verify mode), region_id:{}, new_store_ids size cannot exceed old_size "
+          "(violates Principle 1: new must be a subset of old); old_size:{}, new_size:{}",
+          region_id, region.definition().peers_size(), new_store_ids.size());
+      DINGO_LOG(ERROR) << error_msg;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+    }
   }
 
-  // validate new_store_ids only has one new store or only less one store
+  // Local helper: format an int64_t list as a comma-joined string for log/error output.
+  // Duplicated from `DecideShadowAction` deliberately — see the comment there for why
+  // the pure-function decision logic does not share helpers with this caller.
+  auto lambda_join_store_ids = [](const std::vector<int64_t>& store_ids) {
+    std::string out;
+    for (size_t i = 0; i < store_ids.size(); ++i) {
+      if (i > 0) out += ",";
+      out += std::to_string(store_ids[i]);
+    }
+    return out;
+  };
+
+  DINGO_LOG(INFO) << fmt::format("ChangePeerRegion entry region_id:{}, verify_peer_on_store:{}, new_store_ids:[{}]",
+                                 region_id, verify_peer_on_store, lambda_join_store_ids(new_store_ids));
+
   std::vector<int64_t> old_store_ids;
+  std::vector<int64_t> exist_store_ids;
+  std::vector<int64_t> not_exist_store_ids;
   old_store_ids.reserve(region.definition().peers_size());
   for (int i = 0; i < region.definition().peers_size(); i++) {
     old_store_ids.push_back(region.definition().peers(i).store_id());
   }
 
+  if (verify_peer_on_store) {
+    // Build a printable peer summary once; both the error and success branches
+    // below need to identify which peer endpoints participated in the verify.
+    std::string peer_summary;
+    for (int i = 0; i < region.definition().peers_size(); ++i) {
+      const auto& peer = region.definition().peers(i);
+      if (i > 0) peer_summary += ", ";
+      peer_summary += fmt::format("store_id:{} {}:{}", peer.store_id(), peer.server_location().host(),
+                                  peer.server_location().port());
+    }
+
+    auto verify_status = VerifyPeersOnStore(region, exist_store_ids, not_exist_store_ids);
+    if (!verify_status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[verify_peer] ChangePeerRegion region_id:{} verify rpc failed, error:{}, peers:[{}]", region_id,
+          verify_status.error_str(), peer_summary);
+      return verify_status;
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[verify_peer] ChangePeerRegion region_id:{} peers:[{}], exist_count:{}, exist_store_ids:[{}], "
+        "not_exist_count:{}, not_exist_store_ids:[{}]",
+        region_id, peer_summary, exist_store_ids.size(), lambda_join_store_ids(exist_store_ids),
+        not_exist_store_ids.size(), lambda_join_store_ids(not_exist_store_ids));
+  }
+
   if (old_store_ids.empty()) {
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "ChangePeerRegion old_store_ids is empty");
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         verify_peer_on_store
+                             ? "ChangePeerRegion no peer exists on any store (all shadow or unreachable)"
+                             : "ChangePeerRegion old_store_ids is empty");
   }
 
   std::vector<int64_t> new_store_ids_diff_more;
@@ -3220,16 +3391,64 @@ butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std
   std::set_difference(old_store_ids.begin(), old_store_ids.end(), new_store_ids.begin(), new_store_ids.end(),
                       std::inserter(new_store_ids_diff_less, new_store_ids_diff_less.begin()));
 
-  if (new_store_ids_diff_more.size() + new_store_ids_diff_less.size() != 1) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "ChangePeerRegion, region_id:{}, new_store_ids can only has one diff store, new_store_ids_diff_more.size():{}, "
-        "new_store_ids_diff_less.size():{}",
-        region_id, new_store_ids_diff_more.size(), new_store_ids_diff_less.size());
+  if (verify_peer_on_store) {
+    // Run the pure 4-step decision algorithm. All formatting of error messages and
+    // the step1/step3/step4 reject logic lives in DecideShadowAction so it can be
+    // unit-tested directly. This block only owns logging and the translation into
+    // legacy diff_more/diff_less vectors that the downstream add/remove plumbing
+    // already understands.
+    auto decision = DecideShadowAction(region_id, new_store_ids, old_store_ids, exist_store_ids, not_exist_store_ids);
 
-    for (auto it : new_store_ids_diff_more) DINGO_LOG(ERROR) << "new_store_ids_diff_more = " << it;
-    for (auto it : new_store_ids_diff_less) DINGO_LOG(ERROR) << "new_store_ids_diff_less = " << it;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                         "ChangePeerRegion new_store_ids can only has one diff store");
+    // step1 reject: original behavior was to return immediately without producing
+    // the step2 buckets log; preserve that here.
+    if (decision.action == ShadowDecision::kReject && decision.reject_step == 1) {
+      DINGO_LOG(ERROR) << decision.error_msg;
+      return butil::Status(decision.error_code, decision.error_msg);
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[verify_peer] ChangePeerRegion region_id:{} step2 buckets - to_add:[{}], to_remove_real:[{}], "
+        "shadow_dropped:[{}]",
+        region_id, lambda_join_store_ids(decision.to_add), lambda_join_store_ids(decision.to_remove_real),
+        lambda_join_store_ids(decision.shadow_dropped));
+
+    // step3 / step4 reject: log and return.
+    if (decision.action == ShadowDecision::kReject) {
+      DINGO_LOG(ERROR) << decision.error_msg;
+      return butil::Status(decision.error_code, decision.error_msg);
+    }
+
+    if (decision.action == ShadowDecision::kNoOp) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[verify_peer] ChangePeerRegion region_id:{} no-op accepted, region already aligned", region_id);
+      return butil::Status::OK();
+    }
+
+    // kAddShadow or kRemoveShadow: hand the single action down to the legacy add/remove flow.
+    new_store_ids_diff_more.clear();
+    new_store_ids_diff_less.clear();
+    if (decision.action == ShadowDecision::kAddShadow) {
+      new_store_ids_diff_more.push_back(decision.target_store_id);
+      DINGO_LOG(INFO) << fmt::format("[verify_peer] ChangePeerRegion region_id:{} activate shadow peer store_id:{}",
+                                     region_id, decision.target_store_id);
+    } else {
+      new_store_ids_diff_less.push_back(decision.target_store_id);
+      DINGO_LOG(INFO) << fmt::format("[verify_peer] ChangePeerRegion region_id:{} cleanup shadow peer store_id:{}",
+                                     region_id, decision.target_store_id);
+    }
+  } else {  // legacy path (verify_peer_on_store == false)
+    if (new_store_ids_diff_more.size() + new_store_ids_diff_less.size() != 1) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "ChangePeerRegion, region_id:{}, new_store_ids can only has one diff store, "
+          "new_store_ids_diff_more.size():{}, "
+          "new_store_ids_diff_less.size():{}",
+          region_id, new_store_ids_diff_more.size(), new_store_ids_diff_less.size());
+
+      for (auto it : new_store_ids_diff_more) DINGO_LOG(ERROR) << "new_store_ids_diff_more = " << it;
+      for (auto it : new_store_ids_diff_less) DINGO_LOG(ERROR) << "new_store_ids_diff_less = " << it;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "ChangePeerRegion new_store_ids can only has one diff store");
+    }
   }
 
   if (new_store_ids_diff_more.size() == 1) {
@@ -3254,26 +3473,36 @@ butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std
 
       auto it = store_region_metrics_map_[store_id].region_metrics_map().find(region_id);
       if (it == store_region_metrics_map_[store_id].region_metrics_map().end()) {
-        DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics_map seek failed, region_id = " << region_id;
-        return butil::Status::OK();
+        if (!verify_peer_on_store) {
+          // Legacy quirk preserved: when the metrics lookup misses, the old code returns
+          // Status::OK() without creating a job (so the caller silently no-ops). Behavior
+          // is kept as-is in this PR to avoid changing legacy semantics; cleanup belongs in
+          // a separate change. In verify_peer_on_store mode we deliberately fall through
+          // and skip the epoch check below — shadows may not have propagated metrics yet,
+          // and the verify-on-store RPC is the authoritative check for that path.
+          DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics_map seek failed, region_id = " << region_id;
+          return butil::Status::OK();
+        }
         // return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region_metrics_map seek failed");
       }
 
-      const auto& region_metrics = it->second;
-      DINGO_LOG(INFO) << "ChangePeerRegion, region_id=" << region_id
-                      << ", region_metrics.epoch_version() = " << region_metrics.region_definition().epoch().version()
-                      << ", region.epoch_version() = " << region.definition().epoch().version()
-                      << " snapshot.epoch_version() = " << region_metrics.snapshot_epoch_version();
+      if (it != store_region_metrics_map_[store_id].region_metrics_map().end()) {
+        const auto& region_metrics = it->second;
+        DINGO_LOG(INFO) << "ChangePeerRegion, region_id=" << region_id
+                        << ", region_metrics.epoch_version() = " << region_metrics.region_definition().epoch().version()
+                        << ", region.epoch_version() = " << region.definition().epoch().version()
+                        << " snapshot.epoch_version() = " << region_metrics.snapshot_epoch_version();
 
-      if (region_metrics.snapshot_epoch_version() < region.definition().epoch().version()) {
-        DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
-                         << ", region_metrics.snapshot_epoch_version() < "
-                            "region.definition().epoch().version(), region_id = "
-                         << region_id << " snapshot_epoch_version = " << region_metrics.snapshot_epoch_version()
-                         << " region.epoch_version() = " << region.definition().epoch().version();
-        return butil::Status(pb::error::Errno::EREGION_SNAPSHOT_EPOCH_NOT_MATCH,
-                             "ChangePeerRegion region_metrics.snapshot_epoch_version() < "
-                             "region.definition().epoch().version()");
+        if (region_metrics.snapshot_epoch_version() < region.definition().epoch().version()) {
+          DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                           << ", region_metrics.snapshot_epoch_version() < "
+                              "region.definition().epoch().version(), region_id = "
+                           << region_id << " snapshot_epoch_version = " << region_metrics.snapshot_epoch_version()
+                           << " region.epoch_version() = " << region.definition().epoch().version();
+          return butil::Status(pb::error::Errno::EREGION_SNAPSHOT_EPOCH_NOT_MATCH,
+                               "ChangePeerRegion region_metrics.snapshot_epoch_version() < "
+                               "region.definition().epoch().version()");
+        }
       }
     }
   }
@@ -3349,14 +3578,28 @@ butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std
     }
 
     // generate new peer from store
+    // Location precedence: storemap (`store_to_add_peer`) is the source of truth, taking
+    // precedence over any stale location cached in `region.definition().peers()`.
+    // This matters in verify_peer_on_store mode: if a store was re-registered at a new
+    // endpoint after the shadow was created, we want the fresh address from storemap,
+    // not the snapshot stored on the shadow peer entry.
     auto* peer = new_region_definition.add_peers();
     peer->set_store_id(store_to_add_peer.id());
     peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
     *(peer->mutable_server_location()) = store_to_add_peer.server_location();
     *(peer->mutable_raft_location()) = store_to_add_peer.raft_location();
 
-    // add old peer to new_region_definition
+    // Append the remaining old peers from the existing region definition.
+    // Skip the one we already added explicitly above with fresh location info.
+    // - In the legacy path, the new store_id is brand-new and never appears in
+    //   region.definition().peers(), so the skip condition is a harmless no-op.
+    // - In the verify_peer_on_store path, the activated shadow's store_id is
+    //   already registered in region.definition().peers(); skipping it here
+    //   prevents adding a duplicate peer entry for the same store_id.
     for (int i = 0; i < region.definition().peers_size(); i++) {
+      if (region.definition().peers(i).store_id() == new_store_ids_diff_more.at(0)) {
+        continue;
+      }
       auto* peer = new_region_definition.add_peers();
       *peer = region.definition().peers(i);
     }
@@ -5540,8 +5783,8 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
 
       const auto& region_metrics_map = it->second.region_metrics_map();
       if (region_metrics_map.find(task_pre_check.store_region_check().region_id()) == region_metrics_map.end()) {
-        DINGO_LOG(INFO) << fmt::format("region_metrics_map.find({}) failed",
-                                       task_pre_check.store_region_check().region_id());
+        DINGO_LOG(ERROR) << fmt::format("region_metrics_map.find({}) failed",
+                                        task_pre_check.store_region_check().region_id());
         return false;
       }
 
@@ -6810,6 +7053,171 @@ butil::Status CoordinatorControl::RpcSendPushStoreOperation(const pb::common::Lo
   return butil::Status(
       pb::error::Errno::ESEND_STORE_OPERATION_FAIL,
       fmt::format("connect with store server fail, no leader found or connect timeout, retry count:{}", retry_times));
+}
+
+butil::Status CoordinatorControl::RpcSendQueryRegionStatus(const pb::common::Location& location,
+                                                           dingodb::pb::debug::DebugRequest& request,
+                                                           dingodb::pb::debug::DebugResponse& response) {
+  int retry_times = 0;
+  int max_retry_times = 3;
+
+  // Retry policy: only transport-layer failures (`cntl.Failed()`) trigger a retry.
+  // Any RPC-level error returned by the peer (including EREGION_NOT_FOUND and other
+  // application errors) is propagated to the caller immediately — those are
+  // authoritative answers from the peer, not transient connection issues, so retrying
+  // would not change the outcome.
+  do {
+    response.Clear();
+
+    // rpc
+    brpc::Channel channel;
+    if (channel.Init(location.host().c_str(), location.port(), nullptr) != 0) {
+      DINGO_LOG(ERROR) << fmt::format("[verify_peer] channel init failed, location:{}", location.DebugString());
+      return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store/index/document");
+    }
+
+    brpc::Controller cntl;
+    // QueryRegionStatus is a lightweight debug-meta lookup; a short timeout keeps the
+    // worst-case stall reasonable when a store is unreachable. The retry loop above
+    // still gives 3 chances per peer.
+    cntl.set_timeout_ms(5000L);
+
+    pb::debug::DebugService_Stub(&channel).Debug(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+      DINGO_LOG(WARNING) << fmt::format("[verify_peer] rpc failed, will retry, error code:{}, error message:{}",
+                                        cntl.ErrorCode(), cntl.ErrorText());
+      continue;
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[verify_peer] sent QueryRegionStatus to store/index/document:{}, request:{}",
+                                   location.DebugString(), request.DebugString());
+
+    auto errcode = response.error().errcode();
+    if (errcode == pb::error::Errno::OK) {
+      if (response.region_meta_details().regions_size() == 0) {
+        std::string region_id_desc =
+            request.region_ids_size() > 0 ? fmt::format(", region id:{}", request.region_ids(0)) : ", region id:empty";
+
+        std::string error_msg =
+            fmt::format("{}:{} region id:{} not found, but rpc returns OK, region_meta_details is empty",
+                        location.host().c_str(), location.port(), region_id_desc);
+        DINGO_LOG(WARNING) << error_msg;
+        return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, error_msg);
+      }
+      return butil::Status::OK();
+    }
+    if (errcode == pb::error::Errno::EREGION_NOT_FOUND) {
+      return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, response.error().errmsg());
+    }
+
+    // VerifyPeersOnStore puts exactly one region_id per call, so logging the first
+    // is sufficient. If a future caller batches multiple ids, expand this to log all.
+    std::string region_id_desc =
+        request.region_ids_size() > 0 ? fmt::format(", region id:{}", request.region_ids(0)) : ", region id:empty";
+    DINGO_LOG(ERROR) << fmt::format("[verify_peer] rpc returns error{}, error code:{}, error message:{}",
+                                    region_id_desc, pb::error::Errno_Name(response.error().errcode()),
+                                    response.error().errmsg());
+
+    return butil::Status(response.error().errcode(), response.error().errmsg());
+  } while (++retry_times < max_retry_times);
+
+  return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND,
+                       fmt::format("[verify_peer] QueryRegionStatus failed after {} retries, "
+                                   "store/index/document at {}:{} unreachable",
+                                   retry_times, location.host(), location.port()));
+}
+
+namespace {
+// Per-peer state for the parallel verify fan-out below. Each bthread reads
+// region_id/store_id/location and writes back result; nothing is shared across
+// threads, so no synchronization is needed beyond the bthread_join barrier.
+struct PeerVerifyArg {
+  int64_t region_id;
+  int64_t store_id;
+  pb::common::Location location;
+  butil::Status result;
+};
+
+void* PeerVerifyRoutine(void* arg) {
+  PeerVerifyArg* peer_verify_arg = static_cast<PeerVerifyArg*>(arg);
+  pb::debug::DebugRequest request;
+  request.set_type(pb::debug::DebugType::STORE_REGION_META_DETAILS);
+  request.add_region_ids(peer_verify_arg->region_id);
+  pb::debug::DebugResponse response;
+  peer_verify_arg->result = CoordinatorControl::RpcSendQueryRegionStatus(peer_verify_arg->location, request, response);
+  return nullptr;
+}
+}  // namespace
+
+butil::Status CoordinatorControl::VerifyPeersOnStore(const pb::coordinator_internal::RegionInternal& region,
+                                                     std::vector<int64_t>& exist_store_ids,
+                                                     std::vector<int64_t>& not_exist_store_ids) {
+  exist_store_ids.clear();
+  not_exist_store_ids.clear();
+
+  const int64_t region_id = region.id();
+  const int peer_count = region.definition().peers_size();
+
+  // Pre-validate every peer's server_location before launching any RPC. An invalid
+  // location indicates damaged region metadata (peer registered without proper
+  // location), not a transient store-side issue, so EILLEGAL_PARAMTETERS is the
+  // accurate signal.
+  for (const auto& peer : region.definition().peers()) {
+    const auto& location = peer.server_location();
+    if (location.host().empty() || location.port() <= 0) {
+      std::string error_msg = fmt::format(
+          "[verify_peer] region_id:{} peer store_id:{} has invalid server_location, region metadata may be corrupted",
+          region_id, peer.store_id());
+      DINGO_LOG(ERROR) << error_msg;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+    }
+  }
+
+  // Fan out one RPC per peer in parallel. Total wall-clock time is bounded by the
+  // slowest single peer (rather than the sum), so a 3-replica region with one
+  // unreachable store no longer triples the worst-case stall.
+  std::vector<PeerVerifyArg> peer_verify_args(peer_count);
+  std::vector<bthread_t> tids(peer_count, 0);
+
+  for (int i = 0; i < peer_count; ++i) {
+    peer_verify_args[i].region_id = region_id;
+    peer_verify_args[i].store_id = region.definition().peers(i).store_id();
+    peer_verify_args[i].location = region.definition().peers(i).server_location();
+    int ret = bthread_start_background(&tids[i], nullptr, PeerVerifyRoutine, &peer_verify_args[i]);
+    if (ret != 0) {
+      // Join whatever already started so we don't leak bthreads, then bail.
+      for (int j = 0; j < i; ++j) bthread_join(tids[j], nullptr);
+      DINGO_LOG(ERROR) << fmt::format("[verify_peer] region_id:{} bthread_start_background failed, ret:{}", region_id,
+                                      ret);
+      return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("verify_peer bthread launch failed, ret:{}", ret));
+    }
+  }
+
+  for (int i = 0; i < peer_count; ++i) {
+    bthread_join(tids[i], nullptr);
+  }
+
+  // Aggregate results. OK -> exist; EREGION_NOT_FOUND -> shadow (not_exist).
+  // Any other error means we cannot authoritatively determine that peer's state
+  // (network blip, store restarting, etc.) — refuse the whole verify so the
+  // caller knows to retry rather than acting on a partial picture.
+  for (const auto& peer_verify_arg : peer_verify_args) {
+    if (peer_verify_arg.result.ok()) {
+      exist_store_ids.push_back(peer_verify_arg.store_id);
+    } else if (peer_verify_arg.result.error_code() == pb::error::Errno::EREGION_NOT_FOUND) {
+      not_exist_store_ids.push_back(peer_verify_arg.store_id);
+    } else {
+      std::string error_msg = fmt::format(
+          "[verify_peer] region_id:{} peer store_id:{} verify rpc failed, unable to determine peer state, "
+          "please retry later; underlying error: {}",
+          region_id, peer_verify_arg.store_id, peer_verify_arg.result.error_str());
+      DINGO_LOG(ERROR) << error_msg;
+      return butil::Status(peer_verify_arg.result.error_code(), error_msg);
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status CoordinatorControl::UpdateRegionCmdStatus(int64_t job_id, int64_t region_cmd_id,
