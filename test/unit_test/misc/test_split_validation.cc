@@ -140,17 +140,12 @@ class SplitKeyBoundaryValidationTest : public testing::Test {
   // Replicates the fixed boundary check from raft_apply_handler.cc:276 and :531.
   // Returns true if split_key is strictly between start_key and end_key.
   static bool IsSplitKeyValid(const std::string& split_key, const std::string& start_key, const std::string& end_key) {
-    if (split_key <= start_key || split_key >= end_key) {
-      return false;
-    }
-    return true;
+    return !(split_key <= start_key || split_key >= end_key);
   }
 };
 
 // split_key="C" is strictly between "B" and "D" — should be valid.
-TEST_F(SplitKeyBoundaryValidationTest, SplitKeyInMiddle_ShouldBeValid) {
-  EXPECT_TRUE(IsSplitKeyValid("C", "B", "D"));
-}
+TEST_F(SplitKeyBoundaryValidationTest, SplitKeyInMiddle_ShouldBeValid) { EXPECT_TRUE(IsSplitKeyValid("C", "B", "D")); }
 
 // split_key="B" equals start_key — should be rejected (the bug allowed this).
 TEST_F(SplitKeyBoundaryValidationTest, SplitKeyEqualToStartKey_ShouldBeRejected) {
@@ -269,3 +264,24 @@ TEST_F(SnapshotFailureCleanupTest, BothFlagsCleared_SimulatesSnapshotFailure) {
   EXPECT_FALSE(region->NeedBootstrapDoSnapshot());
   EXPECT_FALSE(region->TemporaryDisableChange());
 }
+
+// =============================================================================
+// NOTE: SplitRegion replica-status guard
+//
+// CoordinatorControl::SplitRegion / SplitRegionWithJob refuse the operation
+// when the parent (or an existing child) region's replica_status is not
+// REPLICA_NORMAL -- see CheckReplicaStatusForSplit in
+// src/coordinator/coordinator_control_coor.cc.
+//
+// This behavior is validated end-to-end against a running coordinator via
+// dingodb_cli. A unit-level test requires a CoordinatorControl fixture
+// (raft / kv dependencies) that is not yet available in this repo; tracked
+// as follow-up.
+//
+// E2E reproduction:
+//   ./dingodb_cli SplitRegion --split_from_id=80002 --store_create_region=true
+//
+// Setup: region 80002 is a degraded region whose replicas exist on only 2 of
+// the 3 stores (one peer is missing). The coordinator must refuse the split
+// because the parent replica_status is not REPLICA_NORMAL.
+// =============================================================================
