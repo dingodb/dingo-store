@@ -93,6 +93,35 @@ BRPC_VALIDATE_GFLAG(print_recycle_orphan_region_not_table_or_index, brpc::PassVa
 DEFINE_bool(print_process_job_error, true, "print process job error. default true");
 BRPC_VALIDATE_GFLAG(print_process_job_error, brpc::PassValidate);
 
+namespace {
+
+// Common pre-check used by SplitRegion / SplitRegionWithJob: refuses split when the given
+// region's replica_status is not REPLICA_NORMAL (covers DEGRAED / UNAVAILABLE / NONE).
+// NOTE: "DEGRAED" is an upstream proto enum typo (should be DEGRADED); preserved here for
+// ABI compat. To be fixed in a separate cross-module PR.
+//
+// `region_role_label` should be "split_from_region" or "split_to_region" so the returned
+// error message tells operators which side failed.
+//
+// NOTE: this helper does NOT emit a log line itself. The returned Status carries the full
+// error_str; callers are expected to DINGO_LOG(ERROR) << <status>.error_str() on failure.
+// This avoids double-logging the same content from both helper and caller.
+//
+// [[nodiscard]] is applied so the compiler warns if a future caller forgets to inspect
+// the return value -- a silent rejection without log/return would defeat the entire guard.
+[[nodiscard]] butil::Status CheckReplicaStatusForSplit(const char* region_role_label, int64_t region_id,
+                                                       pb::common::ReplicaStatus replica_status) {
+  if (replica_status == pb::common::REPLICA_NORMAL) {
+    return butil::Status::OK();
+  }
+  std::string error_msg =
+      fmt::format("SplitRegion refuse split: {}:{} replica_status({}) is not REPLICA_NORMAL", region_role_label,
+                  region_id, pb::common::ReplicaStatus_Name(replica_status));
+  return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL, error_msg);
+}
+
+}  // namespace
+
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,
                                            std::vector<pb::common::Location>& locations,
@@ -2608,6 +2637,14 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
                          "SplitRegion split_from_region is not ready for split");
   }
 
+  // Validate split_from_region replica_status; refuse split if not REPLICA_NORMAL.
+  butil::Status parent_replica_check = CheckReplicaStatusForSplit("split_from_region", split_from_region_id,
+                                                                  region_status.replica_status());
+  if (!parent_replica_check.ok()) {
+    DINGO_LOG(ERROR) << parent_replica_check.error_str();
+    return parent_replica_check;
+  }
+
   // check if all peers are healthy
   auto peer_status = CheckRegionAllPeerOnline(split_from_region_id);
   if (!peer_status.ok()) {
@@ -2675,6 +2712,20 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
     return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL,
                          "SplitRegion split_from_region or "
                          "split_to_region is not ready for split");
+  }
+
+  // Validate split_to_region replica_status; skip when the child has no metrics entry
+  // yet (DingoSafeMap::Get returns -1, never 0). A freshly-created child without store
+  // heartbeat is not considered "degraded".
+  pb::common::RegionMetrics split_to_metrics;
+  int metrics_ret = region_metrics_map_.Get(split_to_region_id, split_to_metrics);
+  if (metrics_ret > 0) {
+    butil::Status child_replica_check = CheckReplicaStatusForSplit(
+        "split_to_region", split_to_region_id, split_to_metrics.region_status().replica_status());
+    if (!child_replica_check.ok()) {
+      DINGO_LOG(ERROR) << child_replica_check.error_str();
+      return child_replica_check;
+    }
   }
 
   // generate store operation for stores
@@ -2771,6 +2822,14 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
     DINGO_LOG(ERROR) << fmt::format("split_from_region:{} is not ready for split, from_state:{}", split_from_region_id,
                                     pb::common::RegionState_Name(split_from_region.state()));
     return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL, "SplitRegion split_from_region is not ready");
+  }
+
+  // Validate split_from_region replica_status; refuse split if not REPLICA_NORMAL.
+  butil::Status parent_replica_check = CheckReplicaStatusForSplit(
+      "split_from_region", split_from_region_id, region_metrics.region_status().replica_status());
+  if (!parent_replica_check.ok()) {
+    DINGO_LOG(ERROR) << parent_replica_check.error_str();
+    return parent_replica_check;
   }
 
   // check if all peers are healthy
