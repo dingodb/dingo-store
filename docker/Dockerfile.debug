@@ -1,0 +1,41 @@
+# Dockerfile.debug — sidecar image containing detached DWARF debug info
+#
+# This image extends dingodatabase/dingo-store:<tag> with .debug files placed
+# next to each stripped binary at /opt/dingo-store/build/bin/. gdb auto-loads
+# them via the .gnu_debuglink section embedded in each binary by
+# `objcopy --add-gnu-debuglink` during the CI build step.
+#
+# This is the standard equivalent of Debian -dbgsym / RHEL -debuginfo packages,
+# packaged as a Docker image for production crash analysis workflows.
+#
+# Recommended usage (SRE crash-analysis workflow, host needs no debug tools):
+#
+#   docker pull dingodatabase/dingo-store:<tag>-debug
+#   docker run --rm -it \
+#     -v /path/to/core.<pid>:/core:ro \
+#     --entrypoint=gdb \
+#     dingodatabase/dingo-store:<tag>-debug \
+#       /opt/dingo-store/build/bin/dingodb_server /core
+#   # gdb finds the .debug file via .gnu_debuglink. See
+#   # docs/debug-symbols.md for the K8s ephemeral-debug-container
+#   # variant and host-side fallback.
+
+ARG STORE_TAG=latest
+FROM dingodatabase/dingo-store:${STORE_TAG}
+
+SHELL ["/bin/bash", "-c"]
+
+# Sidecar adds the .debug files AND the debugger so SREs can drop into
+# `docker run :-debug gdb` directly without host-side tooling. The main
+# runtime image is built on rockylinux:8-minimal which doesn't have tar
+# or gdb by default, so install them here.
+RUN microdnf install -y gdb tar gzip \
+    && microdnf clean all
+
+COPY dingo-store-debug.tar.gz /tmp/
+RUN set -eu \
+    && cd /tmp \
+    && tar -zxvf dingo-store-debug.tar.gz \
+    && mv build/bin/dingodb_*.debug /opt/dingo-store/build/bin/ \
+    && rm -rf /tmp/build /tmp/dingo-store-debug.tar.gz \
+    && ls -lh /opt/dingo-store/build/bin/*.debug

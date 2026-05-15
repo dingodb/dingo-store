@@ -1,132 +1,166 @@
-# This is a basic workflow to help you get started with Actions
-
 name: Release-Dockerhub
 
-# Controls when the workflow will run
+# Triggered by the CMake_rocky8 build completing on a non-PR push.
+#
+# Internally split into two jobs to keep concerns separated while
+# avoiding the fragility of chaining via `workflow_run`:
+#
+#   prepare_release_artifacts  → strip + repack + expose metadata
+#   build_and_push_images      → docker build + push (main + sidecar)
+#
+# The jobs flow via `needs`, so all artifacts and metadata stay
+# within a single workflow run — no cross-run race conditions.
+
 on:
-  # Triggers the workflow on push or pull request events but only for the main branch
   workflow_run:
     workflows: ["CMake_rocky8"]
     types:
       - completed
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  release:
-    # The type of runner that the job will run on
-    if: github.event.pull_request.merged == false
+  prepare_release_artifacts:
+    # Only run for successful, non-PR upstream builds. PRs are filtered
+    # here so subsequent docker-meta / push steps never even start for PRs.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      branch_name: ${{ steps.metadata.outputs.branch_name }}
+      commit_id:   ${{ steps.metadata.outputs.commit_id }}
+      event:       ${{ steps.metadata.outputs.event }}
+      tag_name:    ${{ steps.metadata.outputs.tag_name }}
+    steps:
+      - name: Download all artifacts from CMake_rocky8
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./incoming/
+
+      - name: List downloaded artifacts
+        run: ls -laR ./incoming/
+
+      - name: Strip release binaries and separate debug info
+        run: |
+          set -euo pipefail
+
+          # objcopy and readelf come from binutils, pre-installed on the runner.
+          mkdir -p stage
+          tar -zxvf ./incoming/dingo-store.tar.gz/dingo-store.tar.gz -C stage
+          cd stage
+
+          for bin in build/bin/dingodb_server build/bin/dingodb_cli \
+                     build/bin/dingodb_br     build/bin/dingodb_client; do
+            # Build-id is required for .gnu_debuglink and any future
+            # debuginfod workflow. Debian dh_strip and RHEL find-debuginfo
+            # behave the same way and bail without a build-id.
+            if ! readelf -n "$bin" | grep -q 'Build ID'; then
+              echo "FATAL: $bin has no build-id; add -Wl,--build-id=sha1 to LINKFLAGS"
+              exit 1
+            fi
+            objcopy --only-keep-debug "$bin" "$bin.debug"
+            objcopy --strip-debug     "$bin"
+            objcopy --add-gnu-debuglink="$bin.debug" "$bin"
+            chmod -x "$bin.debug"
+            echo "stripped $(basename $bin): $(ls -lh $bin | awk '{print $5}') (debug: $(ls -lh $bin.debug | awk '{print $5}'))"
+          done
+
+          cd ..
+          tar -czvf dingo-store.tar.gz \
+            -C stage scripts build/bin/dingodb_server build/bin/dingodb_cli \
+                     build/bin/dingodb_br     build/bin/dingodb_client conf
+          tar -czvf dingo-store-debug.tar.gz \
+            -C stage build/bin/dingodb_server.debug build/bin/dingodb_cli.debug \
+                     build/bin/dingodb_br.debug     build/bin/dingodb_client.debug
+
+      - name: Upload stripped runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dingo-store.tar.gz
+          path: ./dingo-store.tar.gz
+
+      - name: Upload debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dingo-store-debug.tar.gz
+          path: ./dingo-store-debug.tar.gz
+
+      - name: Extract metadata to job outputs
+        id: metadata
+        run: |
+          set -eu
+
+          # Required: ci_rocky8.yml always produces these on any push/PR.
+          # Failing fast here surfaces a broken upstream artifact contract
+          # immediately, instead of letting Job 2 fail in docker/metadata-action
+          # with an inscrutable error.
+          for required in branch_name commit_id event; do
+            file="./incoming/${required}/${required}.txt"
+            if [ ! -f "$file" ]; then
+              echo "FATAL: required upstream metadata file missing: $file" >&2
+              echo "This means ci_rocky8.yml's metadata artifact contract is broken." >&2
+              exit 1
+            fi
+            echo "${required}=$(cat "$file")" >> "$GITHUB_OUTPUT"
+          done
+
+          # Optional: only present on tag pushes. Tag publishing is not
+          # currently wired in ci_rocky8.yml (no on.push.tags:), so this
+          # file is expected to be absent in practice today.
+          if [ -f ./incoming/tag_name/tag_name.txt ]; then
+            echo "tag_name=$(cat ./incoming/tag_name/tag_name.txt)" >> "$GITHUB_OUTPUT"
+          fi
+
+  build_and_push_images:
+    needs: prepare_release_artifacts
+    # Belt-and-suspenders job-level guard:
+    #   1. result == 'success' — explicit (GHA defaults this on needs, but
+    #      we make it visible).
+    #   2. event != '' — never run when upstream metadata is empty (Job 1's
+    #      fail-fast should already prevent this, but be explicit).
+    #   3. event != 'pull_request' — defense against PR builds slipping
+    #      through if event.txt is malformed.
+    if: |
+      needs.prepare_release_artifacts.result == 'success' &&
+      needs.prepare_release_artifacts.outputs.event != '' &&
+      needs.prepare_release_artifacts.outputs.event != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       packages: write
       contents: read
+    env:
+      BRANCH_NAME: ${{ needs.prepare_release_artifacts.outputs.branch_name }}
+      COMMIT_ID:   ${{ needs.prepare_release_artifacts.outputs.commit_id }}
+      EVENT:       ${{ needs.prepare_release_artifacts.outputs.event }}
+      TAG_NAME:    ${{ needs.prepare_release_artifacts.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download branch name file
+      - name: Download stripped runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: branch_name
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ./
+          name: dingo-store.tar.gz
+          path: ./docker/
 
-      - name: Config trigger branch env
-        run: |
-          if [ -f branch_name.txt ]; then
-            echo "BRANCH_NAME=$(cat branch_name.txt)" >> $GITHUB_ENV
-          fi
-
-      - name: Download commit id file
+      - name: Download debug artifact
         uses: actions/download-artifact@v4
         with:
-          name: commit_id
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ./
+          name: dingo-store-debug.tar.gz
+          path: ./docker/
 
-      - name: Config commit id env
-        run: |
-          if [ -f commit_id.txt ]; then
-            echo "COMMIT_ID=$(cat commit_id.txt)" >> $GITHUB_ENV
-          fi
-
-      - name: Download event type file
-        uses: actions/download-artifact@v4
-        with:
-          name: event
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ./
-
-      - name: Config trigger event env
-        run: |
-          if [ -f event.txt ]; then
-            echo "EVENT=$(cat event.txt)" >> $GITHUB_ENV
-          fi
-
-      - name: Download tag name file
-        if: ${{ env.EVENT == 'tag' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: tag_name
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ./
-
-      - name: Config push tag env
-        if: ${{ env.EVENT == 'tag' }}
-        run: |
-          if [ -f tag_name.txt ]; then
-            echo "TAG_NAME=$(cat tag_name.txt)" >> $GITHUB_ENV
-          fi
-
-      - name: Print env info
-        id: check-event
-        run: |
-          echo "trigger event type is ${{ env.EVENT }}"
-          echo "continue=true" >> $GITHUB_OUTPUT
-          if [ "${{ env.EVENT }}" == "pull_request" ]; then
-            echo "pull request haven't merged, not need to publish image."
-            echo "continue=false" >> $GITHUB_OUTPUT
-          fi
-          if [ -n "${{ env.TAG_NAME }}" ]; then
-            echo "tag name is ${{ env.TAG_NAME }}, need to publish image."
-          fi
-          if [ -n "${{ env.BRANCH_NAME }}" ]; then
-            echo "branch name is ${{ env.BRANCH_NAME }}"
-          fi
-          if [ -n "${{ env.COMMIT_ID }}" ]; then
-            echo "commit id is ${{ env.COMMIT_ID }}"
-          fi
-
-      - name: Download artifact
-        if: steps.check-event.outputs.continue == 'true'
-        uses: dawidd6/action-download-artifact@v2
-        with:
-            github_token: ${{secrets.GITHUB_TOKEN}}
-            workflow: ci_rocky8.yml
-            name: dingo-store.tar.gz
-
-      - name: rename artifactory name
-        if: steps.check-event.outputs.continue == 'true'
-        run: |
-            cp dingo-store.tar.gz ./docker
-
-      # setup Docker buld action
       - name: Set up Docker Buildx
-        if: steps.check-event.outputs.continue == 'true'
-        id: buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Github Packages
-        if: steps.check-event.outputs.continue == 'true'
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Docker meta info
-        if: steps.check-event.outputs.continue == 'true'
         id: store-meta
         uses: docker/metadata-action@v5
         with:
@@ -138,17 +172,32 @@ jobs:
             type=raw,value=${{ env.BRANCH_NAME }}-${{ env.COMMIT_ID }},enable=${{ env.EVENT != 'tag' && env.BRANCH_NAME != 'main' }}
             type=raw,value=${{ env.BRANCH_NAME }}-latest,enable=${{ env.EVENT != 'tag' && env.BRANCH_NAME != 'main' }}
 
-      - name: Build image and push to Docker Hub and GitHub Container Registry
-        if: steps.check-event.outputs.continue == 'true'
+      - name: Docker meta info (debug sidecar)
+        id: store-debug-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: dingodatabase/dingo-store
+          flavor: |
+            suffix=-debug,onlatest=true
+          tags: |
+            type=raw,enable=${{ env.EVENT == 'tag' }},value=${{ env.TAG_NAME }}
+            type=raw,value=latest,enable=${{ env.BRANCH_NAME == 'main' && env.EVENT != 'tag'}}
+            type=sha,prefix=,format=short,enable=${{ env.BRANCH_NAME == 'main' && env.EVENT != 'tag' }}
+            type=raw,value=${{ env.BRANCH_NAME }}-${{ env.COMMIT_ID }},enable=${{ env.EVENT != 'tag' && env.BRANCH_NAME != 'main' }}
+            type=raw,value=${{ env.BRANCH_NAME }}-latest,enable=${{ env.EVENT != 'tag' && env.BRANCH_NAME != 'main' }}
+
+      - name: Build runtime image and push to Docker Hub
         uses: docker/build-push-action@v6
         with:
-          # relative path to the place where source code with Dockerfile is located
           context: ./docker
-          #tags: dingodatabase/dingo-store:latest
+          file: ./docker/Dockerfile
           tags: ${{ steps.store-meta.outputs.tags }}
-          # push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
           push: true
 
-      - name: Image digest
-        if: steps.check-event.outputs.continue == 'true'
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      - name: Build debug sidecar image and push to Docker Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker
+          file: ./docker/Dockerfile.debug
+          tags: ${{ steps.store-debug-meta.outputs.tags }}
+          push: true

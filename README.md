@@ -72,6 +72,13 @@ make
 cd java && mvn clean package -DskipTests
 ```
 
+### Debug Symbols
+
+Release images ship stripped binaries with the matching DWARF symbols
+distributed as a sidecar image `dingodatabase/dingo-store:<tag>-debug`.
+See [docs/debug-symbols.md](./docs/debug-symbols.md) for the SRE
+crash-analysis workflow, local debugging tips, and common pitfalls.
+
 ## How to make a clean pull request
 
 - Create a personal fork of dingo on GitHub.
