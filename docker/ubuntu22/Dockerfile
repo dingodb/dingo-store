@@ -1,5 +1,5 @@
 # FROM ubuntu:22.04
-FROM dingodatabase/dingo-eureka:ubuntu2204
+FROM dingodatabase/dingo-eureka:ubuntu2204-store
 
 ENV TZ=Asia/Shanghai \
     DEBIAN_FRONTEND=noninteractive
