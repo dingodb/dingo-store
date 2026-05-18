@@ -34,6 +34,24 @@ jobs:
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: git submodule update --init --recursive --progress
 
+    # The dingo-store-ubuntu-22.04-dev:eureka image ships with the original
+    # gcc-13.1.0-8ubuntu1~22.04 backport, which has a template scope-lookup
+    # bug that fails to resolve qualified-name typedefs (e.g. key_type) in
+    # out-of-class member function definitions. This causes errors like:
+    #   src/metrics/dingo_bvar.h:411:96: error: invalid use of incomplete
+    #   type 'class dingodb::DingoMultiDimension<T>'
+    # The bug is fixed in gcc-13.3.x (Rocky's gcc-toolset-13.3.1 builds the
+    # same source tree cleanly). Pull the newer gcc-13 from the
+    # ubuntu-toolchain-r/test PPA before configuring CMake.
+    - name: Upgrade gcc-13 to fix template scope-lookup bug
+      run: |
+        apt-get update
+        apt-get install -y software-properties-common
+        add-apt-repository -y ppa:ubuntu-toolchain-r/test
+        apt-get update
+        apt-get install -y --only-upgrade gcc-13 g++-13
+        gcc-13 --version | head -1
+
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
