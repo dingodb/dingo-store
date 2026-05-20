@@ -2531,11 +2531,13 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
+  std::vector<pb::store::TxnScanEntry> entries;
   bool has_more = false;
   std::string end_key{};
 
   status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(),
-                            request->key_only(), request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more,
+                            request->key_only(), request->is_reverse(), resolved_locks, false,
+                            txn_result_info, kvs, entries, has_more,
                             end_key, !request->has_coprocessor(), request->coprocessor());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

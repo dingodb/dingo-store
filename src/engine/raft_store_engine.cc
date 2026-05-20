@@ -630,11 +630,12 @@ butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> c
 butil::Status RaftStoreEngine::TxnReader::TxnScan(
     std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only,
     bool is_reverse, const std::set<int64_t>& resolved_locks, bool disable_coprocessor,
-    const pb::common::CoprocessorV2& coprocessor, pb::store::TxnResultInfo& txn_result_info,
-    std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_scan_key) {
+    const pb::common::CoprocessorV2& coprocessor, bool enable_lock_collection,
+    pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+    std::vector<pb::store::TxnScanEntry>& entries, bool& has_more, std::string& end_scan_key) {
   return TxnEngineHelper::Scan(ctx, ctx->Stream(), txn_reader_raw_engine_, ctx->IsolationLevel(), start_ts, range,
-                               limit, key_only, is_reverse, resolved_locks, disable_coprocessor, coprocessor,
-                               txn_result_info, kvs, has_more, end_scan_key);
+                                limit, key_only, is_reverse, resolved_locks, disable_coprocessor, coprocessor,
+                                enable_lock_collection, txn_result_info, kvs, entries, has_more, end_scan_key);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> ctx, int64_t min_lock_ts,

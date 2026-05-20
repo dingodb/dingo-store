@@ -271,9 +271,10 @@ class Engine : public std::enable_shared_from_this<Engine> {
     virtual butil::Status TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range,
                                   int64_t limit, bool key_only, bool is_reverse,
                                   const std::set<int64_t>& resolved_locks, bool disable_coprocessor,
-                                  const pb::common::CoprocessorV2& coprocessor,
+                                  const pb::common::CoprocessorV2& coprocessor, bool enable_lock_collection,
                                   pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                                  bool& has_more, std::string& end_scan_key) = 0;
+                                  std::vector<pb::store::TxnScanEntry>& entries, bool& has_more,
+                                  std::string& end_scan_key) = 0;
     virtual butil::Status TxnScanLock(std::shared_ptr<Context> ctx, int64_t min_lock_ts, int64_t max_lock_ts,
                                       const pb::common::Range& range, int64_t limit,
                                       std::vector<pb::store::LockInfo>& lock_infos, bool& has_more,

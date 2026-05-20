@@ -1558,11 +1558,12 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
 }
 
 butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
-                               int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only,
-                               bool is_reverse, const std::set<int64_t>& resolved_locks,
-                               pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                               bool& has_more, std::string& end_scan_key, bool disable_coprocessor,
-                               const pb::common::CoprocessorV2& coprocessor) {
+                                int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only,
+                                bool is_reverse, const std::set<int64_t>& resolved_locks, bool enable_lock_collection,
+                                pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                                std::vector<pb::store::TxnScanEntry>& entries, bool& has_more,
+                                std::string& end_scan_key, bool disable_coprocessor,
+                                const pb::common::CoprocessorV2& coprocessor) {
   auto status = ValidateLeader(ctx->RegionId());
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
@@ -1586,7 +1587,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, const pb::stream::S
   auto reader = GetEngineTxnReader(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, resolved_locks, disable_coprocessor,
-                           coprocessor, txn_result_info, kvs, has_more, end_scan_key);
+                            coprocessor, enable_lock_collection, txn_result_info, kvs, entries, has_more, end_scan_key);
   if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found

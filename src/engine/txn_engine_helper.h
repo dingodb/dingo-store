@@ -101,6 +101,13 @@ class TxnIterator {
   std::string GetLastLockKey() { return last_lock_key_; }
   std::string GetLastWriteKey() { return last_write_key_; }
 
+  // Lock collection support.
+  void SetLockCollectionEnabled(bool enable) { lock_collection_enabled_ = enable; }
+  bool LockCollectionEnabled() const { return lock_collection_enabled_; }
+  bool IsCurrentKeyLocked();
+  pb::store::LockInfo GetCurrentLockInfo();
+  void ClearCurrentLockInfo();
+
   const int64_t GetSkippedVersions() { return total_skipped_versions_; }
 
   void ResetSkippedVersions() { total_skipped_versions_ = 0; }
@@ -142,6 +149,10 @@ class TxnIterator {
   // The resolved locks are used to check the lock conflict.
   // If the lock is resolved, there will not be a conflict for provided resolved_locks.
   std::set<int64_t> resolved_locks_;
+
+  // Lock collection state.
+  bool lock_collection_enabled_{false};
+  pb::store::LockInfo current_lock_info_;
 };
 using TxnIteratorPtr = std::shared_ptr<TxnIterator>;
 
@@ -165,8 +176,10 @@ class TxnEngineHelper {
                             const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                             const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
                             const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
-                            const pb::common::CoprocessorV2 &coprocessor, pb::store::TxnResultInfo &txn_result_info,
-                            std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_scan_key);
+                            const pb::common::CoprocessorV2 &coprocessor, bool enable_lock_collection,
+                            pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
+                            std::vector<pb::store::TxnScanEntry> &entries, bool &has_more,
+                            std::string &end_scan_key);
 
   // txn write functions
   static butil::Status DoTxnCommit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,

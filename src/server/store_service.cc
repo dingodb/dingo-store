@@ -1841,11 +1841,15 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
+  std::vector<pb::store::TxnScanEntry> entries;
   bool has_more = false;
   std::string end_key{};
 
+  bool enable_lock_collection = request->enable_lock_collection();
+
   status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(),
-                            request->key_only(), request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more,
+                            request->key_only(), request->is_reverse(), resolved_locks, enable_lock_collection,
+                            txn_result_info, kvs, entries, has_more,
                             end_key, !request->has_coprocessor(), request->coprocessor());
 
   if (BAIDU_UNLIKELY(!status.ok())) {
@@ -1853,7 +1857,15 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     return;
   }
 
-  if (!kvs.empty()) {
+  CHECK(kvs.empty() || entries.empty())
+      << "kvs and entries cannot be both non-empty";
+  CHECK(entries.empty() || txn_result_info.ByteSizeLong() == 0)
+      << "txn_result_info and entries cannot be both non-empty";
+  if (!entries.empty()) {
+    for (auto &entry : entries) {
+      *response->add_entries() = std::move(entry);
+    }
+  } else if (!kvs.empty()) {
     Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
   }
 

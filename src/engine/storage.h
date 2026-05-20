@@ -82,8 +82,10 @@ class Storage {
                             std::vector<pb::common::KeyValue>& kvs);
   butil::Status TxnScan(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
                         int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only, bool is_reverse,
-                        const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info,
-                        std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_scan_key,
+                        const std::set<int64_t>& resolved_locks, bool enable_lock_collection,
+                        pb::store::TxnResultInfo& txn_result_info,
+                        std::vector<pb::common::KeyValue>& kvs, std::vector<pb::store::TxnScanEntry>& entries,
+                        bool& has_more, std::string& end_scan_key,
                         bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor);
   butil::Status TxnScanLock(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
                             int64_t max_ts, const pb::common::Range& range, int64_t limit,

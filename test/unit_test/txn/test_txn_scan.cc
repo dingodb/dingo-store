@@ -758,6 +758,7 @@ TEST_F(TxnScanTest, Scan) {
   bool key_only = false;
   size_t limit = 10;
   std::vector<pb::common::KeyValue> kvs;
+  std::vector<pb::store::TxnScanEntry> entries;
   bool is_reverse = false;
   pb::store::TxnResultInfo txn_result_info;
   std::string end_key;
@@ -770,8 +771,8 @@ TEST_F(TxnScanTest, Scan) {
 
   auto stream = Stream::New(10000000);
   ok = TxnEngineHelper::Scan(ctx, stream, engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit,
-                             key_only, is_reverse, resolved_locks, false, pb_coprocessor, txn_result_info, kvs,
-                             has_more, end_key);
+                             key_only, is_reverse, resolved_locks, false, pb_coprocessor, false, txn_result_info, kvs,
+                             entries, has_more, end_key);
 
   cnt = kvs.size();
 

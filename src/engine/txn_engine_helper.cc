@@ -551,7 +551,7 @@ butil::Status TxnIterator::Seek(const std::string &key) {
     return ret;
   }
 
-  while (value_.empty()) {
+  while (value_.empty() && !(lock_collection_enabled_ && IsCurrentKeyLocked())) {
     ret = InnerNext();
     if (ret.error_code() == pb::error::Errno::ETXN_SCAN_FINISH) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -562,7 +562,7 @@ butil::Status TxnIterator::Seek(const std::string &key) {
       return ret;
     }
 
-    if (!value_.empty()) {
+    if (!value_.empty() || (lock_collection_enabled_ && IsCurrentKeyLocked())) {
       return butil::Status::OK();
     } else {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -576,6 +576,7 @@ butil::Status TxnIterator::Seek(const std::string &key) {
 }
 
 butil::Status TxnIterator::InnerSeek(const std::string &key) {
+  ClearCurrentLockInfo();
   key_.clear();
   value_.clear();
   last_lock_key_.clear();
@@ -665,7 +666,7 @@ butil::Status TxnIterator::Next() {
       return ret;
     }
 
-    if (!value_.empty()) {
+    if (!value_.empty() || (lock_collection_enabled_ && IsCurrentKeyLocked())) {
       return butil::Status::OK();
     } else {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -679,6 +680,7 @@ butil::Status TxnIterator::Next() {
 }
 
 butil::Status TxnIterator::InnerNext() {
+  ClearCurrentLockInfo();
   if (key_.empty()) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
         << "[txn]Scan Next key_ is empty, scan is finished, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
@@ -984,6 +986,21 @@ butil::Status TxnIterator::GetCurrentValue() {
                          << ", isolation_level: " << isolation_level_ << ", start_ts: " << start_ts_
                          << ", seek_ts: " << seek_ts_ << ", lock_info: " << lock_info.ShortDebugString()
                          << ", txn_result_info: " << txn_result_info_.ShortDebugString();
+      if (lock_collection_enabled_) {
+        // Lock collection mode: record the lock as a locked entry instead of aborting the scan.
+        // Keep key_ pointing to the locked key so the caller can emit a locked TxnScanEntry.
+        current_lock_info_ = lock_info;
+        // Clear txn_result_info_ so that Valid() does not treat this as a hard conflict.
+        txn_result_info_ = pb::store::TxnResultInfo();
+        // Advance write_iter_ past this key when it points to the same user key.
+        // Only the == case needs handling: < means write_iter_ is already ahead,
+        // and > here implies !write_iter_->Valid() so no advance is possible.
+        if (last_write_key_ == last_lock_key_) {
+          GotoNextUserKeyInWriteIter(write_iter_, last_write_key_, last_write_key_, total_skipped_versions_);
+        }
+        value_.clear();
+        return butil::Status::OK();
+      }
       key_.clear();
       value_.clear();
       return butil::Status(pb::error::Errno::ETXN_LOCK_CONFLICT, "lock conflict");
@@ -1059,6 +1076,15 @@ bool TxnIterator::Valid(pb::store::TxnResultInfo &txn_result_info) {
 std::string TxnIterator::Key() { return key_; }
 
 std::string TxnIterator::Value() { return value_; }
+
+bool TxnIterator::IsCurrentKeyLocked() {
+  return lock_collection_enabled_ && !key_.empty() && !current_lock_info_.key().empty() &&
+         current_lock_info_.key() == key_;
+}
+
+pb::store::LockInfo TxnIterator::GetCurrentLockInfo() { return current_lock_info_; }
+
+void TxnIterator::ClearCurrentLockInfo() { current_lock_info_ = pb::store::LockInfo(); }
 
 bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
                                         int64_t start_ts, const std::set<int64_t> &resolved_locks,
@@ -1479,18 +1505,19 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
                                     const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                                     const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
                                     const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
-                                    const pb::common::CoprocessorV2 &coprocessor,
+                                    const pb::common::CoprocessorV2 &coprocessor, bool enable_lock_collection,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
-                                    bool &has_more, std::string &end_scan_key) {
+                                    std::vector<pb::store::TxnScanEntry> &entries, bool &has_more,
+                                    std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_latency);
 
   DINGO_LOG(INFO) << fmt::format(
       "[txn][{}] Scan start_ts: {} range: {} isolation_level: {} start_ts: {} limit: {} key_only: {} is_reverse: {} "
-      "resolved_locks size: {} disable_coprocessor: {} coprocessor: {} txn_result_info: {}, has_more: {}, "
+      "resolved_locks size: {} disable_coprocessor: {} coprocessor: {} enable_lock_collection: {} txn_result_info: {}, has_more: {}, "
       "end_scan_key: {}.",
       stream->StreamId(), start_ts, Helper::RangeToString(range), pb::store::IsolationLevel_Name(isolation_level),
       start_ts, limit, key_only, is_reverse, resolved_locks.size(), disable_coprocessor, coprocessor.ShortDebugString(),
-      txn_result_info.ShortDebugString(), has_more, Helper::StringToHex(end_scan_key));
+      enable_lock_collection, txn_result_info.ShortDebugString(), has_more, Helper::StringToHex(end_scan_key));
   uint64_t start_time = Helper::TimestampUs();
   if (isolation_level != pb::store::SnapshotIsolation && isolation_level != pb::store::ReadCommitted) {
     DINGO_LOG(ERROR) << fmt::format("[txn][{}] TxnScan invalid isolation_level: {}.", stream->StreamId(),
@@ -1501,6 +1528,10 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
   if (!kvs.empty()) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
   }
+  if (!entries.empty()) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entries is not empty");
+  }
+  bool lock_collection_enabled = enable_lock_collection && disable_coprocessor;
   auto tracker = ctx->Tracker();
   tracker->SetStartTs(start_ts);
 
@@ -1518,6 +1549,7 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
       DINGO_LOG(ERROR) << s;
       return butil::Status(status.error_code(), s);
     }
+    iter->SetLockCollectionEnabled(lock_collection_enabled);
 
     uint64_t seek_start_time = Helper::TimestampUs();
     Tracker::RocksDBPerfContext seek_perf;
@@ -1560,6 +1592,15 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
   TxnScanStreamStatePtr stream_state = std::dynamic_pointer_cast<TxnScanStreamState>(stream->StreamState());
   TxnIteratorPtr iter = stream_state->iter;
   CHECK(iter != nullptr) << fmt::format("[txn][{}] Scan stream_state->iter is nullptr.", stream->StreamId());
+  if (iter->LockCollectionEnabled() != lock_collection_enabled) {
+    std::string s = fmt::format(
+        "[txn][{}] Scan lock_collection_enabled changed in the same stream, previous: {} current: {}, start_ts: {} "
+        "range: {}.",
+        stream->StreamId(), iter->LockCollectionEnabled(), lock_collection_enabled, start_ts,
+        Helper::RangeToString(range));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
 
   RawCoprocessor::StopChecker stop_checker = [&stream](size_t size, size_t bytes) -> bool {
     return stream->Check(size, bytes);
@@ -1589,54 +1630,117 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
     uint64_t valid_result_time = Helper::TimestampUs();
     auto count = 0;
     RocksDBPerfGuard scan_perf_guard;
-    while (iter->Valid(txn_result_info)) {
-      uint64_t iter_time = Helper::TimestampUs();
-      auto key = iter->Key();
-      auto value = iter->Value();
 
-      pb::common::KeyValue kv;
-      kv.set_key(key);
-      if (!key_only) kv.set_value(value);
-      bytes += kv.ByteSizeLong();
-      kvs.push_back(std::move(kv));
+    if (lock_collection_enabled) {
+      // Lock collection mode: produce TxnScanEntry entries.
+      int64_t kv_count = 0;
+      int64_t lock_count = 0;
+      while (iter->Valid(txn_result_info)) {
+        uint64_t iter_time = Helper::TimestampUs();
+        auto key = iter->Key();
 
-      if (stop_checker(kvs.size(), bytes)) {
-        has_more = true;
-
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-            "[txn][{}] ScanLockInfo has_more: {} kv size: {} limit: {} max_scan_lock_limit: {} response_memory_size: "
-            "{} max_scan_memory_size: {}.",
-            stream->StreamId(), has_more, kvs.size(), limit, FLAGS_stream_message_max_limit_size, bytes,
-            FLAGS_stream_message_max_bytes);
-
-        break;
-      }
-
-      butil::Status status = iter->Next();
-      if (Helper::TimestampUs() - iter_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-            "[txn]Scan start_ts:{},  iter_next elapsed:{} us.", start_ts, Helper::TimestampUs() - iter_time);
-      }
-
-      count++;
-      if (!status.ok()) {
-        if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
-          DINGO_LOG(INFO) << fmt::format("[txn][{}] Scan Next meet lock conflict, start_ts: {} range: {}  status: {}.",
-                                         stream->StreamId(), start_ts, Helper::RangeToString(range),
-                                         status.error_str());
-
-          CHECK(!iter->Valid(txn_result_info)) << fmt::format(
-              "[txn][{}] Scan Next meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
-              "{}",
-              stream->StreamId(), txn_result_info.DebugString());
-          has_more = true;
-          return butil::Status::OK();
-
+        pb::store::TxnScanEntry entry;
+        if (iter->IsCurrentKeyLocked()) {
+          *entry.mutable_locked() = iter->GetCurrentLockInfo();
+          lock_count++;
         } else {
-          std::string s = fmt::format("[txn][{}] Scan iter->Next() failed, start_ts: {} range: {}  status: {}.",
-                                      stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
-          DINGO_LOG(ERROR) << s;
-          return butil::Status(status.error_code(), s);
+          entry.mutable_kv()->set_key(key);
+          if (!key_only) entry.mutable_kv()->set_value(iter->Value());
+          kv_count++;
+        }
+        bytes += entry.ByteSizeLong();
+        entries.push_back(std::move(entry));
+
+        // Count locked and kv entries together to cap the total response batch size.
+        if (stop_checker(entries.size(), bytes)) {
+          has_more = true;
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][{}] Scan(lock_collection) has_more: {} entry size: {} bytes: {}.",
+                             stream->StreamId(), has_more, entries.size(), bytes);
+          break;
+        }
+
+        butil::Status status = iter->Next();
+        if (Helper::TimestampUs() - iter_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn]Scan start_ts:{},  iter_next elapsed:{} us.", start_ts,
+                             Helper::TimestampUs() - iter_time);
+        }
+
+        count++;
+        if (!status.ok()) {
+          if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+            DINGO_LOG(ERROR) << fmt::format(
+                "[txn][{}] Scan(lock_collection) iter->Next() returned ETXN_LOCK_CONFLICT unexpectedly, start_ts: {} "
+                "range: {} status: {}.",
+                stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+            return butil::Status(pb::error::Errno::EINTERNAL,
+                                 "unexpected lock conflict in lock collection mode");
+          } else {
+            std::string s = fmt::format(
+                "[txn][{}] Scan(lock_collection) iter->Next() failed, start_ts: {} range: {} status: {}.",
+                stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+            DINGO_LOG(ERROR) << s;
+            return butil::Status(status.error_code(), s);
+          }
+        }
+      }
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][{}] Scan(lock_collection) finished, total entries: {}, kv: {}, locked: {}.",
+                         stream->StreamId(), entries.size(), kv_count, lock_count);
+    } else {
+      // Original kvs mode.
+      while (iter->Valid(txn_result_info)) {
+        uint64_t iter_time = Helper::TimestampUs();
+        auto key = iter->Key();
+        auto value = iter->Value();
+
+        pb::common::KeyValue kv;
+        kv.set_key(key);
+        if (!key_only) kv.set_value(value);
+        bytes += kv.ByteSizeLong();
+        kvs.push_back(std::move(kv));
+
+        if (stop_checker(kvs.size(), bytes)) {
+          has_more = true;
+
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+              "[txn][{}] ScanLockInfo has_more: {} kv size: {} limit: {} max_scan_lock_limit: {} response_memory_size: "
+              "{} max_scan_memory_size: {}.",
+              stream->StreamId(), has_more, kvs.size(), limit, FLAGS_stream_message_max_limit_size, bytes,
+              FLAGS_stream_message_max_bytes);
+
+          break;
+        }
+
+        butil::Status status = iter->Next();
+        if (Helper::TimestampUs() - iter_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn]Scan start_ts:{},  iter_next elapsed:{} us.", start_ts,
+                             Helper::TimestampUs() - iter_time);
+        }
+
+        count++;
+        if (!status.ok()) {
+          if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+            DINGO_LOG(INFO) << fmt::format(
+                "[txn][{}] Scan Next meet lock conflict, start_ts: {} range: {}  status: {}.",
+                stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+
+            CHECK(!iter->Valid(txn_result_info)) << fmt::format(
+                "[txn][{}] Scan Next meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. "
+                "txn_result_info: "
+                "{}",
+                stream->StreamId(), txn_result_info.DebugString());
+            has_more = true;
+            return butil::Status::OK();
+
+          } else {
+            std::string s = fmt::format("[txn][{}] Scan iter->Next() failed, start_ts: {} range: {}  status: {}.",
+                                        stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+            DINGO_LOG(ERROR) << s;
+            return butil::Status(status.error_code(), s);
+          }
         }
       }
     }
@@ -1645,8 +1749,8 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
 
     if (Helper::TimestampUs() - valid_result_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn]Scan start_ts:{}, kvs.size:{}, count:{}, valid_result_time elapsed:{} us.", start_ts,
-                         kvs.size(), count, Helper::TimestampUs() - valid_result_time);
+          << fmt::format("[txn]Scan start_ts:{}, kvs.size:{}, entries.size:{}, count:{}, valid_result_time elapsed:{} us.",
+                         start_ts, kvs.size(), entries.size(), count, Helper::TimestampUs() - valid_result_time);
     }
   }
   if (iter->Valid(txn_result_info)) {
@@ -1654,6 +1758,14 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
     butil::Status status = iter->Next();
     if (!status.ok()) {
       if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+        if (lock_collection_enabled) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[txn][{}] Scan(lock_collection) end_key Next returned ETXN_LOCK_CONFLICT unexpectedly, start_ts: {} "
+              "range: {} status: {}.",
+              stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+          return butil::Status(pb::error::Errno::EINTERNAL,
+                               "unexpected lock conflict in lock collection mode");
+        }
         DINGO_LOG(INFO) << fmt::format("[txn][{}] Scan Next meet lock conflict, start_ts: {} range: {}  status: {}.",
                                        stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
 
