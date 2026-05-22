@@ -1166,6 +1166,10 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
   if (request->start_ts() < 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param start_ts is invalid");
   }
+  if (request->enable_lock_collection()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         "lock collection is not supported for document txn scan");
+  }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {

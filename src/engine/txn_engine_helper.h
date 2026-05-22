@@ -104,8 +104,8 @@ class TxnIterator {
   // Lock collection support.
   void SetLockCollectionEnabled(bool enable) { lock_collection_enabled_ = enable; }
   bool LockCollectionEnabled() const { return lock_collection_enabled_; }
-  bool IsCurrentKeyLocked();
-  pb::store::LockInfo GetCurrentLockInfo();
+  bool IsCurrentKeyLocked() const;
+  const pb::store::LockInfo& GetCurrentLockInfo() const;
   void ClearCurrentLockInfo();
 
   const int64_t GetSkippedVersions() { return total_skipped_versions_; }

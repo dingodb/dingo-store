@@ -1077,12 +1077,12 @@ std::string TxnIterator::Key() { return key_; }
 
 std::string TxnIterator::Value() { return value_; }
 
-bool TxnIterator::IsCurrentKeyLocked() {
+bool TxnIterator::IsCurrentKeyLocked() const {
   return lock_collection_enabled_ && !key_.empty() && !current_lock_info_.key().empty() &&
          current_lock_info_.key() == key_;
 }
 
-pb::store::LockInfo TxnIterator::GetCurrentLockInfo() { return current_lock_info_; }
+const pb::store::LockInfo& TxnIterator::GetCurrentLockInfo() const { return current_lock_info_; }
 
 void TxnIterator::ClearCurrentLockInfo() { current_lock_info_ = pb::store::LockInfo(); }
 
@@ -1530,6 +1530,10 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
   }
   if (!entries.empty()) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "entries is not empty");
+  }
+  if (enable_lock_collection && !disable_coprocessor) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "lock collection does not support coprocessor");
   }
   bool lock_collection_enabled = enable_lock_collection && disable_coprocessor;
   auto tracker = ctx->Tracker();

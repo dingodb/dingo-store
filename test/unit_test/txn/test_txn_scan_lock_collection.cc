@@ -399,6 +399,31 @@ TEST_F(TxnScanLockCollectionTest, DisabledReturnsTxnResult) {
   EXPECT_EQ(output.txn_result_info.locked().lock_ts(), 50);
 }
 
+TEST_F(TxnScanLockCollectionTest, CoprocessorRejected) {
+  const std::string prefix = "txn_scan_lc_coprocessor_reject_";
+  ClearTxnPrefix(engine, prefix);
+
+  auto stream = Stream::New(1000);
+  auto ctx = std::make_shared<Context>();
+  ctx->SetTracker(Tracker::New(pb::common::RequestInfo()));
+
+  pb::common::Range range;
+  range.set_start_key(prefix);
+  range.set_end_key(Helper::PrefixNext(prefix));
+
+  ScanOutput output;
+  output.stream = stream;
+  pb::common::CoprocessorV2 coprocessor;
+  output.status = TxnEngineHelper::Scan(
+      ctx, output.stream, engine, pb::store::IsolationLevel::SnapshotIsolation, 100, range, 1000, false, false, {}, false,
+      coprocessor, true, output.txn_result_info, output.kvs, output.entries, output.has_more, output.end_key);
+
+  EXPECT_FALSE(output.status.ok());
+  EXPECT_EQ(output.status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  EXPECT_EQ(output.entries.size(), 0);
+  EXPECT_EQ(output.kvs.size(), 0);
+}
+
 TEST_F(TxnScanLockCollectionTest, PaginationEndKeyAndContinue) {
   const std::string prefix = "txn_scan_lc_page_";
   ClearTxnPrefix(engine, prefix);
@@ -590,35 +615,6 @@ TEST_F(TxnScanLockCollectionTest, ReadCommittedIgnoresNonConflictingLocks) {
   ExpectKvEntry(output.entries[1], k2, "old_v2");
   ExpectKvEntry(output.entries[2], k3, "old_v3");
   ExpectKvEntry(output.entries[3], k4, "old_v4");
-}
-
-TEST_F(TxnScanLockCollectionTest, CoprocessorSilentDowngrade) {
-  const std::string prefix = "txn_scan_lc_coproc_down_";
-  ClearTxnPrefix(engine, prefix);
-
-  const std::string k1 = TestKey(prefix, "001");
-  PutLock(engine, k1, 50);
-
-  auto stream = Stream::New(1000);
-  auto ctx = std::make_shared<Context>();
-  ctx->SetTracker(Tracker::New(pb::common::RequestInfo()));
-
-  pb::common::Range range;
-  range.set_start_key(prefix);
-  range.set_end_key(Helper::PrefixNext(prefix));
-
-  ScanOutput output;
-  output.stream = stream;
-  pb::common::CoprocessorV2 coprocessor;
-  // enable_lock_collection=true, disable_coprocessor=false
-  output.status = TxnEngineHelper::Scan(
-      ctx, output.stream, engine, pb::store::IsolationLevel::SnapshotIsolation, 100, range, 1000, false, false, {},
-      false, coprocessor, true, output.txn_result_info, output.kvs, output.entries, output.has_more, output.end_key);
-
-  // This fixture cannot build a fully valid CoprocessorV2 cheaply: Open() depends on schemas and rel_expr decoding.
-  // Only pin the store-side contract here: coprocessor mode disables lock-collection entries.
-  ASSERT_TRUE(output.status.ok()) << output.status.error_str();
-  EXPECT_EQ(output.entries.size(), 0) << "Lock collection should be silently disabled when coprocessor is present";
 }
 
 }  // namespace dingodb

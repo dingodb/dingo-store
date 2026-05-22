@@ -1768,6 +1768,10 @@ static butil::Status ValidateTxnScanRequest(const pb::store::TxnScanRequest* req
   if (request->start_ts() < 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param start_ts is invalid");
   }
+  if (request->enable_lock_collection() && request->has_coprocessor()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         "lock collection does not support coprocessor");
+  }
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
