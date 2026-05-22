@@ -114,9 +114,8 @@ namespace {
   if (replica_status == pb::common::REPLICA_NORMAL) {
     return butil::Status::OK();
   }
-  std::string error_msg =
-      fmt::format("SplitRegion refuse split: {}:{} replica_status({}) is not REPLICA_NORMAL", region_role_label,
-                  region_id, pb::common::ReplicaStatus_Name(replica_status));
+  std::string error_msg = fmt::format("SplitRegion refuse split: {}:{} replica_status({}) is not REPLICA_NORMAL",
+                                      region_role_label, region_id, pb::common::ReplicaStatus_Name(replica_status));
   return butil::Status(pb::error::Errno::ESPLIT_STATUS_ILLEGAL, error_msg);
 }
 
@@ -2575,10 +2574,24 @@ butil::Status CoordinatorControl::DropRegionPermanently(int64_t region_id,
       return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "DropRegionPermanently region not exists");
     }
 
-    // if region is dropped, do real delete
-    if (region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
-        region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETE ||
-        region_to_delete.state() != ::dingodb::pb::common::RegionState::REGION_DELETING) {
+    // State-based gating:
+    //   * REGION_DELETE / REGION_DELETING: a deletion is already in flight
+    //     (DropRegion was called earlier, or the apply chain is mid-flight).
+    //     Re-emitting a DELETE op_type would bloat the raft log; the in-flight
+    //     path will erase the entry on its own. Skip silently.
+    //   * REGION_DELETED in region_map_: heartbeat-driven shadow case -- a store
+    //     reported store_region_state=DELETED, the heartbeat path updated the
+    //     state field via UPDATE op_type, but the region_map_ entry persists
+    //     because no module periodically scans region_map_ for REGION_DELETED
+    //     entries. DropRegionPermanently is the operator-facing tool for
+    //     cleaning these up, so we MUST emit DELETE here. FSM apply of DELETE
+    //     is idempotent (it skips when the entry is no longer in region_map_),
+    //     so emitting is safe even if a race resolved the entry between Get()
+    //     and apply().
+    //   * Any other state (NORMAL, NEW, ...): normal cleanup path.
+    const auto current_state = region_to_delete.state();
+    if (current_state != ::dingodb::pb::common::RegionState::REGION_DELETE &&
+        current_state != ::dingodb::pb::common::RegionState::REGION_DELETING) {
       region_to_delete.set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
 
       // update meta_increment
@@ -2594,7 +2607,15 @@ butil::Status CoordinatorControl::DropRegionPermanently(int64_t region_id,
 
       // on_apply
       // region_map_[region_id].set_state(::dingodb::pb::common::RegionState::REGION_DELETE);
-      DINGO_LOG(INFO) << "DropRegionPermanently drop region success, id = " << region_id;
+      DINGO_LOG(INFO) << "DropRegionPermanently drop region success, id = " << region_id
+                      << " prev_state=" << pb::common::RegionState_Name(current_state);
+    } else {
+      std::string skip_msg = fmt::format(
+          "DropRegionPermanently skipped: region:{} is already in state:{} "
+          "(deletion in flight via another path)",
+          region_id, pb::common::RegionState_Name(current_state));
+      DINGO_LOG(INFO) << skip_msg;
+      return butil::Status(pb::error::Errno::EREGION_DELETING, skip_msg);
     }
   }
 
@@ -2638,8 +2659,14 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
   }
 
   // Validate split_from_region replica_status; refuse split if not REPLICA_NORMAL.
-  butil::Status parent_replica_check = CheckReplicaStatusForSplit("split_from_region", split_from_region_id,
-                                                                  region_status.replica_status());
+  // NOTE: region_status.replica_status() is meaningful here only because the prior
+  // RAFT_HEALTHY + REGION_ONLINE check above guarantees region_status is fresh.
+  // If metrics is missing, GetRegionStatus returns a default-constructed RegionStatus
+  // (replica_status == REPLICA_NONE), but the upstream check would have already
+  // returned ESPLIT_STATUS_ILLEGAL. If those upstream checks are ever loosened,
+  // add an explicit `metrics_ret > 0` gate here, mirroring the child path below.
+  butil::Status parent_replica_check =
+      CheckReplicaStatusForSplit("split_from_region", split_from_region_id, region_status.replica_status());
   if (!parent_replica_check.ok()) {
     DINGO_LOG(ERROR) << parent_replica_check.error_str();
     return parent_replica_check;
@@ -2717,11 +2744,18 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
   // Validate split_to_region replica_status; skip when the child has no metrics entry
   // yet (DingoSafeMap::Get returns -1, never 0). A freshly-created child without store
   // heartbeat is not considered "degraded".
+  //
+  // NOTE on STANDBY semantics: by the upstream state gate (line above) split_to_region
+  // is REGION_STANDBY at this point. STANDBY children for which no store has ever
+  // reported a heartbeat will have metrics_ret == -1 and skip the check. STANDBY
+  // children whose stores *did* send a heartbeat (e.g. a long-lived STANDBY that
+  // briefly went unhealthy) will have metrics_ret > 0 and a real replica_status --
+  // treated identically to any other state's replica_status check.
   pb::common::RegionMetrics split_to_metrics;
   int metrics_ret = region_metrics_map_.Get(split_to_region_id, split_to_metrics);
   if (metrics_ret > 0) {
-    butil::Status child_replica_check = CheckReplicaStatusForSplit(
-        "split_to_region", split_to_region_id, split_to_metrics.region_status().replica_status());
+    butil::Status child_replica_check = CheckReplicaStatusForSplit("split_to_region", split_to_region_id,
+                                                                   split_to_metrics.region_status().replica_status());
     if (!child_replica_check.ok()) {
       DINGO_LOG(ERROR) << child_replica_check.error_str();
       return child_replica_check;
@@ -2825,8 +2859,18 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
   }
 
   // Validate split_from_region replica_status; refuse split if not REPLICA_NORMAL.
-  butil::Status parent_replica_check = CheckReplicaStatusForSplit(
-      "split_from_region", split_from_region_id, region_metrics.region_status().replica_status());
+  // NOTE: Only the parent guard applies here. SplitRegionWithJob creates the child
+  // region in-place below via CreateRegionForSplitInternal -- no metrics exist for
+  // the child at this point, so a child replica_status check is not applicable.
+  // The child guard lives in SplitRegion() above, which is the path used when an
+  // existing region is supplied as the split target.
+  //
+  // region_metrics.region_status() is meaningful here only because the prior
+  // RAFT_HEALTHY + REGION_ONLINE check above guarantees the metrics is fresh.
+  // If those upstream checks are ever loosened, add an explicit metrics-presence
+  // gate here.
+  butil::Status parent_replica_check = CheckReplicaStatusForSplit("split_from_region", split_from_region_id,
+                                                                  region_metrics.region_status().replica_status());
   if (!parent_replica_check.ok()) {
     DINGO_LOG(ERROR) << parent_replica_check.error_str();
     return parent_replica_check;

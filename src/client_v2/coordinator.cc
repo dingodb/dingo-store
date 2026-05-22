@@ -15,7 +15,10 @@
 
 #include "client_v2/coordinator.h"
 
+#include <unistd.h>
+
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <ostream>
@@ -47,6 +50,9 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpMergeRegion(app);
   SetUpQueryRegion(app);
   SetUpTransferLeaderRegion(app);
+  SetUpDropRegion(app);
+  SetUpDropRegionPermanently(app);
+
   // executor
   SetUpCreateExecutor(app);
   SetUpDeleteExecutor(app);
@@ -1663,9 +1669,28 @@ void RunDropRegion(DropRegionOption const &opt) {
 
 void SetUpDropRegionPermanently(CLI::App &app) {
   auto opt = std::make_shared<DropRegionPermanentlyOption>();
-  auto *cmd = app.add_subcommand("DropRegionPermanently", "Drop region permanently")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("DropRegionPermanently",
+                                  "Drop region permanently. "
+                                  "On success the request and response are printed to stdout; "
+                                  "SendRequest status is also written to the log.")
+                     ->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter region id ")->required();
+  cmd->add_option("--enable_store_verify", opt->enable_store_verify,
+                  "If true (default), verify region is absent from all stores before deletion. "
+                  "Set to false to skip verification (DANGEROUS). "
+                  "Note: verify=true rejects a region whose store-side deletion is still in "
+                  "flight (the store still has region meta even though state is DELETED); "
+                  "retry once store-side cleanup completes.")
+      ->default_val(true)
+      ->default_str("true");
+  cmd->add_flag("--confirm_dangerous", opt->confirm_dangerous,
+                "Acknowledge that --enable_store_verify=false is a DANGEROUS operation "
+                "(may orphan store data) and skip the interactive confirmation prompt. "
+                "Use this in non-TTY callers (CI, scripts) that cannot answer the prompt. "
+                "No-op unless --enable_store_verify=false.")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunDropRegionPermanently(*opt); });
 }
 
@@ -1679,10 +1704,50 @@ void RunDropRegionPermanently(DropRegionPermanentlyOption const &opt) {
   dingodb::pb::coordinator::DropRegionPermanentlyResponse response;
 
   request.set_region_id(std::stoll(opt.id));
+  request.set_enable_store_verify(opt.enable_store_verify);
+
+  // When the safety check is disabled we require operator acknowledgement.
+  // Two paths:
+  //   1. --confirm_dangerous was passed: caller has acknowledged on the command line.
+  //   2. TTY available: prompt interactively for an explicit confirmation.
+  //   3. Otherwise (piped stdin / CI / no TTY): refuse with a non-zero exit code.
+  //      A silent abort here would let SRE automation believe the drop succeeded.
+  if (!opt.enable_store_verify && !opt.confirm_dangerous) {
+    if (!isatty(fileno(stdin))) {
+      std::cerr << "ERROR: --enable_store_verify=false requires either an interactive TTY "
+                   "or --confirm_dangerous to acknowledge the risk. "
+                   "Refusing to proceed in non-interactive mode."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    std::cout << "============================================================\n"
+              << "  WARNING: --enable_store_verify=false\n"
+              << "============================================================\n"
+              << "This will PERMANENTLY erase coordinator metadata for region " << opt.id << "\n"
+              << "WITHOUT confirming the region is absent from all stores.\n\n"
+              << "Misuse can cause data to become inaccessible (coordinator no longer\n"
+              << "schedules the region while store data remains orphaned).\n\n"
+              << "Type 'YES' or 'Yes' or 'yes' or 'Y' or 'y' to confirm, anything else to abort:\n"
+              << "> " << std::flush;
+    std::string confirmation_raw;
+    std::getline(std::cin, confirmation_raw);
+    // Trim leading/trailing whitespace so 'yes  ' or '  Y\r' still parse.
+    std::string confirmation = dingodb::Helper::Trim(confirmation_raw, " \t\r\n");
+    if (confirmation != "YES" && confirmation != "Yes" && confirmation != "yes" && confirmation != "Y" &&
+        confirmation != "y") {
+      std::cerr << "DropRegionPermanently aborted by user (entered: '" << confirmation_raw << "')" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DropRegionPermanently",
                                                                                               request, response);
+  // v2 is a human-facing CLI tool: write user-relevant output to stdout
+  // (operators read it directly). Only RPC-level status goes through
+  // DINGO_LOG for log aggregation; avoid double-printing request/response.
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  std::cout << "request: " << request.DebugString() << std::endl;
+  std::cout << "response: " << response.DebugString() << std::endl;
 }
 
 void SetUpSplitRegion(CLI::App &app) {

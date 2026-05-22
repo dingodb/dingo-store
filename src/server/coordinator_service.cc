@@ -1461,6 +1461,79 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
   }
 }
 
+namespace {
+
+// Validate that a region is an orphan (absent from all peer stores) before
+// DropRegionPermanently strips its coordinator metadata. Used only when
+// DropRegionPermanentlyRequest.enable_store_verify is true.
+//
+// Returns OK                    if all peers confirm absence (region is truly orphan).
+// Returns EREGION_NOT_FOUND     if the region is not in region_map_.
+// Returns EREGION_NOT_ORPHAN    if at least one peer still has the region, OR
+//                               if the region has zero peers in coordinator
+//                               metadata (no store to ask, so orphan status
+//                               cannot be verified via RPC).
+// Otherwise propagates the underlying VerifyPeersOnStore error verbatim, with a
+// hint to retry with --enable_store_verify=false to override.
+//
+// NOTE: this helper does NOT emit a log line itself. The returned Status carries
+// the full error_str; callers are expected to DINGO_LOG(ERROR) << <status>.error_str()
+// on failure. This avoids double-logging the same content from helper and caller.
+[[nodiscard]] butil::Status CheckRegionIsOrphanForDrop(std::shared_ptr<CoordinatorControl> coordinator_control,
+                                                      int64_t region_id) {
+  pb::coordinator_internal::RegionInternal region = coordinator_control->GetRegion(region_id);
+  if (region.id() == 0) {
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND,
+                         fmt::format("DropRegionPermanently region not exists, id={}", region_id));
+  }
+
+  if (region.definition().peers_size() == 0) {
+    return butil::Status(
+        pb::error::Errno::EREGION_NOT_ORPHAN,
+        fmt::format("region:{} has no peers in coordinator metadata; cannot verify "
+                    "orphan status via store RPC. If you are certain the region's "
+                    "data is gone, pass --enable_store_verify=false to skip "
+                    "verification (DANGEROUS).",
+                    region_id));
+  }
+
+  // VerifyPeersOnStore populates two out-vectors: stores that confirm the
+  // region still exists, and stores that confirm absence. We use exist_store_ids
+  // to gate the NOT_ORPHAN refusal below; not_exist_store_ids is logged on the
+  // success path so operators can confirm which stores were actually reached.
+  std::vector<int64_t> exist_store_ids;
+  std::vector<int64_t> not_exist_store_ids;
+  butil::Status verify_status =
+      CoordinatorControl::VerifyPeersOnStore(region, exist_store_ids, not_exist_store_ids);
+  if (!verify_status.ok()) {
+    return butil::Status(
+        verify_status.error_code(),
+        fmt::format("verify peer on store failed: {}. Cannot determine whether region:{} is "
+                    "truly an orphan. If peer stores are confirmed offline / unreachable and "
+                    "you know the region's data is gone, pass --enable_store_verify=false "
+                    "to skip verification.",
+                    verify_status.error_str(), region_id));
+  }
+
+  if (!exist_store_ids.empty()) {
+    return butil::Status(
+        pb::error::Errno::EREGION_NOT_ORPHAN,
+        fmt::format("region:{} still exists on store_ids:[{}], this is NOT an orphan. "
+                    "DropRegionPermanently refused. If you are sure these stores no longer "
+                    "hold this region's data, pass --enable_store_verify=false to skip "
+                    "the check (DANGEROUS).",
+                    region_id, Helper::VectorToString(exist_store_ids)));
+  }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "CheckRegionIsOrphanForDrop: region:{} confirmed orphan; stores reporting absence:[{}]",
+      region_id, Helper::VectorToString(not_exist_store_ids));
+
+  return butil::Status::OK();
+}
+
+}  // namespace
+
 void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
                              const pb::coordinator::DropRegionPermanentlyRequest *request,
                              pb::coordinator::DropRegionPermanentlyResponse *response, TrackClosure *done,
@@ -1478,7 +1551,46 @@ void DoDropRegionPermanently(google::protobuf::RpcController * /*controller*/,
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   auto region_id = request->region_id();
-  auto cluster_id = request->cluster_id();
+  // cluster_id is currently unused but read to preserve the API surface;
+  // reserved for future multi-cluster routing.
+  [[maybe_unused]] auto cluster_id = request->cluster_id();
+
+  // Verify the region is truly an orphan (absent from all peer stores) before
+  // erasing coordinator metadata. proto3 default for enable_store_verify is
+  // false (old clients without the field stay on the no-verify path -- this
+  // is wire-level backward compat only); new dingodb_client / dingodb_cli set
+  // this to true by default. NOTE: backward compat here refers ONLY to the
+  // verify branch in this RPC handler. The underlying DropRegionPermanently
+  // has changed its state-gate predicate as part of this same change (it now
+  // emits DELETE for REGION_DELETED state to clean up heartbeat-driven shadow
+  // entries) -- see coordinator_control_coor.cc DropRegionPermanently().
+  //
+  // NOTE on TOCTOU: CheckRegionIsOrphanForDrop fans out to peer stores via
+  // VerifyPeersOnStore (ms-level RPC), and DropRegionPermanently below is NOT in
+  // the same critical section. A store could in principle re-report the region
+  // between check and erase. In practice this is acceptable because (a) a store
+  // that has "forgotten" the region does not spontaneously re-acquire it, and
+  // (b) this RPC is operator-initiated and is supposed to run only after all
+  // load on the region has stopped. Operators must not rely on this check to
+  // race against live traffic.
+  //
+  // When enable_store_verify=true, there is also a second TOCTOU window between
+  // the GetRegion(region_id) call inside CheckRegionIsOrphanForDrop and the
+  // region_map_.Get(region_id) call inside DropRegionPermanently itself (both
+  // are lock-free DingoSafeMap reads). The window is dominated by the
+  // VerifyPeersOnStore fan-out that sits between them, so it is ms-level under
+  // normal peer latency, not microseconds. If a raft apply erases the entry
+  // during that window, DropRegionPermanently returns EREGION_NOT_FOUND -- the
+  // operator just retries and sees the actual final state. No corruption risk.
+  if (request->enable_store_verify()) {
+    butil::Status orphan_check = CheckRegionIsOrphanForDrop(coordinator_control, region_id);
+    if (!orphan_check.ok()) {
+      DINGO_LOG(ERROR) << orphan_check.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(orphan_check.error_code()));
+      response->mutable_error()->set_errmsg(orphan_check.error_str());
+      return;
+    }
+  }
 
   auto ret = coordinator_control->DropRegionPermanently(region_id, meta_increment);
 

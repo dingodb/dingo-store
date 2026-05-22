@@ -329,6 +329,11 @@ void RunDropRegion(DropRegionOption const &opt);
 struct DropRegionPermanentlyOption {
   std::string coor_url;
   std::string id;
+  // Member initializers guarantee defined values even if CLI11 parsing is
+  // bypassed (e.g. by future SDK wrappers or unit tests). CLI11 still owns
+  // the user-visible default via ->default_val() in SetUpDropRegionPermanently.
+  bool enable_store_verify{true};
+  bool confirm_dangerous{false};
 };
 void SetUpDropRegionPermanently(CLI::App &app);
 void RunDropRegionPermanently(DropRegionPermanentlyOption const &opt);

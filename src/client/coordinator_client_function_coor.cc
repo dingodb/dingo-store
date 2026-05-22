@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <unistd.h>
+
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -100,6 +104,19 @@ DECLARE_int64(tenant_id);
 DECLARE_bool(get_all_tenant);
 
 DEFINE_bool(get_coordinator_map, false, "get_coordinator_map");
+DEFINE_bool(enable_store_verify, true,
+            "If true (default), DropRegionPermanently performs VerifyPeersOnStore "
+            "to confirm the region is absent from all stores before deletion. "
+            "Set to false to skip verification (DANGEROUS). "
+            "Note: verify=true rejects a region whose store-side deletion is "
+            "still in flight (the store still has region meta even though state "
+            "is DELETED); retry once store-side cleanup completes.");
+DEFINE_bool(confirm_dangerous, false,
+            "Acknowledge that --enable_store_verify=false is a DANGEROUS operation "
+            "(may orphan store data) and skip the interactive confirmation prompt that "
+            "DropRegionPermanently otherwise shows. Use this in non-TTY callers (CI, "
+            "scripts) that cannot answer the prompt. "
+            "No-op unless --enable_store_verify=false.");
 
 DEFINE_bool(use_filter_store_type, false, "use filter_store_type");
 DEFINE_int32(filter_store_type, 0, "filter_store_type");
@@ -1449,9 +1466,50 @@ void SendDropRegionPermanently(std::shared_ptr<dingodb::CoordinatorInteraction> 
     return;
   }
 
+  request.set_enable_store_verify(FLAGS_enable_store_verify);
+
+  // When the safety check is disabled we require operator acknowledgement.
+  // Two paths:
+  //   1. --confirm_dangerous was passed: caller has acknowledged on the command line.
+  //   2. TTY available: prompt interactively for an explicit confirmation.
+  //   3. Otherwise (piped stdin / CI / no TTY): refuse with a non-zero exit code.
+  //      A silent abort here would let SRE automation believe the drop succeeded.
+  if (!FLAGS_enable_store_verify && !FLAGS_confirm_dangerous) {
+    if (!isatty(fileno(stdin))) {
+      DINGO_LOG(ERROR) << "--enable_store_verify=false requires either an interactive TTY "
+                          "or --confirm_dangerous to acknowledge the risk. "
+                          "Refusing to proceed in non-interactive mode.";
+      std::cerr << "ERROR: --enable_store_verify=false requires either an interactive TTY "
+                   "or --confirm_dangerous to acknowledge the risk. "
+                   "Refusing to proceed in non-interactive mode."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    std::cout << "============================================================\n"
+              << "  WARNING: --enable_store_verify=false\n"
+              << "============================================================\n"
+              << "This will PERMANENTLY erase coordinator metadata for region " << FLAGS_id << "\n"
+              << "WITHOUT confirming the region is absent from all stores.\n\n"
+              << "Misuse can cause data to become inaccessible (coordinator no longer\n"
+              << "schedules the region while store data remains orphaned).\n\n"
+              << "Type 'YES' or 'Yes' or 'yes' or 'Y' or 'y' to confirm, anything else to abort:\n"
+              << "> " << std::flush;
+    std::string confirmation_raw;
+    std::getline(std::cin, confirmation_raw);
+    // Trim leading/trailing whitespace so 'yes  ' or '  Y\r' still parse.
+    std::string confirmation = dingodb::Helper::Trim(confirmation_raw, " \t\r\n");
+    if (confirmation != "YES" && confirmation != "Yes" && confirmation != "yes" && confirmation != "Y" &&
+        confirmation != "y") {
+      DINGO_LOG(WARNING) << "DropRegionPermanently aborted by user (entered: '" << confirmation_raw << "')";
+      std::cerr << "DropRegionPermanently aborted by user (entered: '" << confirmation_raw << "')" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   auto status = coordinator_interaction->SendRequest("DropRegionPermanently", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  DINGO_LOG(INFO) << "request: " << request.DebugString();
+  DINGO_LOG(INFO) << "response: " << response.DebugString();
 }
 
 void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
