@@ -117,6 +117,14 @@ DEFINE_string(br_client_method, "", "br client method. default empty");
 // br client method param1
 DEFINE_string(br_client_method_param1, "", "br client method param1. default empty");
 
+DEFINE_bool(confirm_dangerous, false,
+            "Acknowledge that the requested br tool client operation is DANGEROUS "
+            "(e.g. EnableRaftMetaForceNoSync disables fsync of raft meta, so a machine "
+            "power failure may lose unsynced vote records) and skip the interactive "
+            "confirmation prompt. Use this in non-TTY callers (CI, scripts) that cannot "
+            "answer the prompt. Without it, dangerous operations are refused in "
+            "non-interactive mode. default false");
+
 DEFINE_bool(br_backup_enable_get_job_list_check, true, "br backup enable get job list check. default true");
 
 // br backup index must be exist

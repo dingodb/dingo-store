@@ -615,6 +615,13 @@ int main(int argc, char* argv[]) {
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableRaftSync\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableRaftSync\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=QueryRaftSync\n");
+    // raft_meta_force_no_sync=true means braft will NOT fsync raft meta (vote records): faster writes
+    // but a machine power failure may lose unsynced votes. So "Enable" turns the UNSAFE behaviour ON.
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableRaftMetaForceNoSync\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableRaftMetaForceNoSync "
+        "--confirm_dangerous  # DANGEROUS: turns OFF fsync of raft meta cluster-wide\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=QueryRaftMetaForceNoSync\n");
 
     exit(-1);
   }

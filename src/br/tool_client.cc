@@ -14,12 +14,19 @@
 
 #include "br/tool_client.h"
 
+#include <unistd.h>
+
 #include <cstdint>
+#include <cstdio>
+#include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "br/helper.h"
 #include "br/interaction_manager.h"
+#include "br/parameter.h"
 #include "br/tool_utils.h"
 #include "br/utils.h"
 #include "common/constant.h"
@@ -31,6 +38,54 @@
 #include "proto/error.pb.h"
 
 namespace br {
+
+namespace {
+
+// Send a single ControlConfig request to every addr of ONE service (the per-service
+// inner loop behind CoreControlConfig). Errors do NOT abort the loop: each reachable
+// node is still attempted (best-effort), and any failure is recorded into failed_addrs
+// and reflected in return_status. The coordinator and the store/index/document services
+// use different request/response proto types, so this is a template; both type arguments
+// are spelled explicitly at the call site (request type first, then response type).
+template <typename Request, typename Response>
+void SendControlConfigToService(const std::vector<std::string>& addrs, const std::string& service_name,
+                                const std::string& action, const Request& request,
+                                std::vector<std::string>& failed_addrs, butil::Status& return_status) {
+  int i = 0;
+  for (const auto& addr : addrs) {
+    Response response;
+    std::shared_ptr<ServerInteraction> interaction;
+    butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return_status = status;
+      failed_addrs.push_back(addr);
+      ++i;
+      continue;
+    }
+
+    std::string name = fmt::format("[{}] {} {} {}", i++, service_name, action, addr);
+    ToolUtils::PrintRequest(name, request);
+
+    status = interaction->SendRequest(service_name, "ControlConfig", request, response);
+    ToolUtils::PrintResponse(name, response);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return_status = status;
+      failed_addrs.push_back(addr);
+      continue;
+    }
+
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+      failed_addrs.push_back(addr);
+      continue;
+    }
+  }
+}
+
+}  // namespace
 
 ToolClient::ToolClient(ToolClientParams params) : tool_client_params_(params) {}
 
@@ -163,6 +218,24 @@ butil::Status ToolClient::Run() {
     }
   } else if ("QueryRaftSync" == tool_client_params_.br_client_method) {
     status = QueryRaftSync();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else if ("DisableRaftMetaForceNoSync" == tool_client_params_.br_client_method) {
+    status = DisableRaftMetaForceNoSync();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else if ("EnableRaftMetaForceNoSync" == tool_client_params_.br_client_method) {
+    status = EnableRaftMetaForceNoSync();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else if ("QueryRaftMetaForceNoSync" == tool_client_params_.br_client_method) {
+    status = QueryRaftMetaForceNoSync();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -691,6 +764,11 @@ butil::Status ToolClient::EnableRaftSync() { return CoreRaftSync("true", "Enable
 butil::Status ToolClient::QueryRaftSync() { return CoreRaftSync("query", "QueryRaftSync"); }
 
 butil::Status ToolClient::CoreRaftSync(const std::string& type, const std::string& action) {
+  return CoreControlConfig("FLAGS_raft_sync", type, action);
+}
+
+butil::Status ToolClient::CoreControlConfig(const std::string& flag_name, const std::string& type,
+                                            const std::string& action) {
   butil::Status return_status;
   auto coordinator_interaction = br::InteractionManager::GetInstance().GetCoordinatorInteraction();
   auto store_interaction = br::InteractionManager::GetInstance().GetStoreInteraction();
@@ -703,167 +781,139 @@ butil::Status ToolClient::CoreRaftSync(const std::string& type, const std::strin
   bool is_exist_document = (document_interaction != nullptr ? !document_interaction->IsEmpty() : false);
 
   if (!is_exist_coordinator && !is_exist_store && !is_exist_index && !is_exist_document) {
-    DINGO_LOG(INFO) << "Coordinator, Store, Index and Document not exist, skip CoreRaftSync";
-    std::cout << "Coordinator, Store, Index and Document not exist, skip CoreRaftSync" << std::endl;
+    std::string msg = fmt::format("Coordinator, Store, Index and Document not exist, skip {}", action);
+    DINGO_LOG(INFO) << msg;
+    std::cout << msg << std::endl;
     return butil::Status::OK();
   }
 
   dingodb::pb::store::ControlConfigRequest request;
-  dingodb::pb::store::ControlConfigResponse response;
-
   request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
 
-  dingodb::pb::common::ControlConfigVariable config_raft_sync;
-  config_raft_sync.set_name("FLAGS_raft_sync");
-  config_raft_sync.set_value(type);
-  request.mutable_control_config_variable()->Add(std::move(config_raft_sync));
+  dingodb::pb::common::ControlConfigVariable config_variable;
+  config_variable.set_name(flag_name);
+  config_variable.set_value(type);
+  request.mutable_control_config_variable()->Add(std::move(config_variable));
+
+  std::vector<std::string> failed_addrs;
 
   // coordinator exist
   if (is_exist_coordinator) {
     dingodb::pb::coordinator::ControlConfigRequest coordinator_request;
-    dingodb::pb::coordinator::ControlConfigResponse coordinator_response;
-
     coordinator_request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
     coordinator_request.mutable_control_config_variable()->Add()->CopyFrom(request.control_config_variable(0));
-
-    std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
-    int i = 0;
-    for (const auto& addr : addrs) {
-      coordinator_response.Clear();
-      std::shared_ptr<ServerInteraction> interaction;
-      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      std::string name = fmt::format("[{}] CoordinatorService {} {}", i++, action, addr);
-      ToolUtils::PrintRequest(name, coordinator_request);
-
-      status =
-          interaction->SendRequest("CoordinatorService", "ControlConfig", coordinator_request, coordinator_response);
-      ToolUtils::PrintResponse(name, coordinator_response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      if (coordinator_response.error().errcode() != dingodb::pb::error::OK) {
-        DINGO_LOG(ERROR) << Utils::FormatResponseError(coordinator_response);
-        return_status = butil::Status(coordinator_response.error().errcode(), coordinator_response.error().errmsg());
-        continue;
-      }
-    }
+    SendControlConfigToService<dingodb::pb::coordinator::ControlConfigRequest,
+                               dingodb::pb::coordinator::ControlConfigResponse>(
+        coordinator_interaction->GetAddrs(), "CoordinatorService", action, coordinator_request, failed_addrs,
+        return_status);
   }
 
   // store exist
   if (is_exist_store) {
-    std::vector<std::string> addrs = store_interaction->GetAddrs();
-    int i = 0;
-    for (const auto& addr : addrs) {
-      response.Clear();
-
-      std::shared_ptr<ServerInteraction> interaction;
-      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      std::string name = fmt::format("[{}] StoreService {} {}", i++, action, addr);
-
-      ToolUtils::PrintRequest(name, request);
-
-      status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
-      ToolUtils::PrintResponse(name, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      if (response.error().errcode() != dingodb::pb::error::OK) {
-        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
-        continue;
-      }
-    }
+    SendControlConfigToService<dingodb::pb::store::ControlConfigRequest, dingodb::pb::store::ControlConfigResponse>(
+        store_interaction->GetAddrs(), "StoreService", action, request, failed_addrs, return_status);
   }
 
   // index exist
   if (is_exist_index) {
-    std::vector<std::string> addrs = index_interaction->GetAddrs();
-    int i = 0;
-    for (const auto& addr : addrs) {
-      response.Clear();
-      std::shared_ptr<ServerInteraction> interaction;
-
-      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      std::string name = fmt::format("[{}] IndexService {} {}", i++, action, addr);
-
-      ToolUtils::PrintRequest(name, request);
-
-      status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
-      ToolUtils::PrintResponse(name, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      if (response.error().errcode() != dingodb::pb::error::OK) {
-        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
-        continue;
-      }
-    }
+    SendControlConfigToService<dingodb::pb::store::ControlConfigRequest, dingodb::pb::store::ControlConfigResponse>(
+        index_interaction->GetAddrs(), "IndexService", action, request, failed_addrs, return_status);
   }
 
   // document exist
   if (is_exist_document) {
-    std::vector<std::string> addrs = document_interaction->GetAddrs();
-    int i = 0;
-    for (const auto& addr : addrs) {
-      response.Clear();
-      std::shared_ptr<ServerInteraction> interaction;
+    SendControlConfigToService<dingodb::pb::store::ControlConfigRequest, dingodb::pb::store::ControlConfigResponse>(
+        document_interaction->GetAddrs(), "DocumentService", action, request, failed_addrs, return_status);
+  }
 
-      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
+  // A control-config change applied to only some nodes leaves the cluster in a
+  // mixed state. Surface exactly which nodes failed (instead of silently keeping
+  // only the last error) so the operator can re-apply there.
+  if (!failed_addrs.empty()) {
+    std::string joined;
+    for (const auto& failed_addr : failed_addrs) {
+      if (!joined.empty()) {
+        joined += ", ";
       }
-
-      std::string name = fmt::format("[{}] DocumentService {} {}", i++, action, addr);
-
-      ToolUtils::PrintRequest(name, request);
-
-      status = interaction->SendRequest("DocumentService", "ControlConfig", request, response);
-      ToolUtils::PrintResponse(name, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return_status = status;
-        continue;
-      }
-
-      if (response.error().errcode() != dingodb::pb::error::OK) {
-        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
-        continue;
-      }
+      joined += failed_addr;
     }
+    std::string msg = fmt::format(
+        "{} failed on {} node(s): {}. The cluster may be in an inconsistent state; re-run on the failed node(s).",
+        action, failed_addrs.size(), joined);
+    DINGO_LOG(ERROR) << msg;
+    std::cout << msg << std::endl;
+  } else {
+    DINGO_LOG(INFO) << fmt::format("{} succeeded on all nodes.", action);
   }
 
   return return_status;
+}
+
+butil::Status ToolClient::DisableRaftMetaForceNoSync() {
+  // Disabling raft_meta_force_no_sync restores normal (safe) fsync behaviour, so no confirmation needed.
+  return CoreRaftMetaForceNoSync("false", "DisableRaftMetaForceNoSync");
+}
+
+butil::Status ToolClient::EnableRaftMetaForceNoSync() {
+  // Enabling raft_meta_force_no_sync tells braft to STOP fsync-ing raft meta (vote records): writes
+  // get faster, but a machine power failure can then lose unsynced votes. This is the DANGEROUS
+  // direction, so require explicit operator acknowledgement before broadcasting it to the cluster.
+  butil::Status status = ConfirmDangerous(
+      "EnableRaftMetaForceNoSync",
+      "This DISABLES fsync of raft meta (vote records) on every coordinator/store/index/document node.\n"
+      "Writes become faster, but a machine power failure may then lose unsynced vote records.");
+  if (!status.ok()) {
+    return status;
+  }
+  return CoreRaftMetaForceNoSync("true", "EnableRaftMetaForceNoSync");
+}
+
+butil::Status ToolClient::QueryRaftMetaForceNoSync() {
+  return CoreRaftMetaForceNoSync("query", "QueryRaftMetaForceNoSync");
+}
+
+butil::Status ToolClient::CoreRaftMetaForceNoSync(const std::string& type, const std::string& action) {
+  return CoreControlConfig("FLAGS_raft_meta_force_no_sync", type, action);
+}
+
+butil::Status ToolClient::ConfirmDangerous(const std::string& action, const std::string& detail) {
+  // Two ways to proceed with a dangerous operation:
+  //   1. --confirm_dangerous on the command line (scripts / CI acknowledge up front), or
+  //   2. an interactive TTY where the operator types an explicit confirmation.
+  // Otherwise (piped stdin / CI without the flag) refuse with a non-OK status so automation cannot
+  // silently weaken durability. A silent success here would be the worst outcome.
+  if (FLAGS_confirm_dangerous) {
+    DINGO_LOG(WARNING) << action << ": proceeding because --confirm_dangerous was set. " << detail;
+    return butil::Status::OK();
+  }
+
+  if (!isatty(fileno(stdin))) {
+    std::string msg = fmt::format(
+        "{} is a DANGEROUS operation; it requires either an interactive TTY or --confirm_dangerous to "
+        "acknowledge the risk. Refusing to proceed in non-interactive mode. {}",
+        action, detail);
+    DINGO_LOG(ERROR) << msg;
+    std::cerr << "ERROR: " << msg << std::endl;
+    return butil::Status(dingodb::pb::error::EILLEGAL_PARAMTETERS, msg);
+  }
+
+  std::cout << "============================================================\n"
+            << "  WARNING: " << action << " (DANGEROUS)\n"
+            << "============================================================\n"
+            << detail << "\n\n"
+            << "Type 'YES' or 'Yes' or 'yes' or 'Y' or 'y' to confirm, anything else to abort:\n"
+            << "> " << std::flush;
+  std::string confirmation_raw;
+  std::getline(std::cin, confirmation_raw);
+  std::string confirmation = dingodb::Helper::Trim(confirmation_raw, " \t\r\n");
+  if (confirmation != "YES" && confirmation != "Yes" && confirmation != "yes" && confirmation != "Y" &&
+      confirmation != "y") {
+    std::string msg = fmt::format("{} aborted by user (entered: '{}')", action, confirmation_raw);
+    DINGO_LOG(WARNING) << msg;
+    std::cerr << msg << std::endl;
+    return butil::Status(dingodb::pb::error::EILLEGAL_PARAMTETERS, msg);
+  }
+  return butil::Status::OK();
 }
 
 }  // namespace br
