@@ -66,6 +66,17 @@ class ToolClient : public std::enable_shared_from_this<ToolClient> {
   static butil::Status EnableRaftSync();
   static butil::Status QueryRaftSync();
   static butil::Status CoreRaftSync(const std::string& type, const std::string& action);
+  static butil::Status DisableRaftMetaForceNoSync();
+  static butil::Status EnableRaftMetaForceNoSync();
+  static butil::Status QueryRaftMetaForceNoSync();
+  static butil::Status CoreRaftMetaForceNoSync(const std::string& type, const std::string& action);
+  // Shared implementation behind CoreRaftSync / CoreRaftMetaForceNoSync: broadcasts a single
+  // {flag_name = type} ControlConfig change to every coordinator/store/index/document node.
+  static butil::Status CoreControlConfig(const std::string& flag_name, const std::string& type,
+                                         const std::string& action);
+  // Gate a DANGEROUS operation behind --confirm_dangerous or an interactive TTY confirmation.
+  // Returns a non-OK status (and does NOT proceed) when neither is available.
+  static butil::Status ConfirmDangerous(const std::string& action, const std::string& detail);
 
   ToolClientParams tool_client_params_;
 };
