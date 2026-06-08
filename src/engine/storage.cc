@@ -22,6 +22,7 @@
 
 #include "butil/compiler_specific.h"
 #include "butil/status.h"
+#include "common/braft_flags.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -45,6 +46,9 @@
 #include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index_utils.h"
+
+// braft::FLAGS_raft_meta_force_no_sync is declared in common/braft_flags.h
+// (it is a braft-internal flag not exposed by braft's public headers).
 
 namespace dingodb {
 
@@ -2065,6 +2069,16 @@ butil::Status Storage::ControlConfig(std::shared_ptr<Context> /*ctx*/,
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_region_enable_auto_merge);
     } else if ("FLAGS_raft_sync" == variable.name()) {
       Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
+    } else if ("FLAGS_raft_meta_force_no_sync" == variable.name()) {
+      // Setting this flag directly assigns the gflag, so braft's own gflags validator
+      // (validate_raft_meta_force_no_sync) is bypassed and its warning is not emitted. Log a warning
+      // here -- only for the dangerous direction (enabling) -- so a durability-weakening change is
+      // visible in the server log. (query/false are read-only/safe and must not warn.)
+      if (Helper::StringConvertTrue(variable.value())) {
+        DINGO_LOG(WARNING) << "ControlConfig enabling FLAGS_raft_meta_force_no_sync: braft will NOT fsync raft "
+                              "meta (vote records); a machine power failure may then lose unsynced votes.";
+      }
+      Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_meta_force_no_sync);
     } else {
       config.set_is_already_set(false);
       config.set_is_error_occurred(true);

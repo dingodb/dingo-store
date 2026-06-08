@@ -163,6 +163,11 @@ DECLARE_string(br_client_method);
 // br client method param1
 DECLARE_string(br_client_method_param1);
 
+// Acknowledge a DANGEROUS br tool client operation (e.g. EnableRaftMetaForceNoSync,
+// which disables fsync of raft meta). When false, dangerous operations require an
+// interactive TTY confirmation and are refused in non-interactive mode.
+DECLARE_bool(confirm_dangerous);
+
 DECLARE_bool(br_backup_enable_get_job_list_check);
 
 // br backup index must be exist
