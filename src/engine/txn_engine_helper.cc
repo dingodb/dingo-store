@@ -84,11 +84,23 @@ BRPC_VALIDATE_GFLAG(max_restore_count, brpc::PositiveInteger);
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
 
+DECLARE_bool(gc_enable_compaction_filter);
+
+DEFINE_bool(gc_enable_safe_point_read_check, true,
+            "reject txn reads/prewrites whose start_ts is not newer than the gc safe point");
+
+DEFINE_int64(txn_scan_next_seek_bound, 8,
+             "when a scan crosses a user key's remaining versions, or a snapshot read descends through versions "
+             "newer than its start_ts, try this many Next calls before falling back to one Seek past the run; 0 "
+             "disables the seek fallback (pure Next crawl)");
+BRPC_VALIDATE_GFLAG(txn_scan_next_seek_bound, brpc::NonNegativeInteger);
+
 DEFINE_validator(dingo_log_switch_txn_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_txn_gc_detail, &PassBool);
 DEFINE_validator(dingo_log_switch_backup_detail, &PassBool);
 DEFINE_validator(enable_gc_task_tracker, &PassBool);
 DEFINE_validator(enable_rocksdb_perf_metric, &PassBool);
+DEFINE_validator(gc_enable_safe_point_read_check, &PassBool);
 
 DEFINE_int64(txn_iterator_elapse_time_threshold_ms, 5, "txn iterator elapse time ms threshold");
 
@@ -558,7 +570,11 @@ butil::Status TxnIterator::Seek(const std::string &key) {
           << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return butil::Status::OK();
     } else if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "[txn]InnerNext failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      if (ret.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+        DINGO_LOG(INFO) << "[txn]InnerNext failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      } else {
+        DINGO_LOG(ERROR) << "[txn]InnerNext failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      }
       return ret;
     }
 
@@ -784,9 +800,23 @@ butil::Status TxnIterator::InnerNext() {
 butil::Status TxnIterator::GotoNextUserKeyInWriteIter(std::shared_ptr<Iterator> write_iter, std::string prev_user_key,
                                                       std::string &last_write_key, int64_t &skipped_count) {
   int64_t local_skip = 0;
+  bool seek_used = false;
+  const int64_t seek_bound = FLAGS_txn_scan_next_seek_bound;
   while (write_iter->Valid()) {
-    write_iter->Next();
-    local_skip++;
+    if (seek_bound > 0 && local_skip >= seek_bound && !seek_used) {
+      // Bounded next-then-seek: a hot key can hold millions of stale
+      // versions; after a few Next probes, one index-level Seek jumps past
+      // the whole group. Real commit_ts is always >= 1, so ts=0 encodes to a
+      // position after every version of prev_user_key and before the next
+      // user key — the seek lands exactly on the next key's newest version.
+      // One-shot: if it (impossibly) lands inside prev_user_key we fall back
+      // to plain Next instead of re-seeking forever.
+      write_iter->Seek(mvcc::Codec::EncodeKey(prev_user_key, 0));
+      seek_used = true;
+    } else {
+      write_iter->Next();
+      local_skip++;
+    }
     if (write_iter->Valid()) {
       int64_t commit_ts;
       auto ret = mvcc::Codec::DecodeKey(write_iter->Key(), last_write_key, commit_ts);
@@ -802,8 +832,8 @@ butil::Status TxnIterator::GotoNextUserKeyInWriteIter(std::shared_ptr<Iterator> 
   }
   skipped_count += local_skip;
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail && local_skip > 0)
-      << fmt::format("[txn]GotoNextUserKeyInWriteIter prev_user_key:{}, skipped {} old versions",
-                     Helper::StringToHex(prev_user_key), local_skip);
+      << fmt::format("[txn]GotoNextUserKeyInWriteIter prev_user_key:{}, skipped {} old versions, seek_fallback:{}",
+                     Helper::StringToHex(prev_user_key), local_skip, seek_used);
 
   return butil::Status::OK();
 }
@@ -828,6 +858,9 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
                                                    std::string &user_value, int64_t &skipped_count) {
   is_value_found = false;
   int64_t version_count = 0;
+  int64_t newer_probe_count = 0;
+  bool seek_used = false;
+  const int64_t seek_bound = FLAGS_txn_scan_next_seek_bound;
   while (write_iter->Valid()) {
     int64_t commit_ts;
     auto ret1 = mvcc::Codec::DecodeKey(write_iter->Key(), last_write_key, commit_ts);
@@ -851,8 +884,21 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << "[txn]Scan commit_ts > start_ts, means this value is not accepted, will go to next, start_ts: "
             << start_ts << ", commit_ts: " << commit_ts << ", user_key: " << Helper::StringToHex(user_key);
-        write_iter->Next();
-        version_count++;
+        if (seek_bound > 0 && newer_probe_count >= seek_bound && !seek_used) {
+          // Bounded next-then-seek, mirroring GotoNextUserKeyInWriteIter: an old
+          // snapshot on a hot key can face a long run of versions newer than
+          // start_ts. All of them sort before EncodeKey(user_key, start_ts) (ts
+          // is stored negated), so one Seek lands on the newest version with
+          // commit_ts <= start_ts — or beyond user_key when nothing is visible.
+          // After the landing this branch cannot trigger again for user_key, so
+          // the seek is naturally one-shot; the flag only rules out re-seeking.
+          write_iter->Seek(mvcc::Codec::EncodeKey(user_key, start_ts));
+          seek_used = true;
+        } else {
+          write_iter->Next();
+          newer_probe_count++;
+          version_count++;
+        }
 
         // we need to setup is_value_found to true, so that the caller can go to next user_key
         // is_value_found means the value is found, not means the value is valid
@@ -1244,6 +1290,56 @@ butil::Status TxnEngineHelper::ScanLockInfo(StreamPtr stream, RawEnginePtr engin
   return butil::Status::OK();
 }
 
+butil::Status TxnEngineHelper::CheckSafePointForRead(const std::shared_ptr<GCSafePointManager> &safe_point_manager,
+                                                     int64_t tenant_id, int64_t region_id, int64_t start_ts,
+                                                     const char *op_name) {
+  if (!FLAGS_gc_enable_safe_point_read_check) {
+    return butil::Status::OK();
+  }
+
+  if (safe_point_manager == nullptr) {
+    return butil::Status::OK();
+  }
+
+  // A stale snapshot is unsafe no matter whether gc is currently paused, so
+  // the gc_stop flag is deliberately ignored here. Missing tenant -> {true, 0}
+  // which the safe_point_ts > 0 test skips.
+  auto [gc_stop, safe_point_ts] = safe_point_manager->GetGcFlagAndSafePointTs(tenant_id);
+  (void)gc_stop;
+  if (safe_point_ts > 0 && start_ts <= safe_point_ts) {
+    std::string s = fmt::format(
+        "[txn][region({})] {} rejected, start_ts {} is not newer than gc safe point {} of tenant {}; versions the "
+        "snapshot depends on may already be garbage collected",
+        region_id, op_name, start_ts, safe_point_ts, tenant_id);
+    DINGO_LOG(WARNING) << s;
+    return butil::Status(pb::error::Errno::ETXN_LT_GC_SAFE_POINT, s);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnEngineHelper::CheckSafePointForRead(int64_t region_id, int64_t start_ts, const char *op_name) {
+  if (!FLAGS_gc_enable_safe_point_read_check) {
+    return butil::Status::OK();
+  }
+
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+  if (store_meta_manager == nullptr) {
+    return butil::Status::OK();
+  }
+
+  int64_t tenant_id = Constant::kDefaultTenantId;
+  auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
+  if (store_region_meta != nullptr) {
+    auto region = store_region_meta->GetRegion(region_id);
+    if (region != nullptr) {
+      tenant_id = region->Definition().tenant_id();
+    }
+  }
+
+  return CheckSafePointForRead(store_meta_manager->GetGCSafePointManager(), tenant_id, region_id, start_ts, op_name);
+}
+
 bvar::LatencyRecorder g_txn_batch_get_latency("dingo_txn_batch_get");
 
 butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEnginePtr engine,
@@ -1293,6 +1389,11 @@ butil::Status TxnEngineHelper::BatchGet(std::shared_ptr<Context> ctx, RawEngineP
   if (!ret_init.ok()) {
     DINGO_LOG(ERROR) << "[txn]BatchGet txn_reader.Init failed, status: " << ret_init.error_str();
     return butil::Status(pb::error::Errno::EINTERNAL, "txn_reader.Init failed");
+  }
+
+  auto ret_safe_point = CheckSafePointForRead(ctx->RegionId(), start_ts, "BatchGet");
+  if (!ret_safe_point.ok()) {
+    return ret_safe_point;
   }
 
   if (Helper::TimestampUs() - start_time > FLAGS_txn_iterator_elapse_time_threshold_ms * 1000) {
@@ -1554,6 +1655,13 @@ butil::Status TxnEngineHelper::Scan(std::shared_ptr<Context> ctx, StreamPtr stre
       return butil::Status(status.error_code(), s);
     }
     iter->SetLockCollectionEnabled(lock_collection_enabled);
+
+    // Only on stream creation: continuation pages read from the already-pinned
+    // iterator, which stays consistent regardless of safe point movement.
+    butil::Status safe_point_status = CheckSafePointForRead(ctx->RegionId(), start_ts, "Scan");
+    if (!safe_point_status.ok()) {
+      return safe_point_status;
+    }
 
     uint64_t seek_start_time = Helper::TimestampUs();
     Tracker::RocksDBPerfContext seek_perf;
@@ -2923,6 +3031,15 @@ butil::Status TxnEngineHelper::Prewrite(
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
                      << ", init txn_reader failed, status: " << ret_init.error_str();
     return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  // A prewrite whose start_ts lags the gc safe point derived its mutations
+  // from a snapshot gc may already have destroyed; reject like a stale read.
+  auto ret_safe_point = CheckSafePointForRead(region->Id(), start_ts, "Prewrite");
+  if (!ret_safe_point.ok()) {
+    error->set_errcode(pb::error::Errno::ETXN_LT_GC_SAFE_POINT);
+    error->set_errmsg(ret_safe_point.error_str());
+    return ret_safe_point;
   }
 
   Tracker::ElapsedTime lock_et{"check_lock"};
@@ -4959,6 +5076,103 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
   return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
 }
 
+bool TxnEngineHelper::IsRocksdbRegionForGc(int64_t region_id) {
+#if defined(ENABLE_XDPROCKS)
+  (void)region_id;
+  return false;
+#elif defined(ENABLE_GC_MOCK)
+  // Unit tests run without the server singleton; the mock engine is rocksdb.
+  (void)region_id;
+  return true;
+#else
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    // Near-impossible: DoGc fetched this region just before dispatching here.
+    // Fall back to the BDB-style paths (exact-key marks, full scan).
+    return false;
+  }
+  return region->GetRawEngineType() == pb::common::RawEngine::RAW_ENG_ROCKSDB;
+#endif
+}
+
+bool TxnEngineHelper::IsGcFilterMode(int64_t region_id) {
+  if (!FLAGS_gc_enable_compaction_filter) {
+    return false;
+  }
+  if (!FLAGS_gc_enable_safe_point_read_check) {
+    // Mirror TxnGcCompactionFilterFactory::CreateCompactionFilter: without
+    // the read guard the filter refuses to run, so narrowing scan GC here
+    // would leave Put-headed garbage owned by NOBODY — an unbounded silent
+    // leak. Keep the legacy full scan until both flags are on.
+    static std::atomic<uint64_t> log_count{0};
+    if (log_count.fetch_add(1, std::memory_order_relaxed) % 100 == 0) {
+      DINGO_LOG(ERROR) << "[txn_gc] gc_enable_compaction_filter is on but gc_enable_safe_point_read_check is off; "
+                          "the compaction filter refuses to run in this state, keeping legacy full-scan GC.";
+    }
+    return false;
+  }
+  return IsRocksdbRegionForGc(region_id);
+}
+
+TxnEngineHelper::GcFilterModeAction TxnEngineHelper::ClassifyForGcFilterMode(GcFilterModeKeyState &state,
+                                                                             pb::store::Op op,
+                                                                             const std::string_view &encoded_key) {
+  switch (op) {
+    case pb::store::Op::Put:
+      if (!state.head_decided) {
+        // Newest Put <= safe point: the compaction filter keeps it and
+        // physically drops everything older — scan GC has no business here.
+        state.head_decided = true;
+        return GcFilterModeAction::kSkip;
+      }
+      // Below a Put head: the filter's garbage. Under a delete mark: covered
+      // by the pending range; its data CF row is reconciled replica-locally
+      // when the range is applied.
+      return GcFilterModeAction::kSkip;
+    case pb::store::Op::Delete:
+      if (!state.head_decided) {
+        // Delete-mark group head: the whole group dies as one raft range so
+        // replicas whose filter progressed differently still converge.
+        state.head_decided = true;
+        state.under_delete_mark = true;
+        state.pending_range_start.assign(encoded_key.data(), encoded_key.size());
+        return GcFilterModeAction::kSkip;
+      }
+      return GcFilterModeAction::kSkip;
+    case pb::store::Op::Rollback:
+      if (!state.head_decided) {
+        // The filter keeps head-position rollbacks (computed-commit_ts twin
+        // hazard); scan GC stays their remover so rollback-only keys cannot
+        // leak. NOTE: the exact-key delete shares the pre-existing legacy
+        // collision hazard — tracked as an independent issue.
+        return GcFilterModeAction::kCollectWriteExact;
+      }
+      return GcFilterModeAction::kSkip;
+    default:
+      return GcFilterModeAction::kSkip;
+  }
+}
+
+void TxnEngineHelper::FlushGcFilterModePendingRange(GcFilterModeKeyState &state,
+                                                    std::vector<pb::common::Range> &range_deletes) {
+  if (state.pending_range_start.empty()) {
+    return;
+  }
+  if (state.pending_range_start.size() <= 8) {
+    // Malformed encoded key; never emit a range whose end we cannot bound.
+    state.pending_range_start.clear();
+    return;
+  }
+  pb::common::Range range;
+  std::string_view encoded_user_prefix(state.pending_range_start.data(), state.pending_range_start.size() - 8);
+  // [mark, PrefixNext(user prefix)): every version at or below the mark and
+  // nothing of the next user key (EncodeBytes output is prefix-free).
+  range.set_end_key(Helper::PrefixNext(encoded_user_prefix));
+  range.set_start_key(std::move(state.pending_range_start));
+  range_deletes.push_back(std::move(range));
+  state.pending_range_start.clear();
+}
+
 butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, pb::common::RegionType type,
                                            int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
@@ -4978,6 +5192,21 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
   std::vector<std::string> kv_deletes_lock;
   std::vector<std::string> kv_deletes_data;
   std::vector<std::string> kv_deletes_write;
+  std::vector<pb::common::Range> range_deletes_write;
+
+  // Narrowed "delete-mark specialist" mode: active only for rocksdb regions
+  // with the compaction filter enabled (the filter owns Put-headed garbage).
+  const bool filter_mode = IsGcFilterMode(region_id);
+  // Rocksdb regions remove delete-mark groups as per-key raft RANGES in
+  // EVERY mode: replica write-CF states may have diverged under the
+  // compaction filter (and stay diverged after any flag toggle), so
+  // leader-enumerated exact keys cannot cover followers.
+  const bool use_mark_ranges = filter_mode || IsRocksdbRegionForGc(region_id);
+  GcFilterModeKeyState filter_state;
+  // Set when the scan is cut short (gc_stop at a batch boundary): the
+  // deferred mark / pending range must then be dropped, because versions of
+  // the current group past the abort point were never examined.
+  bool scan_aborted = false;
 
   std::string lock_start_key;
   std::string lock_end_key;
@@ -5008,6 +5237,15 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
   bool is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
   // this var is too long. this is important var. do not cut down it.
   bool is_first_put_key_if_write_ts_le_safe_point_ts = true;
+
+  // A delete mark that heads its key's version group must reach raft strictly
+  // AFTER every older version it shadows: batches flush newest-first, so an
+  // eagerly-batched mark could be applied (and the process crash) while
+  // shadowed versions survive in a later batch — the next GC round would then
+  // mistake the newest shadowed Put for a live head and keep it forever,
+  // resurrecting a deleted row. The mark is therefore held here and only
+  // emplaced when its group ends (or at scan end).
+  std::string deferred_delete_mark_key;
 
   std::string write_key;
   std::string last_write_key;
@@ -5042,6 +5280,17 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
 
     // reset for first put
     if (last_write_key != write_key) {
+      if (!deferred_delete_mark_key.empty()) {
+        // previous key's group is complete; its mark may now follow the olders
+        kv_deletes_write.emplace_back(std::move(deferred_delete_mark_key));
+        deferred_delete_mark_key.clear();
+      }
+      if (use_mark_ranges) {
+        // previous key's group is complete; its delete-mark range (if any)
+        // may now be emitted
+        FlushGcFilterModePendingRange(filter_state, range_deletes_write);
+        filter_state.Reset();
+      }
       is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts = false;
       last_write_key = write_key;
       is_first_put_key_if_write_ts_le_safe_point_ts = true;
@@ -5068,6 +5317,27 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
     }
 
     // handle write_ts <= safe_point_ts key value
+    if (filter_mode) {
+      GcFilterModeAction action = ClassifyForGcFilterMode(filter_state, op, write_iter_key);
+      switch (action) {
+        case GcFilterModeAction::kCollectWriteExact: {
+          kv_deletes_write.emplace_back(write_iter_key);
+          break;
+        }
+        case GcFilterModeAction::kSkip:
+        default: {
+          if (op != pb::store::Put && op != pb::store::Delete && op != pb::store::Rollback) {
+            std::string s = fmt::format(
+                "[txn_gc][write][tenant({})][region({})][type({})][txn] filter-mode invalid pb::store::Op type : {} "
+                "type string : {} , write_iter->key : {} write_key : {} write_ts : {} ignore. ",
+                gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), static_cast<int>(op),
+                pb::store::Op_Name(op), Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts);
+            DINGO_LOG(ERROR) << s;
+          }
+          break;
+        }
+      }
+    } else {
     switch (op) {
       case pb::store::Put: {
         // caution!!!
@@ -5115,12 +5385,27 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
         // caution!!!
         // if write_ts > safe_point_ts. not exist delete or put key.
         // if write_ts <= safe_point_ts. first is delete key. this first put key actually can be delete.
+        bool is_group_head = false;
         if (!is_exist_put_or_delete_key_if_write_ts_gt_safe_point_ts) {
           if (is_first_put_key_if_write_ts_le_safe_point_ts) {
             is_first_put_key_if_write_ts_le_safe_point_ts = false;
+            is_group_head = true;
           }
         }
-        kv_deletes_write.emplace_back(write_iter_key);
+        if (use_mark_ranges) {
+          // rocksdb region: head or shadowed alike, everything at or below a
+          // removable mark is garbage — one raft range covers it on every
+          // replica regardless of local filter progress. The highest mark of
+          // the key wins (its range subsumes lower ones).
+          if (filter_state.pending_range_start.empty()) {
+            filter_state.pending_range_start.assign(write_iter_key.data(), write_iter_key.size());
+          }
+        } else if (is_group_head) {
+          // defer: must not reach raft before the versions it shadows
+          deferred_delete_mark_key.assign(write_iter_key.data(), write_iter_key.size());
+        } else {
+          kv_deletes_write.emplace_back(write_iter_key);
+        }
         break;
       }
 
@@ -5149,14 +5434,19 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
         break;
       }
     }
+    }
 
-    if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
+    if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size() + range_deletes_write.size()) >=
+        FLAGS_gc_delete_batch_count) {
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
             "[txn_gc][tenant({})][region({})][type({})][txn] gc_stop set stop.  start_key : {} end_key : {}. return",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
             Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+        // remember WHY we left the loop: a second gc_stop read at _interrupt1
+        // can race a concurrent stop->start toggle and must not un-abort us
+        scan_aborted = true;
         goto _interrupt1;
       }
 
@@ -5168,10 +5458,11 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
             internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
       }
 
-      total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
+      total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size() +
+                             range_deletes_write.size());
       DoFinalWorkForTxnGc(raft_engine, ctx, reader, snapshot, write_key, gc_safe_point->GetTenantId(), type,
-                          safe_point_ts, kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key,
-                          lock_end_key, last_lock_start_key, last_lock_end_key);
+                          safe_point_ts, kv_deletes_lock, kv_deletes_data, kv_deletes_write, range_deletes_write,
+                          lock_start_key, lock_end_key, last_lock_start_key, last_lock_end_key);
     }
     write_iter->Next();
   }
@@ -5194,10 +5485,42 @@ _interrupt1:
         internal_safe_point_ts);
   }
 
-  total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
+  {
+    // The deferral contract: a mark/range may reach raft only after its WHOLE
+    // group was examined. An aborted scan (gc_stop at a batch boundary) or an
+    // errored iterator can leave the current group half-scanned — drop the
+    // pending mark/range then; the next round re-collects the intact group.
+    const bool scan_clean = !scan_aborted && write_iter->Status().ok();
+    if (!scan_clean) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[txn_gc][tenant({})][region({})][type({})][txn] scan aborted or iterator error({}), dropping pending "
+          "delete-mark/range for the half-scanned group.",
+          gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
+          write_iter->Status().error_str());
+      deferred_delete_mark_key.clear();
+      filter_state.Reset();
+    }
+  }
+
+  if (!deferred_delete_mark_key.empty()) {
+    // scan ended inside the last group: its mark goes into the final batch,
+    // after every shadowed version. (On the gc_stop path above the mark is
+    // intentionally NOT flushed — it survives as the group head, safe.)
+    kv_deletes_write.emplace_back(std::move(deferred_delete_mark_key));
+    deferred_delete_mark_key.clear();
+  }
+  if (use_mark_ranges) {
+    // scan ended inside the last group: same deferral contract as the mark
+    // above — not flushed on the gc_stop path, the group survives whole.
+    FlushGcFilterModePendingRange(filter_state, range_deletes_write);
+    filter_state.Reset();
+  }
+
+  total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size() +
+                         range_deletes_write.size());
   DoFinalWorkForTxnGc(raft_engine, ctx, reader, snapshot, write_key, gc_safe_point->GetTenantId(), type, safe_point_ts,
-                      kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key, lock_end_key,
-                      last_lock_start_key, last_lock_end_key);
+                      kv_deletes_lock, kv_deletes_data, kv_deletes_write, range_deletes_write, lock_start_key,
+                      lock_end_key, last_lock_start_key, last_lock_end_key);
 
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
@@ -5678,6 +6001,7 @@ butil::Status TxnEngineHelper::RaftEngineWriteForTxnGc(std::shared_ptr<Engine> r
                                                        const std::vector<std::string> &kv_deletes_lock,
                                                        const std::vector<std::string> &kv_deletes_data,
                                                        const std::vector<std::string> &kv_deletes_write,
+                                                       const std::vector<pb::common::Range> &range_deletes_write,
                                                        int64_t tenant_id, pb::common::RegionType type) {
   BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
 
@@ -5711,7 +6035,16 @@ butil::Status TxnEngineHelper::RaftEngineWriteForTxnGc(std::shared_ptr<Engine> r
     }
   }
 
-  if (nullptr == write_dels && nullptr == lock_dels && nullptr == data_dels) {
+  pb::raft::DeleteRangesWithCf *write_range_dels = nullptr;
+  if (!range_deletes_write.empty()) {
+    write_range_dels = cf_put_delete->add_delete_ranges_with_cf();
+    write_range_dels->set_cf_name(Constant::kTxnWriteCF);
+    for (const auto &range : range_deletes_write) {
+      *(write_range_dels->add_ranges()) = range;
+    }
+  }
+
+  if (nullptr == write_dels && nullptr == lock_dels && nullptr == data_dels && nullptr == write_range_dels) {
     return butil::Status::OK();
   }
 
@@ -5719,6 +6052,10 @@ butil::Status TxnEngineHelper::RaftEngineWriteForTxnGc(std::shared_ptr<Engine> r
     return butil::Status::OK();
   }
 #if defined(ENABLE_GC_MOCK)
+  // Mirror the apply handler: ranges first, then exact keys.
+  if (!range_deletes_write.empty()) {
+    ctx->Writer()->KvBatchDeleteRange({{Constant::kTxnWriteCF, range_deletes_write}});
+  }
   if (!kv_deletes_write.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnWriteCF, {}, kv_deletes_write);
   if (!kv_deletes_lock.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnLockCF, {}, kv_deletes_lock);
   if (!kv_deletes_data.empty()) ctx->Writer()->KvBatchPutAndDelete(Constant::kTxnDataCF, {}, kv_deletes_data);
@@ -5887,8 +6224,9 @@ butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
     std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, RawEngine::ReaderPtr reader,
     std::shared_ptr<Snapshot> snapshot, const std::string &write_key, int64_t tenant_id, pb::common::RegionType type,
     int64_t safe_point_ts, std::vector<std::string> &kv_deletes_lock, std::vector<std::string> &kv_deletes_data,
-    std::vector<std::string> &kv_deletes_write, std::string &lock_start_key, std::string &lock_end_key,
-    std::string &last_lock_start_key, std::string &last_lock_end_key) {
+    std::vector<std::string> &kv_deletes_write, std::vector<pb::common::Range> &range_deletes_write,
+    std::string &lock_start_key, std::string &lock_end_key, std::string &last_lock_start_key,
+    std::string &last_lock_end_key) {
   BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
 
   butil::Status status;
@@ -5907,15 +6245,15 @@ butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
     }
   }
 
-  status =
-      RaftEngineWriteForTxnGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write, tenant_id, type);
+  status = RaftEngineWriteForTxnGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write,
+                                   range_deletes_write, tenant_id, type);
   if (!status.ok()) {
     std::string s = fmt::format(
         "[txn_gc][write][tenant({})][region({})][type({})][txn] RaftEngineWriteForTxnGc failed. kv_deletes_lock size "
         ": "
-        "{} kv_deletes_data size : {} kv_deletes_write : {} safe_point_ts : {}. ignore.",
+        "{} kv_deletes_data size : {} kv_deletes_write : {} range_deletes_write : {} safe_point_ts : {}. ignore.",
         tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_lock.size(), kv_deletes_data.size(),
-        kv_deletes_write.size(), safe_point_ts);
+        kv_deletes_write.size(), range_deletes_write.size(), safe_point_ts);
     DINGO_LOG(ERROR) << s + status.error_str();
   }
 
@@ -5926,6 +6264,7 @@ butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
   kv_deletes_lock.resize(0);
   kv_deletes_data.resize(0);
   kv_deletes_write.resize(0);
+  range_deletes_write.resize(0);
 
   return butil::Status();
 }

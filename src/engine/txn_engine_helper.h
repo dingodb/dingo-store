@@ -167,6 +167,19 @@ class TxnEngineHelper {
                                     std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
                                     std::string &end_scan_key);
 
+  // Reject a txn read/prewrite whose start_ts is not newer than the tenant's
+  // GC safe point: GC may already have removed versions such a snapshot
+  // depends on. Gated by FLAGS_gc_enable_safe_point_read_check; must be
+  // called AFTER the operation's rocksdb snapshot/iterator is created so the
+  // pinned view cannot predate any filtering done under a smaller safe point.
+  // Resolves tenant and safe point manager from the server singleton.
+  static butil::Status CheckSafePointForRead(int64_t region_id, int64_t start_ts, const char *op_name);
+
+  // Core decision, dependency-injected for unit tests.
+  static butil::Status CheckSafePointForRead(const std::shared_ptr<GCSafePointManager> &safe_point_manager,
+                                             int64_t tenant_id, int64_t region_id, int64_t start_ts,
+                                             const char *op_name);
+
   static butil::Status BatchGet(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
                                 const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
                                 const std::vector<std::string> &keys, const std::set<int64_t> &resolved_locks,
@@ -308,8 +321,52 @@ class TxnEngineHelper {
   static butil::Status RaftEngineWriteForTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                                const std::vector<std::string> &kv_deletes_lock,
                                                const std::vector<std::string> &kv_deletes_data,
-                                               const std::vector<std::string> &kv_deletes_write, int64_t tenant_id,
-                                               pb::common::RegionType type);
+                                               const std::vector<std::string> &kv_deletes_write,
+                                               const std::vector<pb::common::Range> &range_deletes_write,
+                                               int64_t tenant_id, pb::common::RegionType type);
+
+  // True when this region lives on rocksdb (BDB regions and XDPROCKS builds
+  // excluded). Rocksdb regions remove delete-mark groups as raft-replicated
+  // per-key RANGES in every GC mode: once the compaction filter has ever
+  // diverged replica write-CF states, enumerated exact keys cannot cover
+  // followers, and that divergence outlives any flag toggle.
+  static bool IsRocksdbRegionForGc(int64_t region_id);
+
+  // True when this region's txn GC must run in compaction-filter mode: scan
+  // GC narrowed to delete-mark groups plus rollbacks before a head; every
+  // Put-headed group belongs to TxnGcCompactionFilter. Requires BOTH flags
+  // (the factory refuses to filter without the read guard — narrowing scan GC
+  // then would leave Put garbage owned by nobody) AND a rocksdb region.
+  static bool IsGcFilterMode(int64_t region_id);
+
+  // Filter-mode per-user-key classification. The write CF removal of a
+  // delete-mark group is ONE range [mark_key, PrefixNext(user_prefix)),
+  // deferred to group end so a mid-group batch flush cannot strand data-cf
+  // orphans without a next-round re-collection path.
+  struct GcFilterModeKeyState {
+    bool head_decided{false};
+    bool under_delete_mark{false};
+    std::string pending_range_start;  // encoded key of the delete mark
+
+    void Reset() {
+      head_decided = false;
+      under_delete_mark = false;
+      pending_range_start.clear();
+    }
+  };
+  enum class GcFilterModeAction : uint8_t {
+    kSkip = 0,               // the compaction filter or the pending range owns this version
+    kCollectWriteExact = 1,  // exact write-cf key delete (rollback before a head)
+    // NOTE: under-mark data CF rows are NOT collected here — the raft apply
+    // of the write-CF range enumerates them replica-locally (leader-snapshot
+    // enumeration misses rows the leader's filter already dropped).
+  };
+  // Only versions with ts <= safe point reach this; versions arrive newest
+  // first within one user key.
+  static GcFilterModeAction ClassifyForGcFilterMode(GcFilterModeKeyState &state,  // NOLINT
+                                                    pb::store::Op op, const std::string_view &encoded_key);
+  static void FlushGcFilterModePendingRange(GcFilterModeKeyState &state,          // NOLINT
+                                            std::vector<pb::common::Range> &range_deletes);  // NOLINT
 
   static butil::Status RaftEngineWriteForNonTxnStoreAndDocumentGc(std::shared_ptr<Engine> raft_engine,
                                                                   std::shared_ptr<Context> ctx,
@@ -342,6 +399,7 @@ class TxnEngineHelper {
                                            std::vector<std::string> &kv_deletes_lock,                    // NOLINT
                                            std::vector<std::string> &kv_deletes_data,                    // NOLINT
                                            std::vector<std::string> &kv_deletes_write,                   // NOLINT
+                                           std::vector<pb::common::Range> &range_deletes_write,          // NOLINT
                                            std::string &lock_start_key,                                  // NOLINT
                                            std::string &lock_end_key, std::string &last_lock_start_key,  // NOLINT
                                            std::string &last_lock_end_key);                              // NOLINT

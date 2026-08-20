@@ -14,6 +14,7 @@
 
 #include "server/server.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -33,6 +34,7 @@
 #include "coordinator/coordinator_control.h"
 #include "engine/bdb_raw_engine.h"
 #include "engine/engine.h"
+#include "engine/txn_auto_compaction_checker.h"
 #include "engine/raft_store_engine.h"
 #include "engine/rocks_raw_engine.h"
 #include "event/store_state_machine_event.h"
@@ -98,6 +100,9 @@ DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index inter
 DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
 DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
 DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
+DEFINE_int32(gc_auto_compaction_check_interval_s, 300,
+             "gc auto compaction check interval seconds, doubling as each round's time budget; the crontab interval "
+             "is fixed at startup, restart to change");
 DEFINE_int32(balance_leader_interval_s, 60, "balance leader interval seconds");
 DEFINE_int32(balance_region_interval_s, 120, "balance region interval seconds");
 DEFINE_int32(recycle_job_interval_s, 60, "recycle job list interval seconds");
@@ -293,6 +298,36 @@ bool Server::InitDirectory() {
   return true;
 }
 
+#if !defined(ENABLE_XDPROCKS)
+// Filter-effective gc safe point: min over all known tenants, 0 (= every
+// physical gc paused) while any tenant is stopped or has no safe point yet.
+// gc_stop is also the br backup barrier. Resolved lazily on every use
+// because the store meta manager initializes after the rocks engine.
+static int64_t TxnGcFilterEffectiveSafePoint() {
+  auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
+  if (store_meta_manager == nullptr) {
+    return 0;
+  }
+  auto safe_point_manager = store_meta_manager->GetGCSafePointManager();
+  if (safe_point_manager == nullptr) {
+    return 0;
+  }
+  auto safe_points = safe_point_manager->GetAllGcFlagAndSafePointTsForDebug();
+  if (safe_points.empty()) {
+    return 0;
+  }
+  int64_t min_safe_point_ts = INT64_MAX;
+  for (const auto& [tenant_id, flag_and_ts] : safe_points) {
+    auto [gc_stop, safe_point_ts] = flag_and_ts;
+    if (gc_stop || safe_point_ts <= 0) {
+      return 0;
+    }
+    min_safe_point_ts = std::min(min_safe_point_ts, safe_point_ts);
+  }
+  return min_safe_point_ts;
+}
+#endif
+
 bool Server::InitRocksRawEngine() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
@@ -310,6 +345,11 @@ bool Server::InitRocksRawEngine() {
     DINGO_LOG(ERROR) << "Init RocksRawEngine Failed with Config[" << config->ToString();
     return false;
   }
+
+  // Shared safe point source for the txn gc compaction filter and the auto
+  // compaction checker (both must pause on exactly the same signal).
+  rocks_raw_engine_->SetGcSafePointProvider(TxnGcFilterEffectiveSafePoint);
+  TxnAutoCompactionChecker::GetInstance().Wire(rocks_raw_engine_, TxnGcFilterEffectiveSafePoint);
 #endif
 
   meta_reader_ = std::make_shared<MetaReader>(rocks_raw_engine_);
@@ -771,6 +811,17 @@ bool Server::InitCrontabManager() {
       [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
   });
 
+  // Add gc auto compaction crontab
+  FLAGS_gc_auto_compaction_check_interval_s =
+      GetInterval(config, "gc.auto_compaction_check_interval_s", FLAGS_gc_auto_compaction_check_interval_s);
+  crontab_configs_.push_back({
+      "GC_AUTO_COMPACTION",
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
+      FLAGS_gc_auto_compaction_check_interval_s * 1000,
+      true,
+      [](void*) { TxnAutoCompactionChecker::RegularCheckHandler(nullptr); },
+  });
+
   if (FLAGS_enable_balance_leader) {
     // Add balance leader crontab
     FLAGS_balance_leader_interval_s =
@@ -972,6 +1023,15 @@ void Server::Destroy() {
 
   if (GetRole() == pb::common::DOCUMENT && document_index_manager_) {
     document_index_manager_->Destroy();
+  }
+
+  // Stop rocksdb background work (and with it the txn gc compaction filter
+  // plus its orphan cleaner) while every piece of server state the filter's
+  // safe point provider can touch is still alive; leaving this to static
+  // destruction would let a late compaction race dying members. The db stays
+  // open — stray readers between here and process exit keep working.
+  if (rocks_raw_engine_ != nullptr) {
+    rocks_raw_engine_->StopBackgroundWork();
   }
 
   google::ShutdownGoogleLogging();
