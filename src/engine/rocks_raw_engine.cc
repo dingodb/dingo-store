@@ -53,6 +53,10 @@
 namespace dingodb {
 DEFINE_bool(enable_rocksdb_sync, false, "enable rocksdb sync");
 
+DEFINE_uint64(txn_write_cf_periodic_compaction_seconds, 3 * 24 * 60 * 60,
+              "periodic compaction interval for the txn write cf; set explicitly because attaching a compaction "
+              "filter factory silently defaults it to 30 days, leaving cold bottom-level garbage unfiltered");
+
 namespace rocks {
 
 ColumnFamily::ColumnFamily(const std::string& cf_name, const ColumnFamilyConfig& config,
@@ -733,7 +737,10 @@ butil::Status Writer::KvBatchDeleteRange(const std::map<std::string, std::vector
 
 RocksRawEngine::RocksRawEngine() : db_(nullptr), column_families_({}) {}
 
-RocksRawEngine::~RocksRawEngine() = default;
+// Close() is idempotent; running it here guarantees the teardown ordering
+// (cancel background work -> stop orphan cleaner -> drop handles -> close db)
+// even on paths that never call Close() explicitly.
+RocksRawEngine::~RocksRawEngine() { Close(); }
 
 static rocks::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
   rocks::ColumnFamily::ColumnFamilyConfig default_config;
@@ -904,6 +911,19 @@ rocksdb::DB* RocksRawEngine::InitDB(const std::string& db_path, rocks::ColumnFam
   for (auto [cf_name, column_family] : column_families) {
     column_family->Dump();
     rocksdb::ColumnFamilyOptions family_options = GenRocksDBColumnFamilyOptions(column_family);
+    if (cf_name == Constant::kTxnWriteCF) {
+      // Factory is always registered; each compaction decides via flag +
+      // safe point whether to actually filter, so runtime toggling needs no
+      // DB reopen.
+      txn_gc_filter_factory_ = std::make_shared<TxnGcCompactionFilterFactory>();
+      family_options.compaction_filter_factory = txn_gc_filter_factory_;
+      family_options.periodic_compaction_seconds = FLAGS_txn_write_cf_periodic_compaction_seconds;
+      // Always registered: per-entry counting is noise inside an IO-bound
+      // SST build, and properties must have accumulated before any consumer
+      // (the auto-compaction checker) is ever switched on.
+      family_options.table_properties_collector_factories.emplace_back(
+          std::make_shared<TxnMvccPropertiesCollectorFactory>());
+    }
     column_family_descs.push_back(rocksdb::ColumnFamilyDescriptor(cf_name, family_options));
   }
 
@@ -931,6 +951,18 @@ rocksdb::DB* RocksRawEngine::InitDB(const std::string& db_path, rocks::ColumnFam
   int i = 0;
   for (auto [_, column_family] : column_families) {
     column_family->SetHandle(family_handles[i++]);
+  }
+
+  if (txn_gc_filter_factory_ != nullptr) {
+    auto it = column_families.find(Constant::kTxnDataCF);
+    if (it != column_families.end()) {
+      txn_gc_filter_factory_->SetDBContext(db, it->second->GetHandle());
+    } else {
+      // Without the data CF, orphan versions could not be cleaned up; the
+      // factory stays unwired and every compaction keeps everything.
+      DINGO_LOG(WARNING) << fmt::format(
+          "[rocksdb] txn write cf present but data cf absent, txn gc compaction filter stays disabled.");
+    }
   }
 
   return db;
@@ -1149,6 +1181,12 @@ butil::Status RocksRawEngine::IngestExternalFile(const std::string& cf_name, con
   return butil::Status();
 }
 
+void RocksRawEngine::SetGcSafePointProvider(TxnGcCompactionFilterFactory::SafePointProvider provider) {
+  if (txn_gc_filter_factory_ != nullptr) {
+    txn_gc_filter_factory_->SetSafePointProvider(std::move(provider));
+  }
+}
+
 void RocksRawEngine::Flush(const std::string& cf_name) {
   if (db_) {
     rocksdb::FlushOptions flush_options;
@@ -1172,11 +1210,100 @@ butil::Status RocksRawEngine::Compact(const std::string& cf_name) {
   return butil::Status();
 }
 
+butil::Status RocksRawEngine::GetTxnMvccPropertiesInRange(const pb::common::Range& encoded_range,
+                                                          TxnMvccRangeStats& stats) {
+  if (db_ == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "db not opened");
+  }
+  if (encoded_range.start_key().empty() || encoded_range.start_key() >= encoded_range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+  }
+  // Not GetColumnFamily(): that FATALs on absence, but engines without the
+  // txn write CF (coordinator meta) may legitimately be asked and must fail
+  // softly.
+  auto it = column_families_.find(Constant::kTxnWriteCF);
+  if (it == column_families_.end()) {
+    return butil::Status(pb::error::EINTERNAL, "txn write column family absent");
+  }
+
+  rocksdb::Range range;
+  range.start = encoded_range.start_key();
+  range.limit = encoded_range.end_key();
+  rocksdb::TablePropertiesCollection collection;
+  auto status = db_->GetPropertiesOfTablesInRange(it->second->GetHandle(), &range, 1, &collection);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[rocksdb] get table properties in range failed, error: {}", status.ToString());
+    return butil::Status(pb::error::EINTERNAL, "GetPropertiesOfTablesInRange failed");
+  }
+
+  for (const auto& [_, table_properties] : collection) {
+    stats.num_files++;
+    stats.total_entries += static_cast<int64_t>(table_properties->num_entries);
+    stats.tombstones += static_cast<int64_t>(table_properties->num_deletions);
+    stats.range_deletions += static_cast<int64_t>(table_properties->num_range_deletions);
+    TxnMvccProperties one;
+    if (TxnMvccProperties::DecodeFrom(table_properties->user_collected_properties, &one)) {
+      stats.num_files_with_props++;
+      stats.mvcc.Add(one);
+    }
+  }
+  return butil::Status();
+}
+
+butil::Status RocksRawEngine::CompactRangeForAutoGc(const std::string& cf_name,
+                                                    const pb::common::Range& encoded_range, bool force_bottommost) {
+  if (db_ == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "db not opened");
+  }
+  if (encoded_range.start_key().empty() || encoded_range.start_key() >= encoded_range.end_key()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "range is wrong");
+  }
+  auto it = column_families_.find(cf_name);
+  if (it == column_families_.end()) {
+    return butil::Status(pb::error::EINTERNAL, fmt::format("column family {} absent", cf_name));
+  }
+
+  // Background-task manners, unlike Compact(cf)'s operator-driven full
+  // sweep: never exclusive (don't fence off automatic compactions and don't
+  // wait for them to drain), never allowed to provoke a write stall, one
+  // subcompaction at a time. kForceOptimized instead of kForce so a forced
+  // bottommost pass skips files the compaction itself just produced.
+  rocksdb::CompactRangeOptions options;
+  options.exclusive_manual_compaction = false;
+  options.allow_write_stall = false;
+  options.max_subcompactions = 1;
+  options.bottommost_level_compaction = force_bottommost
+                                            ? rocksdb::BottommostLevelCompaction::kForceOptimized
+                                            : rocksdb::BottommostLevelCompaction::kIfHaveCompactionFilter;
+
+  rocksdb::Slice start(encoded_range.start_key());
+  rocksdb::Slice end(encoded_range.end_key());
+  auto status = db_->CompactRange(options, it->second->GetHandle(), &start, &end);
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("[rocksdb] auto-gc compact range failed, cf {} error: {}", cf_name,
+                                      status.ToString());
+    return butil::Status(pb::error::EINTERNAL, "CompactRange failed");
+  }
+  return butil::Status();
+}
+
 void RocksRawEngine::Destroy() { rocksdb::DestroyDB(db_path_, rocksdb::Options()); }
+
+void RocksRawEngine::StopBackgroundWork() {
+  if (db_) {
+    CancelAllBackgroundWork(db_.get(), true);
+
+    // After background work is drained no filter can write; stop the orphan
+    // cleaner and drop its raw db pointer.
+    if (txn_gc_filter_factory_ != nullptr) {
+      txn_gc_filter_factory_->ClearDBContext();
+    }
+  }
+}
 
 void RocksRawEngine::Close() {
   if (db_) {
-    CancelAllBackgroundWork(db_.get(), true);
+    StopBackgroundWork();
 
     std::vector<rocksdb::ColumnFamilyHandle*> column_family_handles;
     for (auto& [_, column_family] : column_families_) {

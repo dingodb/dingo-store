@@ -25,6 +25,8 @@
 #include "engine/iterator.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
+#include "engine/txn_gc_compaction_filter.h"
+#include "engine/txn_mvcc_properties_collector.h"
 #include "proto/common.pb.h"
 #include "proto/store_internal.pb.h"
 #include "rocksdb/convenience.h"
@@ -272,6 +274,11 @@ class RocksRawEngine : public RawEngine {
   void Close() override;
   void Destroy() override;
 
+  // Cancel compactions/flushes and stop the gc-filter orphan cleaner without
+  // closing the db: safe to call at controlled shutdown while other
+  // components may still read. Close() implies it.
+  void StopBackgroundWork();
+
   dingodb::SnapshotPtr GetSnapshot() override;
 
   RawEngine::ReaderPtr Reader() override;
@@ -288,6 +295,24 @@ class RocksRawEngine : public RawEngine {
 
   void Flush(const std::string& cf_name) override;
   butil::Status Compact(const std::string& cf_name) override;
+
+  // Aggregate MVCC table properties of every write-CF SST overlapping
+  // encoded_range (SST-overlap granularity: a boundary file shared with the
+  // neighbor region counts in full). Built-in counters cover every file;
+  // stats.mvcc only sums files carrying dingo.mvcc.* properties —
+  // pre-collector files land in denominators only.
+  butil::Status GetTxnMvccPropertiesInRange(const pb::common::Range& encoded_range, TxnMvccRangeStats& stats);
+
+  // Range-scoped manual compaction for the auto-gc checker, with
+  // background-task manners (non-exclusive, no write stall, single
+  // subcompaction) — the opposite of Compact(cf)'s operator-driven
+  // full-CF sweep.
+  butil::Status CompactRangeForAutoGc(const std::string& cf_name, const pb::common::Range& encoded_range,
+                                      bool force_bottommost);
+
+  // Wire the txn gc compaction filter's safe point source (min over tenants,
+  // 0 disables filtering). No-op when this engine has no txn write CF.
+  void SetGcSafePointProvider(TxnGcCompactionFilterFactory::SafePointProvider provider);
 
   std::vector<int64_t> GetApproximateSizes(const std::string& cf_name, std::vector<pb::common::Range>& ranges) override;
 
@@ -307,6 +332,8 @@ class RocksRawEngine : public RawEngine {
   std::shared_ptr<rocksdb::DB> db_;
   rocks::ColumnFamilyMap column_families_;
   std::shared_ptr<rocksdb::RateLimiter> rate_limiter_;
+  // Set iff the CF set contains the txn write CF (store/index/document roles).
+  std::shared_ptr<TxnGcCompactionFilterFactory> txn_gc_filter_factory_;
 
   RawEngine::ReaderPtr reader_;
   RawEngine::WriterPtr writer_;

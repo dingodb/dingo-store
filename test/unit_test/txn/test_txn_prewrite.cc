@@ -165,6 +165,7 @@ void TxnPreWriteTest::MustCommit(store::RegionPtr region, int64_t start_ts, int6
                                  const std::vector<std::string> &keys) {
   pb::store::TxnCommitResponse response;
   auto ctx = std::make_shared<Context>();
+  ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
   ctx->SetRegionId(region->Id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetResponse(&response);
@@ -181,6 +182,7 @@ void TxnPreWriteTest::MustAcquirePessimisticlock(std::shared_ptr<RocksRawEngine>
                                                  int64_t for_update_ts) {
   pb::store::TxnPessimisticLockResponse response;
   auto ctx = std::make_shared<Context>();
+  ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
   ctx->SetRegionId(region->Id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetResponse(&response);
@@ -206,6 +208,7 @@ void TxnPreWriteTest::MustPessimisticRollback(store::RegionPtr region, int64_t s
                                               const std::vector<std::string> &keys) {
   pb::store::TxnPessimisticRollbackResponse response;
   auto ctx = std::make_shared<Context>();
+  ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
   ctx->SetRegionId(region->Id());
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetResponse(&response);
@@ -478,6 +481,7 @@ TEST_F(TxnPreWriteTest, PreWrite) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -530,6 +534,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWrite) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -573,6 +578,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWrite) {
     butil::Status ok;
 
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     std::vector<pb::store::Mutation> mutations;
@@ -668,6 +674,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWrite) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -720,6 +727,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWrite) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -782,6 +790,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -824,6 +833,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -867,6 +877,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -936,6 +947,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -980,6 +992,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1032,6 +1045,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1077,6 +1091,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1123,6 +1138,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1170,6 +1186,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1262,6 +1279,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1316,6 +1334,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1380,6 +1399,7 @@ TEST_F(TxnPreWriteTest, RepeatedComittedPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);
@@ -1461,6 +1481,7 @@ TEST_F(TxnPreWriteTest, RepeatedComittedPreWriteWithOnePC) {
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
+    ctx->SetTracker(Tracker::New(pb::common::RequestInfo{}));
     ctx->SetRegionId(region_id);
     ctx->SetCfName(Constant::kStoreDataCF);
     ctx->SetResponse(&response);

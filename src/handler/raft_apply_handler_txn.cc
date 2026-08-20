@@ -93,6 +93,76 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
   auto writer = engine->Writer();
   butil::Status status;
+
+  // Range deletes (txn gc: delete-mark version groups). Data-CF cleanup for
+  // the covered versions is reconciled REPLICA-LOCALLY right here: the
+  // leader's snapshot cannot enumerate write records its own compaction
+  // filter already dropped (their data rows were orphan-deleted locally on
+  // the leader only), so each replica walks its OWN surviving records before
+  // the range destroys them. Replay after a crash is idempotent: either the
+  // records are still there to re-enumerate, or every deletion already
+  // applied. The write-CF range goes last so the shadowing mark and its
+  // group die together.
+  if (request.delete_ranges_with_cf_size() > 0) {
+    std::map<std::string, std::vector<pb::common::Range>> range_deletes_with_cf;
+    for (const auto &range_dels : request.delete_ranges_with_cf()) {
+      auto &ranges = range_deletes_with_cf[range_dels.cf_name()];
+      for (const auto &range : range_dels.ranges()) {
+        ranges.push_back(range);
+      }
+
+      if (range_dels.cf_name() != Constant::kTxnWriteCF) {
+        continue;
+      }
+      auto reader = engine->Reader();
+      for (const auto &range : range_dels.ranges()) {
+        IteratorOptions options;
+        options.upper_bound = range.end_key();
+        auto iter = reader->NewIterator(Constant::kTxnWriteCF, options);
+        if (iter == nullptr) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[txn][region({})] HandleMultiCfPutAndDelete data reconcile NewIterator fail, term: {} apply_log_id: "
+              "{}.",
+              region->Id(), term_id, log_id);
+          continue;
+        }
+        std::vector<std::string> data_deletes;
+        for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+          pb::store::WriteInfo write_info;
+          if (!write_info.ParseFromArray(iter->Value().data(), iter->Value().size())) {
+            DINGO_LOG(ERROR) << fmt::format(
+                "[txn][region({})] HandleMultiCfPutAndDelete data reconcile parse fail, key: {}.", region->Id(),
+                Helper::StringToHex(iter->Key()));
+            continue;
+          }
+          if (write_info.op() != pb::store::Op::Put || !write_info.short_value().empty() ||
+              write_info.start_ts() <= 0) {
+            continue;
+          }
+          std::string user_key;
+          if (!mvcc::Codec::DecodeKey(iter->Key(), user_key)) {
+            continue;
+          }
+          data_deletes.emplace_back(mvcc::Codec::EncodeKey(user_key, write_info.start_ts()));
+          if (data_deletes.size() >= 4096) {
+            writer->KvBatchPutAndDelete(Constant::kTxnDataCF, {}, data_deletes);
+            data_deletes.clear();
+          }
+        }
+        if (!data_deletes.empty()) {
+          writer->KvBatchPutAndDelete(Constant::kTxnDataCF, {}, data_deletes);
+        }
+      }
+    }
+    status = writer->KvBatchDeleteRange(range_deletes_with_cf);
+    if (!status.ok()) {
+      DINGO_LOG(FATAL) << fmt::format(
+          "[txn][region({})] HandleMultiCfPutAndDelete range delete fail, term: {} apply_log_id: {}, error: {} "
+          "request: {}.",
+          region->Id(), term_id, log_id, status.error_str(), request.ShortDebugString());
+    }
+  }
+
   if (!kv_puts_with_cf.empty() || !kv_deletes_with_cf.empty()) {
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
     if (!status.ok()) {
