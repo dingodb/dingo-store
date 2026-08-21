@@ -234,4 +234,118 @@ TEST_F(HandleBoolControlConfigVariableTest, StringConvertFalse_AllVariants) {
   EXPECT_FALSE(Helper::StringConvertFalse(""));
 }
 
+// ============================================================
+// Int64 / double variants — added for runtime control of the
+// balance region knobs (limit_score_diff, default_store_region_size).
+// Same contract as the bool handler: "query" reports without touching
+// the flag, an unparsable value sets is_error_occurred and keeps the
+// flag, an identical value sets is_already_set.
+// ============================================================
+
+class HandleInt64ControlConfigVariableTest : public testing::Test {
+ protected:
+  static pb::common::ControlConfigVariable MakeVar(const std::string& name, const std::string& value) {
+    pb::common::ControlConfigVariable var;
+    var.set_name(name);
+    var.set_value(value);
+    return var;
+  }
+};
+
+TEST_F(HandleInt64ControlConfigVariableTest, Set_UpdatesFlagNoError) {
+  pb::common::ControlConfigVariable config;
+  int64_t flag = 0;
+
+  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_x", "4294967296"), config, flag);
+
+  EXPECT_EQ(4294967296LL, flag);
+  EXPECT_FALSE(config.is_error_occurred());
+  EXPECT_FALSE(config.is_already_set());
+}
+
+TEST_F(HandleInt64ControlConfigVariableTest, SameValue_SetsAlreadySet) {
+  pb::common::ControlConfigVariable config;
+  int64_t flag = 5;
+
+  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_x", "5"), config, flag);
+
+  EXPECT_EQ(5, flag);
+  EXPECT_TRUE(config.is_already_set());
+  EXPECT_FALSE(config.is_error_occurred());
+}
+
+TEST_F(HandleInt64ControlConfigVariableTest, Query_ReturnsCurrentWithoutModify) {
+  pb::common::ControlConfigVariable config;
+  int64_t flag = 5;
+
+  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_x", "query"), config, flag);
+
+  EXPECT_EQ("5", config.value());
+  EXPECT_EQ(5, flag);
+  EXPECT_FALSE(config.is_error_occurred());
+}
+
+TEST_F(HandleInt64ControlConfigVariableTest, Invalid_SetsErrorKeepsFlag) {
+  pb::common::ControlConfigVariable config;
+  int64_t flag = 5;
+
+  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_x", "12abc"), config, flag);
+
+  EXPECT_EQ(5, flag);
+  EXPECT_TRUE(config.is_error_occurred());
+}
+
+class HandleDoubleControlConfigVariableTest : public testing::Test {
+ protected:
+  static pb::common::ControlConfigVariable MakeVar(const std::string& name, const std::string& value) {
+    pb::common::ControlConfigVariable var;
+    var.set_name(name);
+    var.set_value(value);
+    return var;
+  }
+};
+
+TEST_F(HandleDoubleControlConfigVariableTest, Set_UpdatesFlagNoError) {
+  pb::common::ControlConfigVariable config;
+  double flag = 15;
+
+  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_x", "7.5"), config, flag);
+
+  EXPECT_DOUBLE_EQ(7.5, flag);
+  EXPECT_FALSE(config.is_error_occurred());
+  EXPECT_FALSE(config.is_already_set());
+}
+
+TEST_F(HandleDoubleControlConfigVariableTest, SameValue_SetsAlreadySet) {
+  pb::common::ControlConfigVariable config;
+  double flag = 7.5;
+
+  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_x", "7.5"), config, flag);
+
+  EXPECT_DOUBLE_EQ(7.5, flag);
+  EXPECT_TRUE(config.is_already_set());
+  EXPECT_FALSE(config.is_error_occurred());
+}
+
+TEST_F(HandleDoubleControlConfigVariableTest, Query_ReturnsCurrentWithoutModify) {
+  pb::common::ControlConfigVariable config;
+  double flag = 7.5;
+
+  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_x", "query"), config, flag);
+
+  EXPECT_EQ("7.5", config.value());
+  EXPECT_DOUBLE_EQ(7.5, flag);
+  EXPECT_FALSE(config.is_error_occurred());
+}
+
+TEST_F(HandleDoubleControlConfigVariableTest, Invalid_SetsErrorKeepsFlag) {
+  pb::common::ControlConfigVariable config;
+  double flag = 7.5;
+
+  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_x", "abc"), config, flag);
+
+  EXPECT_DOUBLE_EQ(7.5, flag);
+  EXPECT_TRUE(config.is_error_occurred());
+}
+
 }  // namespace dingodb

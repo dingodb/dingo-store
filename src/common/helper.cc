@@ -2525,6 +2525,68 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
   config.set_is_error_occurred(false);
 }
 
+void Helper::HandleInt64ControlConfigVariable(const pb::common::ControlConfigVariable& variable,
+                                              pb::common::ControlConfigVariable& config, int64_t& gflags_var) {
+  // Support "query" mode: return current value without modification
+  if (variable.value() == "query" || variable.value() == "QUERY" || variable.value() == "Query") {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(false);
+    return;
+  }
+
+  char* endptr = nullptr;
+  errno = 0;
+  int64_t value = std::strtoll(variable.value().c_str(), &endptr, 10);
+  if (variable.value().empty() || errno != 0 || endptr == nullptr || *endptr != '\0') {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " is not int64 type, skip.";
+    return;
+  }
+
+  if (value == gflags_var) {
+    config.set_is_already_set(true);
+  } else {
+    config.set_is_already_set(false);
+    gflags_var = value;
+  }
+  config.set_is_error_occurred(false);
+}
+
+void Helper::HandleDoubleControlConfigVariable(const pb::common::ControlConfigVariable& variable,
+                                               pb::common::ControlConfigVariable& config, double& gflags_var) {
+  // Support "query" mode: return current value without modification
+  if (variable.value() == "query" || variable.value() == "QUERY" || variable.value() == "Query") {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(false);
+    return;
+  }
+
+  char* endptr = nullptr;
+  errno = 0;
+  double value = std::strtod(variable.value().c_str(), &endptr);
+  if (variable.value().empty() || errno != 0 || endptr == nullptr || *endptr != '\0') {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " is not double type, skip.";
+    return;
+  }
+
+  if (value == gflags_var) {
+    config.set_is_already_set(true);
+  } else {
+    config.set_is_already_set(false);
+    gflags_var = value;
+  }
+  config.set_is_error_occurred(false);
+}
+
 size_t Helper::FindReEnd(const std::string& s, size_t start_pos) {
   // Only calculate the outermost
   int bracket_level = 0;

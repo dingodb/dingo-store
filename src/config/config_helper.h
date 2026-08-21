@@ -48,7 +48,7 @@ class ConfigHelper {
   static std::string GetBalanceRegionInspectionTimePeriod();
   static float GetBalanceRegionCountRatio();
   static int32_t GetBalanceRegionDefaultIndexRegionSize();
-  static int32_t GetBalanceRegionDefaultStoreRegionSize();
+  static int64_t GetBalanceRegionDefaultStoreRegionSize();
 
   static int32_t GetWorkerThreadNum();
   static double GetWorkerThreadRatio();

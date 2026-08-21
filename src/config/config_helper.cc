@@ -18,11 +18,20 @@
 #include <cstdint>
 #include <string>
 
+#include "brpc/reloadable_flags.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
+
+// Same (global) scope as the balance flags family in coordinator/balance_region.cc.
+DEFINE_int64(balance_region_default_store_region_size, 0,
+             "runtime override for coordinator.balance_region_default_store_region_size (bytes), used as the "
+             "per-region size base when scoring store region count for balance region; 0 means no override: fall "
+             "back to the config file value or the built-in default (256MB)");
+BRPC_VALIDATE_GFLAG(balance_region_default_store_region_size, brpc::NonNegativeInteger);
 
 namespace dingodb {
 
@@ -289,7 +298,12 @@ int32_t ConfigHelper::GetBalanceRegionDefaultIndexRegionSize() {
   return (size <= 0) ? Constant::kBalanceRegionDefaultIndexRegionSize : size;
 }
 
-int32_t ConfigHelper::GetBalanceRegionDefaultStoreRegionSize() {
+int64_t ConfigHelper::GetBalanceRegionDefaultStoreRegionSize() {
+  // Runtime override (settable via brpc /flags or the coordinator ControlConfig RPC)
+  // takes precedence; 0 keeps the config-file semantics.
+  if (FLAGS_balance_region_default_store_region_size > 0) {
+    return FLAGS_balance_region_default_store_region_size;
+  }
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kBalanceRegionDefaultStoreRegionSize;

@@ -51,6 +51,11 @@
 // braft::FLAGS_raft_meta_force_no_sync is declared in common/braft_flags.h
 // (it is a braft-internal flag not exposed by braft's public headers).
 
+// The balance region knobs live at global scope (coordinator/balance_region.cc
+// and config/config_helper.cc), unlike the flags declared inside namespace dingodb.
+DECLARE_double(balance_region_limit_score_diff);
+DECLARE_int64(balance_region_default_store_region_size);
+
 namespace dingodb {
 
 DEFINE_int32(max_create_id_count, 2048, "max create id count");
@@ -4200,6 +4205,10 @@ void DoControlConfig(google::protobuf::RpcController * /*controller*/,
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_enable_balance_leader);
     } else if ("FLAGS_enable_balance_region" == variable.name()) {
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_enable_balance_region);
+    } else if ("FLAGS_balance_region_limit_score_diff" == variable.name()) {
+      Helper::HandleDoubleControlConfigVariable(variable, config, FLAGS_balance_region_limit_score_diff);
+    } else if ("FLAGS_balance_region_default_store_region_size" == variable.name()) {
+      Helper::HandleInt64ControlConfigVariable(variable, config, FLAGS_balance_region_default_store_region_size);
     } else if ("FLAGS_raft_sync" == variable.name()) {
       Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
     } else if ("FLAGS_raft_meta_force_no_sync" == variable.name()) {
