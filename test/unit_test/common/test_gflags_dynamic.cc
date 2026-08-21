@@ -24,6 +24,11 @@
 
 #include "gflags/gflags.h"
 
+// The balance flags family lives at global scope (see coordinator/balance_region.cc
+// and config/config_helper.cc), unlike the gc flags defined inside namespace dingodb.
+DECLARE_int64(balance_region_default_store_region_size);
+DECLARE_double(balance_region_limit_score_diff);
+
 namespace dingodb {
 
 DECLARE_int32(gc_compaction_filter_orphan_batch_keys);
@@ -77,6 +82,34 @@ TEST(DynamicGflagsTest, OrphanRetryNumRejectsNegative) {
 
   EXPECT_TRUE(SetFlag("gc_compaction_filter_orphan_retry_num", std::to_string(old_value)));
   EXPECT_EQ(FLAGS_gc_compaction_filter_orphan_retry_num, old_value);
+}
+
+// Balance region knobs. The store-region-size flag tolerates 0 ("no override,
+// fall back to the config file"), but a negative size is meaningless; the
+// score-diff threshold must be strictly positive or the scheduler would try
+// to migrate on every inspection round.
+TEST(DynamicGflagsTest, BalanceRegionStoreRegionSizeRejectsNegative) {
+  const int64_t old_value = FLAGS_balance_region_default_store_region_size;
+
+  EXPECT_FALSE(SetFlag("balance_region_default_store_region_size", "-1"));
+  EXPECT_TRUE(SetFlag("balance_region_default_store_region_size", "4294967296"));
+  EXPECT_EQ(FLAGS_balance_region_default_store_region_size, 4294967296LL);
+  EXPECT_TRUE(SetFlag("balance_region_default_store_region_size", "0"));
+
+  EXPECT_TRUE(SetFlag("balance_region_default_store_region_size", std::to_string(old_value)));
+  EXPECT_EQ(FLAGS_balance_region_default_store_region_size, old_value);
+}
+
+TEST(DynamicGflagsTest, BalanceRegionLimitScoreDiffRejectsNonPositive) {
+  const double old_value = FLAGS_balance_region_limit_score_diff;
+
+  EXPECT_FALSE(SetFlag("balance_region_limit_score_diff", "0"));
+  EXPECT_FALSE(SetFlag("balance_region_limit_score_diff", "-3"));
+  EXPECT_TRUE(SetFlag("balance_region_limit_score_diff", "8.5"));
+  EXPECT_DOUBLE_EQ(FLAGS_balance_region_limit_score_diff, 8.5);
+
+  EXPECT_TRUE(SetFlag("balance_region_limit_score_diff", std::to_string(old_value)));
+  EXPECT_DOUBLE_EQ(FLAGS_balance_region_limit_score_diff, old_value);
 }
 
 }  // namespace dingodb

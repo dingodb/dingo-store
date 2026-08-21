@@ -428,6 +428,10 @@ class Helper {
   static bool StringConvertFalse(const std::string& str);
   static void HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
                                               pb::common::ControlConfigVariable& config, bool& gflags_var);
+  static void HandleInt64ControlConfigVariable(const pb::common::ControlConfigVariable& variable,
+                                               pb::common::ControlConfigVariable& config, int64_t& gflags_var);
+  static void HandleDoubleControlConfigVariable(const pb::common::ControlConfigVariable& variable,
+                                                pb::common::ControlConfigVariable& config, double& gflags_var);
 
   static size_t FindReEnd(const std::string& s, size_t start_pos);
   static std::string Base64Encode(const std::string& input);

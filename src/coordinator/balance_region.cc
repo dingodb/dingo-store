@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "brpc/reloadable_flags.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -36,7 +37,12 @@
 
 DEFINE_double(balance_region_default_score, 100, "balance region default score");
 
-DEFINE_double(balance_region_limit_score_diff, 15, "balance region limit score diff");
+static bool ValidatePositiveDouble(const char* /*flag_name*/, double value) { return value > 0; }
+
+DEFINE_double(balance_region_limit_score_diff, 15,
+              "balance region limit score diff; migration triggers only when the source/target score gap exceeds "
+              "this threshold, so it must be strictly positive");
+BRPC_VALIDATE_GFLAG(balance_region_limit_score_diff, ValidatePositiveDouble);
 
 namespace dingodb {
 
@@ -288,7 +294,7 @@ float StoreEntry::Score() {
 
   float region_count_score = 0;
   auto region_count = store_metric_.region_metrics_map_size();
-  int32_t default_region_size = 0;
+  int64_t default_region_size = 0;
   if (store_.store_type() == pb::common::StoreType::NODE_TYPE_INDEX) {
     default_region_size = ConfigHelper::GetBalanceRegionDefaultIndexRegionSize();
   } else if (store_.store_type() == pb::common::StoreType::NODE_TYPE_STORE) {
