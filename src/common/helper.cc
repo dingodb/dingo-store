@@ -26,6 +26,7 @@
 #include <cctype>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -57,6 +58,7 @@
 #include "common/role.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "google/protobuf/util/json_util.h"
 #include "openssl/sha.h"
@@ -2525,6 +2527,18 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
   config.set_is_error_occurred(false);
 }
 
+// Apply a ControlConfig value through gflags so any registered validator
+// (BRPC_VALIDATE_GFLAG) runs. Assigning the flag variable directly would bypass
+// validators entirely: gflags only runs them for command-line parsing and
+// SetCommandLineOption. Returns false when the flag is unknown or the validator
+// rejected the value.
+static bool SetGflagByControlConfig(const std::string& variable_name, const std::string& value) {
+  constexpr std::string_view kPrefix = "FLAGS_";
+  std::string flag_name =
+      variable_name.compare(0, kPrefix.size(), kPrefix) == 0 ? variable_name.substr(kPrefix.size()) : variable_name;
+  return !google::SetCommandLineOption(flag_name.c_str(), value.c_str()).empty();
+}
+
 void Helper::HandleInt64ControlConfigVariable(const pb::common::ControlConfigVariable& variable,
                                               pb::common::ControlConfigVariable& config, int64_t& gflags_var) {
   // Support "query" mode: return current value without modification
@@ -2549,10 +2563,20 @@ void Helper::HandleInt64ControlConfigVariable(const pb::common::ControlConfigVar
 
   if (value == gflags_var) {
     config.set_is_already_set(true);
-  } else {
-    config.set_is_already_set(false);
-    gflags_var = value;
+    config.set_is_error_occurred(false);
+    return;
   }
+
+  if (!SetGflagByControlConfig(variable.name(), variable.value())) {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " rejected by gflags validator or unknown flag, skip.";
+    return;
+  }
+
+  config.set_is_already_set(false);
   config.set_is_error_occurred(false);
 }
 
@@ -2578,12 +2602,33 @@ void Helper::HandleDoubleControlConfigVariable(const pb::common::ControlConfigVa
     return;
   }
 
+  // strtod happily parses "inf"/"nan"; reject them up front for a clear error
+  // (NaN would also poison the value == gflags_var comparison below).
+  if (!std::isfinite(value)) {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " is not a finite double, skip.";
+    return;
+  }
+
   if (value == gflags_var) {
     config.set_is_already_set(true);
-  } else {
-    config.set_is_already_set(false);
-    gflags_var = value;
+    config.set_is_error_occurred(false);
+    return;
   }
+
+  if (!SetGflagByControlConfig(variable.name(), variable.value())) {
+    config.set_value(fmt::format("{}", gflags_var));
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " rejected by gflags validator or unknown flag, skip.";
+    return;
+  }
+
+  config.set_is_already_set(false);
   config.set_is_error_occurred(false);
 }
 

@@ -105,6 +105,11 @@ TEST(DynamicGflagsTest, BalanceRegionLimitScoreDiffRejectsNonPositive) {
 
   EXPECT_FALSE(SetFlag("balance_region_limit_score_diff", "0"));
   EXPECT_FALSE(SetFlag("balance_region_limit_score_diff", "-3"));
+  // Non-finite values parse fine ("inf" > 0 is even true), so the validator
+  // must check isfinite explicitly: +inf silently disables balancing, NaN
+  // defeats the threshold comparison entirely.
+  EXPECT_FALSE(SetFlag("balance_region_limit_score_diff", "inf"));
+  EXPECT_FALSE(SetFlag("balance_region_limit_score_diff", "nan"));
   EXPECT_TRUE(SetFlag("balance_region_limit_score_diff", "8.5"));
   EXPECT_DOUBLE_EQ(FLAGS_balance_region_limit_score_diff, 8.5);
 
