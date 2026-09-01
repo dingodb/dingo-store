@@ -260,9 +260,6 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
       // perf_context->set_block_read_byte(et.rocksdb_perf.block_read_byte);
       // perf_context->set_seek_internal_seek_time_ns(et.rocksdb_perf.seek_internal_seek_time_ns);
       // perf_context->set_find_next_user_entry_time_ns(et.rocksdb_perf.find_next_user_entry_time_ns);
-
-      // DINGO_LOG(INFO) << fmt::format("[perf][start_ts:{}][{}] time_us={} skip_version={} {}", tracker->StartTs(),
-      //                                et.name, et.elapsed_time_us, et.skip_versions, et.rocksdb_perf.ToString());
     }
   }
 }
