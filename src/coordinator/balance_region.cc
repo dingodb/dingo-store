@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -37,7 +38,11 @@
 
 DEFINE_double(balance_region_default_score, 100, "balance region default score");
 
-static bool ValidatePositiveDouble(const char* /*flag_name*/, double value) { return value > 0; }
+static bool ValidatePositiveDouble(const char* /*flag_name*/, double value) {
+  // isfinite matters: "inf" parses and inf > 0 holds, but +inf silently
+  // disables balancing and NaN defeats the threshold comparison entirely.
+  return std::isfinite(value) && value > 0;
+}
 
 DEFINE_double(balance_region_limit_score_diff, 15,
               "balance region limit score diff; migration triggers only when the source/target score gap exceeds "

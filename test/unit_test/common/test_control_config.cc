@@ -21,7 +21,15 @@
 #include <string>
 
 #include "common/helper.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
+
+// These flags live at global scope (see coordinator/balance_region.cc and
+// config/config_helper.cc). The int64/double handlers apply values through
+// google::SetCommandLineOption so registered validators run; tests therefore
+// exercise the real flags instead of a detached local variable.
+DECLARE_int64(balance_region_default_store_region_size);
+DECLARE_double(balance_region_limit_score_diff);
 
 namespace dingodb {
 
@@ -253,14 +261,30 @@ class HandleInt64ControlConfigVariableTest : public testing::Test {
 };
 
 TEST_F(HandleInt64ControlConfigVariableTest, Set_UpdatesFlagNoError) {
+  const int64_t old_value = FLAGS_balance_region_default_store_region_size;
   pb::common::ControlConfigVariable config;
-  int64_t flag = 0;
 
-  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_x", "4294967296"), config, flag);
+  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_balance_region_default_store_region_size", "4294967296"),
+                                           config, FLAGS_balance_region_default_store_region_size);
 
-  EXPECT_EQ(4294967296LL, flag);
+  EXPECT_EQ(4294967296LL, FLAGS_balance_region_default_store_region_size);
   EXPECT_FALSE(config.is_error_occurred());
   EXPECT_FALSE(config.is_already_set());
+
+  FLAGS_balance_region_default_store_region_size = old_value;
+}
+
+// The RPC path must run the registered gflags validator (NonNegativeInteger):
+// a negative size would otherwise silently land in the scheduler.
+TEST_F(HandleInt64ControlConfigVariableTest, RpcPathRejectsNegative) {
+  const int64_t old_value = FLAGS_balance_region_default_store_region_size;
+  pb::common::ControlConfigVariable config;
+
+  Helper::HandleInt64ControlConfigVariable(MakeVar("FLAGS_balance_region_default_store_region_size", "-1"), config,
+                                           FLAGS_balance_region_default_store_region_size);
+
+  EXPECT_TRUE(config.is_error_occurred());
+  EXPECT_EQ(old_value, FLAGS_balance_region_default_store_region_size);
 }
 
 TEST_F(HandleInt64ControlConfigVariableTest, SameValue_SetsAlreadySet) {
@@ -306,14 +330,56 @@ class HandleDoubleControlConfigVariableTest : public testing::Test {
 };
 
 TEST_F(HandleDoubleControlConfigVariableTest, Set_UpdatesFlagNoError) {
+  const double old_value = FLAGS_balance_region_limit_score_diff;
   pb::common::ControlConfigVariable config;
-  double flag = 15;
 
-  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_x", "7.5"), config, flag);
+  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_balance_region_limit_score_diff", "7.5"), config,
+                                            FLAGS_balance_region_limit_score_diff);
 
-  EXPECT_DOUBLE_EQ(7.5, flag);
+  EXPECT_DOUBLE_EQ(7.5, FLAGS_balance_region_limit_score_diff);
   EXPECT_FALSE(config.is_error_occurred());
   EXPECT_FALSE(config.is_already_set());
+
+  FLAGS_balance_region_limit_score_diff = old_value;
+}
+
+// The RPC path must run the registered gflags validator (ValidatePositiveDouble):
+// zero/negative would defeat the score-diff hysteresis every inspection round.
+TEST_F(HandleDoubleControlConfigVariableTest, RpcPathRejectsNonPositive) {
+  const double old_value = FLAGS_balance_region_limit_score_diff;
+  for (const char* bad : {"0", "-3"}) {
+    pb::common::ControlConfigVariable config;
+    Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_balance_region_limit_score_diff", bad), config,
+                                              FLAGS_balance_region_limit_score_diff);
+    EXPECT_TRUE(config.is_error_occurred()) << bad;
+    EXPECT_DOUBLE_EQ(old_value, FLAGS_balance_region_limit_score_diff) << bad;
+  }
+}
+
+// strtod happily parses "inf"/"nan"; NaN would make the score-diff comparison
+// constantly false and +inf would silently disable balancing, so both must be
+// rejected before they reach the flag.
+TEST_F(HandleDoubleControlConfigVariableTest, RpcPathRejectsNonFinite) {
+  const double old_value = FLAGS_balance_region_limit_score_diff;
+  for (const char* bad : {"inf", "-inf", "nan", "nan(123)"}) {
+    pb::common::ControlConfigVariable config;
+    Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_balance_region_limit_score_diff", bad), config,
+                                              FLAGS_balance_region_limit_score_diff);
+    EXPECT_TRUE(config.is_error_occurred()) << bad;
+    EXPECT_DOUBLE_EQ(old_value, FLAGS_balance_region_limit_score_diff) << bad;
+  }
+}
+
+// A name that is not a registered gflag must be reported as an error instead of
+// silently mutating whatever variable the caller happened to pass.
+TEST_F(HandleDoubleControlConfigVariableTest, UnknownFlagName_SetsError) {
+  pb::common::ControlConfigVariable config;
+  double flag = 7.5;
+
+  Helper::HandleDoubleControlConfigVariable(MakeVar("FLAGS_no_such_flag_in_binary", "9.5"), config, flag);
+
+  EXPECT_TRUE(config.is_error_occurred());
+  EXPECT_DOUBLE_EQ(7.5, flag);
 }
 
 TEST_F(HandleDoubleControlConfigVariableTest, SameValue_SetsAlreadySet) {
