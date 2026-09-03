@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Unit tests for Helper::HandleBoolControlConfigVariable covering:
-//   [fix][store] Optimized some code.                   (query mode added)
-//   [feat][br]   Add a toggle switch for RocksDB disk synchronization.
+// Unit tests for ControlConfig value parsing and registry-based bool updates.
 
 #include <gtest/gtest.h>
 
@@ -27,200 +25,113 @@
 // These flags live at global scope (see coordinator/balance_region.cc and
 // config/config_helper.cc). The int64/double handlers apply values through
 // google::SetCommandLineOption so registered validators run; tests therefore
-// exercise the real flags instead of a detached local variable.
+// exercise the real flags instead of detached local variables.
 DECLARE_int64(balance_region_default_store_region_size);
 DECLARE_double(balance_region_limit_score_diff);
 
 namespace dingodb {
 
-class HandleBoolControlConfigVariableTest : public testing::Test {
- protected:
-  void SetUp() override {}
-  void TearDown() override {}
+DEFINE_bool(control_config_test_bool, false, "bool flag used by ControlConfig unit tests");
+DEFINE_bool(control_config_reject_true, false, "validated bool flag used by ControlConfig unit tests");
 
-  // Build a ControlConfigVariable with the given name and value.
-  static pb::common::ControlConfigVariable MakeVar(const std::string& name, const std::string& value) {
-    pb::common::ControlConfigVariable var;
-    var.set_name(name);
-    var.set_value(value);
-    return var;
+static bool RejectTrue(const char*, bool value) { return !value; }
+DEFINE_validator(control_config_reject_true, &RejectTrue);
+
+class HandleBoolControlConfigVariableByNameTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    saved_test_bool_ = FLAGS_control_config_test_bool;
+    saved_reject_true_ = FLAGS_control_config_reject_true;
+    FLAGS_control_config_test_bool = false;
+    FLAGS_control_config_reject_true = false;
   }
+
+  void TearDown() override {
+    FLAGS_control_config_test_bool = saved_test_bool_;
+    FLAGS_control_config_reject_true = saved_reject_true_;
+  }
+
+  static pb::common::ControlConfigVariable MakeVar(const std::string& name, const std::string& value) {
+    pb::common::ControlConfigVariable variable;
+    variable.set_name(name);
+    variable.set_value(value);
+    return variable;
+  }
+
+  static pb::common::ControlConfigVariable Call(const std::string& name, const std::string& value) {
+    const auto variable = MakeVar(name, value);
+    pb::common::ControlConfigVariable config;
+    config.set_name(name);
+    config.set_value(value);
+    Helper::HandleBoolControlConfigVariableByName(variable, config);
+    return config;
+  }
+
+  bool saved_test_bool_{};
+  bool saved_reject_true_{};
 };
 
-// ============================================================
-// Query mode — introduced in [fix][store] Optimized some code.
-// ============================================================
+TEST_F(HandleBoolControlConfigVariableByNameTest, QueryReturnsCurrentValueWithoutMutation) {
+  FLAGS_control_config_test_bool = true;
 
-TEST_F(HandleBoolControlConfigVariableTest, Query_WhenTrue_ReturnsTrueNoError) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
+  const auto config = Call("FLAGS_control_config_test_bool", "query");
 
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "query"), config, flag);
-
+  EXPECT_TRUE(FLAGS_control_config_test_bool);
   EXPECT_EQ("true", config.value());
-  EXPECT_FALSE(config.is_error_occurred());
-  // gflags variable must NOT be modified
-  EXPECT_TRUE(flag);
-}
-
-TEST_F(HandleBoolControlConfigVariableTest, Query_WhenFalse_ReturnsFalseNoError) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "query"), config, flag);
-
-  EXPECT_EQ("false", config.value());
-  EXPECT_FALSE(config.is_error_occurred());
-  EXPECT_FALSE(flag);
-}
-
-TEST_F(HandleBoolControlConfigVariableTest, Query_UpperCase_Accepted) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "QUERY"), config, flag);
-
-  EXPECT_EQ("true", config.value());
-  EXPECT_FALSE(config.is_error_occurred());
-  EXPECT_TRUE(flag);  // not modified
-}
-
-TEST_F(HandleBoolControlConfigVariableTest, Query_MixedCase_Accepted) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "Query"), config, flag);
-
-  EXPECT_EQ("false", config.value());
-  EXPECT_FALSE(config.is_error_occurred());
-  EXPECT_FALSE(flag);  // not modified
-}
-
-TEST_F(HandleBoolControlConfigVariableTest, Query_DoesNotModifyGflagsVar) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "query"), config, flag);
-
-  // flag must remain true — query is read-only
-  EXPECT_TRUE(flag);
-}
-
-// ============================================================
-// Set to true
-// ============================================================
-
-TEST_F(HandleBoolControlConfigVariableTest, SetTrue_WhenAlreadyTrue_IsAlreadySet) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "true"), config, flag);
-
-  EXPECT_TRUE(flag);
-  EXPECT_TRUE(config.is_already_set());
-  EXPECT_FALSE(config.is_error_occurred());
-}
-
-TEST_F(HandleBoolControlConfigVariableTest, SetTrue_WhenFalse_SetsToTrue) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "true"), config, flag);
-
-  EXPECT_TRUE(flag);
   EXPECT_FALSE(config.is_already_set());
   EXPECT_FALSE(config.is_error_occurred());
 }
 
-TEST_F(HandleBoolControlConfigVariableTest, SetTrue_UpperCase_SetsToTrue) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
+TEST_F(HandleBoolControlConfigVariableByNameTest, UnknownFlagReturnsError) {
+  const auto config = Call("FLAGS_control_config_missing_bool", "true");
 
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "TRUE"), config, flag);
-
-  EXPECT_TRUE(flag);
-  EXPECT_FALSE(config.is_error_occurred());
+  EXPECT_FALSE(config.is_already_set());
+  EXPECT_TRUE(config.is_error_occurred());
 }
 
-TEST_F(HandleBoolControlConfigVariableTest, SetTrue_One_SetsToTrue) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
+TEST_F(HandleBoolControlConfigVariableByNameTest, InvalidValueReturnsCurrentValueAndError) {
+  FLAGS_control_config_test_bool = true;
 
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "1"), config, flag);
+  const auto config = Call("FLAGS_control_config_test_bool", "abc");
 
-  EXPECT_TRUE(flag);
-  EXPECT_FALSE(config.is_error_occurred());
+  EXPECT_TRUE(FLAGS_control_config_test_bool);
+  EXPECT_EQ("true", config.value());
+  EXPECT_FALSE(config.is_already_set());
+  EXPECT_TRUE(config.is_error_occurred());
 }
 
-// ============================================================
-// Set to false
-// ============================================================
+TEST_F(HandleBoolControlConfigVariableByNameTest, IdenticalValueIsAlreadySet) {
+  FLAGS_control_config_test_bool = true;
 
-TEST_F(HandleBoolControlConfigVariableTest, SetFalse_WhenAlreadyFalse_IsAlreadySet) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
+  const auto config = Call("FLAGS_control_config_test_bool", "true");
 
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "false"), config, flag);
-
-  EXPECT_FALSE(flag);
+  EXPECT_TRUE(FLAGS_control_config_test_bool);
   EXPECT_TRUE(config.is_already_set());
   EXPECT_FALSE(config.is_error_occurred());
 }
 
-TEST_F(HandleBoolControlConfigVariableTest, SetFalse_WhenTrue_SetsToFalse) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
+TEST_F(HandleBoolControlConfigVariableByNameTest, NumericValuesUpdateRegisteredFlag) {
+  auto config = Call("FLAGS_control_config_test_bool", "1");
+  EXPECT_TRUE(FLAGS_control_config_test_bool);
+  EXPECT_FALSE(config.is_already_set());
+  EXPECT_FALSE(config.is_error_occurred());
 
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "false"), config, flag);
-
-  EXPECT_FALSE(flag);
+  config = Call("FLAGS_control_config_test_bool", "0");
+  EXPECT_FALSE(FLAGS_control_config_test_bool);
   EXPECT_FALSE(config.is_already_set());
   EXPECT_FALSE(config.is_error_occurred());
 }
 
-TEST_F(HandleBoolControlConfigVariableTest, SetFalse_Zero_SetsToFalse) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
+TEST_F(HandleBoolControlConfigVariableByNameTest, ValidatorRejectionReturnsError) {
+  const auto config = Call("FLAGS_control_config_reject_true", "true");
 
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "0"), config, flag);
-
-  EXPECT_FALSE(flag);
-  EXPECT_FALSE(config.is_error_occurred());
-}
-
-// ============================================================
-// Invalid value
-// ============================================================
-
-TEST_F(HandleBoolControlConfigVariableTest, InvalidValue_SetsErrorOccurred) {
-  pb::common::ControlConfigVariable config;
-  bool flag = true;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", "invalid_value"), config, flag);
-
-  EXPECT_TRUE(config.is_error_occurred());
-  // gflags variable must NOT be modified on error
-  EXPECT_TRUE(flag);
-  // current value must be returned even on error
-  EXPECT_EQ("true", config.value());
-}
-
-TEST_F(HandleBoolControlConfigVariableTest, InvalidValue_EmptyString_SetsErrorOccurred) {
-  pb::common::ControlConfigVariable config;
-  bool flag = false;
-
-  Helper::HandleBoolControlConfigVariable(MakeVar("FLAGS_raft_sync", ""), config, flag);
-
-  EXPECT_TRUE(config.is_error_occurred());
-  EXPECT_FALSE(flag);
+  EXPECT_FALSE(FLAGS_control_config_reject_true);
   EXPECT_EQ("false", config.value());
+  EXPECT_FALSE(config.is_already_set());
+  EXPECT_TRUE(config.is_error_occurred());
 }
 
-// ============================================================
-// StringConvertTrue / StringConvertFalse (used internally)
-// ============================================================
-
-TEST_F(HandleBoolControlConfigVariableTest, StringConvertTrue_AllVariants) {
+TEST_F(HandleBoolControlConfigVariableByNameTest, StringConvertTrue_AllVariants) {
   EXPECT_TRUE(Helper::StringConvertTrue("true"));
   EXPECT_TRUE(Helper::StringConvertTrue("TRUE"));
   EXPECT_TRUE(Helper::StringConvertTrue("True"));
@@ -231,7 +142,7 @@ TEST_F(HandleBoolControlConfigVariableTest, StringConvertTrue_AllVariants) {
   EXPECT_FALSE(Helper::StringConvertTrue(""));
 }
 
-TEST_F(HandleBoolControlConfigVariableTest, StringConvertFalse_AllVariants) {
+TEST_F(HandleBoolControlConfigVariableByNameTest, StringConvertFalse_AllVariants) {
   EXPECT_TRUE(Helper::StringConvertFalse("false"));
   EXPECT_TRUE(Helper::StringConvertFalse("FALSE"));
   EXPECT_TRUE(Helper::StringConvertFalse("False"));

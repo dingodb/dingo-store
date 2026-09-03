@@ -2487,44 +2487,9 @@ bool Helper::StringConvertFalse(const std::string& str) {
          std::string("0") == str;
 }
 
-void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
-                                             pb::common::ControlConfigVariable& config, bool& gflags_var) {
-  // Support "query" mode: return current value without modification
-  if (variable.value() == "query" || variable.value() == "QUERY" || variable.value() == "Query") {
-    config.set_value(gflags_var ? "true" : "false");
-    config.set_is_already_set(false);
-    config.set_is_error_occurred(false);
-    return;
-  }
-
-  bool is_true = Helper::StringConvertTrue(variable.value());
-  bool is_false = Helper::StringConvertFalse(variable.value());
-
-  if (!is_true && !is_false) {
-    config.set_value(gflags_var ? "true" : "false");
-    config.set_is_already_set(false);
-    config.set_is_error_occurred(true);
-    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
-                     << " is not bool type, skip.";
-    return;
-  }
-
-  if (is_true) {
-    if (gflags_var) {
-      config.set_is_already_set(true);
-    } else {
-      config.set_is_already_set(false);
-      gflags_var = true;
-    }
-  } else if (is_false) {
-    if (gflags_var) {
-      config.set_is_already_set(false);
-      gflags_var = false;
-    } else {
-      config.set_is_already_set(true);
-    }
-  }
-  config.set_is_error_occurred(false);
+static std::string GetControlConfigGflagName(const std::string& variable_name) {
+  constexpr std::string_view kPrefix = "FLAGS_";
+  return variable_name.compare(0, kPrefix.size(), kPrefix) == 0 ? variable_name.substr(kPrefix.size()) : variable_name;
 }
 
 // Apply a ControlConfig value through gflags so any registered validator
@@ -2533,10 +2498,58 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
 // SetCommandLineOption. Returns false when the flag is unknown or the validator
 // rejected the value.
 static bool SetGflagByControlConfig(const std::string& variable_name, const std::string& value) {
-  constexpr std::string_view kPrefix = "FLAGS_";
-  std::string flag_name =
-      variable_name.compare(0, kPrefix.size(), kPrefix) == 0 ? variable_name.substr(kPrefix.size()) : variable_name;
+  const std::string flag_name = GetControlConfigGflagName(variable_name);
   return !google::SetCommandLineOption(flag_name.c_str(), value.c_str()).empty();
+}
+
+void Helper::HandleBoolControlConfigVariableByName(const pb::common::ControlConfigVariable& variable,
+                                                   pb::common::ControlConfigVariable& config) {
+  const std::string flag_name = GetControlConfigGflagName(variable.name());
+  std::string current_value;
+  if (!google::GetCommandLineOption(flag_name.c_str(), &current_value)) {
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " is not a registered gflag, skip.";
+    return;
+  }
+
+  if (variable.value() == "query" || variable.value() == "QUERY" || variable.value() == "Query") {
+    config.set_value(current_value);
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(false);
+    return;
+  }
+
+  const bool is_true = Helper::StringConvertTrue(variable.value());
+  const bool is_false = Helper::StringConvertFalse(variable.value());
+  if (!is_true && !is_false) {
+    config.set_value(current_value);
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " is not bool type, skip.";
+    return;
+  }
+
+  const bool current = Helper::StringConvertTrue(current_value);
+  if (current == is_true) {
+    config.set_is_already_set(true);
+    config.set_is_error_occurred(false);
+    return;
+  }
+
+  const std::string requested_value = is_true ? "true" : "false";
+  if (!SetGflagByControlConfig(variable.name(), requested_value)) {
+    config.set_value(current_value);
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " rejected by gflags validator, skip.";
+    return;
+  }
+
+  config.set_is_already_set(false);
+  config.set_is_error_occurred(false);
 }
 
 void Helper::HandleInt64ControlConfigVariable(const pb::common::ControlConfigVariable& variable,
