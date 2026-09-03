@@ -34,7 +34,9 @@ If you want to start quickly, we can refer to the following commands to pull con
 ``````
 docker pull dingodatabase/dingo-store-ubuntu-18.04-dev
 
-docker pull dingodatabase/dingo-store-ubuntu-22.04-dev:eureka
+# Ubuntu 22.04 dependency image used by CI. Build docker/ubuntu22 locally
+# when a complete image with the Rust toolchain is required.
+docker pull dingodatabase/dingo-eureka:ubuntu2204-store
 
 docker pull dingodatabase/dingo-store-centos-7-dev
 
