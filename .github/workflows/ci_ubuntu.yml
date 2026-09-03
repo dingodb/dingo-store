@@ -9,6 +9,7 @@ on:
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
+  DINGO_EUREKA_INSTALL_PATH: /root/.local/dingo-eureka
 
 jobs:
   build:
@@ -16,10 +17,16 @@ jobs:
     # You can convert this to a matrix build if you need cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     runs-on: ubuntu-latest
-    container: dingodatabase/dingo-store-ubuntu-22.04-dev:eureka
+    container: dingodatabase/dingo-eureka:ubuntu2204-store
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install curl for Rust setup
+      run: apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@1.78.0
 
     - name: Set Safe Dir
       run: git config --global --add safe.directory $PWD
@@ -37,9 +44,14 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLINK_TCMALLOC=ON
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLINK_TCMALLOC=ON -DBUILD_UNIT_TESTS=ON
 
     - name: Build
       # Build your program with the given configuration
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Run ControlConfig unit tests
+      run: >-
+        ${{github.workspace}}/build/bin/dingodb_unit_test
+        --gtest_filter=HandleBoolControlConfigVariableByNameTest.*:StorageControlConfigTest.*:RaftSyncValueSemanticsTest.*
 
