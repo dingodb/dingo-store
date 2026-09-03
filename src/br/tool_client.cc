@@ -82,6 +82,24 @@ void SendControlConfigToService(const std::vector<std::string>& addrs, const std
       failed_addrs.push_back(addr);
       continue;
     }
+
+    bool has_variable_error = false;
+    for (const auto& variable : response.control_config_variable()) {
+      if (!variable.is_error_occurred()) {
+        continue;
+      }
+
+      std::string message =
+          fmt::format("{} rejected {} on {} (current value: {}).", action, variable.name(), addr, variable.value());
+      DINGO_LOG(ERROR) << message;
+      return_status = butil::Status(dingodb::pb::error::EILLEGAL_PARAMTETERS, message);
+      failed_addrs.push_back(addr);
+      has_variable_error = true;
+      break;
+    }
+    if (has_variable_error) {
+      continue;
+    }
   }
 }
 

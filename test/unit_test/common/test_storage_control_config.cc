@@ -16,24 +16,28 @@
 //   [feat][br] Add a toggle switch for RocksDB disk synchronization (5f38bad3)
 //      Added FLAGS_raft_sync dispatch in Storage::ControlConfig
 //   [fix][store] Optimized some code (5210ca61)
-//      HandleBoolControlConfigVariable with query mode
+//      Registry-based bool handler with query mode
 //
 // Storage::ControlConfig is a purely static, network-free method that
-// dispatches ControlConfigVariable requests to HandleBoolControlConfigVariable.
+// dispatches ControlConfigVariable requests to the appropriate helper.
 // ctx is unused (passed as nullptr in tests).
 
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
-#include "common/braft_flags.h"  // braft::FLAGS_raft_sync, braft::FLAGS_raft_meta_force_no_sync
 #include "engine/storage.h"
-#include "gflags/gflags_declare.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
+
+namespace braft {
+DECLARE_bool(raft_sync);
+}
 
 namespace dingodb {
 
@@ -61,20 +65,39 @@ class StorageControlConfigTest : public testing::Test {
   bool saved_auto_split{};
   bool saved_auto_merge{};
   bool saved_raft_sync{};
-  bool saved_raft_meta_force_no_sync{};
+  std::optional<std::string> saved_raft_meta_force_no_sync;
 
   void SetUp() override {
     saved_auto_split = FLAGS_region_enable_auto_split;
     saved_auto_merge = FLAGS_region_enable_auto_merge;
     saved_raft_sync = braft::FLAGS_raft_sync;
-    saved_raft_meta_force_no_sync = braft::FLAGS_raft_meta_force_no_sync;
+    std::string value;
+    if (google::GetCommandLineOption("raft_meta_force_no_sync", &value)) {
+      saved_raft_meta_force_no_sync = value;
+    }
+    ASSERT_TRUE(saved_raft_meta_force_no_sync.has_value());
   }
 
   void TearDown() override {
     FLAGS_region_enable_auto_split = saved_auto_split;
     FLAGS_region_enable_auto_merge = saved_auto_merge;
     braft::FLAGS_raft_sync = saved_raft_sync;
-    braft::FLAGS_raft_meta_force_no_sync = saved_raft_meta_force_no_sync;
+    if (saved_raft_meta_force_no_sync.has_value()) {
+      EXPECT_FALSE(
+          google::SetCommandLineOption("raft_meta_force_no_sync", saved_raft_meta_force_no_sync->c_str()).empty());
+    }
+  }
+
+  static std::optional<std::string> GetRaftMetaForceNoSync() {
+    std::string value;
+    if (!google::GetCommandLineOption("raft_meta_force_no_sync", &value)) {
+      return std::nullopt;
+    }
+    return value;
+  }
+
+  static bool SetRaftMetaForceNoSync(bool value) {
+    return !google::SetCommandLineOption("raft_meta_force_no_sync", value ? "true" : "false").empty();
   }
 
   // Invoke Storage::ControlConfig with a single variable.
@@ -96,6 +119,12 @@ TEST_F(StorageControlConfigTest, AlwaysReturnsOkStatus) {
   const std::vector<pb::common::ControlConfigVariable> vars = {MakeVar("FLAGS_region_enable_auto_split", "true")};
   const butil::Status s = Storage::ControlConfig(nullptr, vars, &response);
   EXPECT_TRUE(s.ok());
+}
+
+TEST_F(StorageControlConfigTest, BraftControlConfigFlagsAreRegistered) {
+  std::string value;
+  EXPECT_TRUE(google::GetCommandLineOption("raft_sync", &value));
+  EXPECT_TRUE(google::GetCommandLineOption("raft_meta_force_no_sync", &value));
 }
 
 TEST_F(StorageControlConfigTest, EmptyVariableList_ReturnsOkStatus) {
@@ -211,7 +240,7 @@ TEST_F(StorageControlConfigTest, RaftSync_Query_DoesNotMutateFlag) {
 }
 
 TEST_F(StorageControlConfigTest, RaftSync_QueryCaseInsensitive_Query) {
-  // HandleBoolControlConfigVariable accepts "Query" and "QUERY" as well.
+  // The registry-based bool handler accepts "Query" and "QUERY" as well.
   const bool original = braft::FLAGS_raft_sync;
   pb::store::ControlConfigResponse response;
   const std::vector<pb::common::ControlConfigVariable> vars = {MakeVar("FLAGS_raft_sync", "Query")};
@@ -225,42 +254,46 @@ TEST_F(StorageControlConfigTest, RaftSync_QueryCaseInsensitive_Query) {
 // ============================================================
 
 TEST_F(StorageControlConfigTest, RaftMetaForceNoSync_SetTrue) {
-  braft::FLAGS_raft_meta_force_no_sync = false;
+  ASSERT_TRUE(SetRaftMetaForceNoSync(false));
   auto resp = CallOne("FLAGS_raft_meta_force_no_sync", "true");
   ASSERT_EQ(1, resp.control_config_variable_size());
-  EXPECT_TRUE(braft::FLAGS_raft_meta_force_no_sync) << "FLAGS_raft_meta_force_no_sync should be true after set";
+  const auto value = GetRaftMetaForceNoSync();
+  ASSERT_TRUE(value.has_value());
+  EXPECT_EQ("true", *value);
   EXPECT_FALSE(resp.control_config_variable(0).is_already_set());
   EXPECT_FALSE(resp.control_config_variable(0).is_error_occurred());
 }
 
 TEST_F(StorageControlConfigTest, RaftMetaForceNoSync_SetFalse) {
-  braft::FLAGS_raft_meta_force_no_sync = true;
+  ASSERT_TRUE(SetRaftMetaForceNoSync(true));
   auto resp = CallOne("FLAGS_raft_meta_force_no_sync", "false");
   ASSERT_EQ(1, resp.control_config_variable_size());
-  EXPECT_FALSE(braft::FLAGS_raft_meta_force_no_sync) << "FLAGS_raft_meta_force_no_sync should be false after unset";
+  const auto value = GetRaftMetaForceNoSync();
+  ASSERT_TRUE(value.has_value());
+  EXPECT_EQ("false", *value);
   EXPECT_FALSE(resp.control_config_variable(0).is_already_set());
   EXPECT_FALSE(resp.control_config_variable(0).is_error_occurred());
 }
 
 TEST_F(StorageControlConfigTest, RaftMetaForceNoSync_Query_DoesNotMutateFlag) {
-  const bool original = braft::FLAGS_raft_meta_force_no_sync;
+  const auto original = GetRaftMetaForceNoSync();
+  ASSERT_TRUE(original.has_value());
   auto resp = CallOne("FLAGS_raft_meta_force_no_sync", "query");
   ASSERT_EQ(1, resp.control_config_variable_size());
-  // Flag must remain unchanged after a query.
-  EXPECT_EQ(original, braft::FLAGS_raft_meta_force_no_sync) << "query must not change FLAGS_raft_meta_force_no_sync";
+  EXPECT_EQ(original, GetRaftMetaForceNoSync());
   EXPECT_FALSE(resp.control_config_variable(0).is_already_set());
-  EXPECT_EQ(original ? "true" : "false", resp.control_config_variable(0).value());
+  EXPECT_EQ(*original, resp.control_config_variable(0).value());
   EXPECT_FALSE(resp.control_config_variable(0).is_error_occurred());
 }
 
 TEST_F(StorageControlConfigTest, RaftMetaForceNoSync_QueryCaseInsensitive_Query) {
-  // HandleBoolControlConfigVariable accepts "Query" and "QUERY" as well.
-  const bool original = braft::FLAGS_raft_meta_force_no_sync;
+  const auto original = GetRaftMetaForceNoSync();
+  ASSERT_TRUE(original.has_value());
   pb::store::ControlConfigResponse response;
   const std::vector<pb::common::ControlConfigVariable> vars = {MakeVar("FLAGS_raft_meta_force_no_sync", "Query")};
   const butil::Status s = Storage::ControlConfig(nullptr, vars, &response);
   EXPECT_TRUE(s.ok());
-  EXPECT_EQ(original, braft::FLAGS_raft_meta_force_no_sync);
+  EXPECT_EQ(original, GetRaftMetaForceNoSync());
 }
 
 // ============================================================

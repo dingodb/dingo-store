@@ -426,8 +426,11 @@ class Helper {
 
   static bool StringConvertTrue(const std::string& str);
   static bool StringConvertFalse(const std::string& str);
-  static void HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
-                                              pb::common::ControlConfigVariable& config, bool& gflags_var);
+  // Resolves variable.name through the gflags registry so registered validators
+  // run. Missing flags, invalid booleans, and rejected values are reported via
+  // config.is_error_occurred; production ControlConfig bools must use this path.
+  static void HandleBoolControlConfigVariableByName(const pb::common::ControlConfigVariable& variable,
+                                                    pb::common::ControlConfigVariable& config);
   static void HandleInt64ControlConfigVariable(const pb::common::ControlConfigVariable& variable,
                                                pb::common::ControlConfigVariable& config, int64_t& gflags_var);
   static void HandleDoubleControlConfigVariable(const pb::common::ControlConfigVariable& variable,

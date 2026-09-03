@@ -94,7 +94,7 @@ TEST_F(ToolClientRaftSyncTest, QueryRaftSync_NoInteractions_ReturnsOk) {
 // ============================================================
 // Verify that the three facade methods are distinct (not accidentally
 // aliased to the same thing) by checking the server-side interpretation
-// of the values they would pass.  We use HandleBoolControlConfigVariable
+// of the values they would pass. We use the registry-based bool handler
 // (the same logic the server uses) to verify that:
 //   "false" → sets the target to false (Disable)
 //   "true"  → sets the target to true  (Enable)
@@ -119,7 +119,7 @@ TEST_F(RaftSyncValueSemanticsTest, DisableValue_SetsFlagFalse) {
   dingodb::pb::common::ControlConfigVariable config;
   config.set_name(variable.name());
   config.set_value(variable.value());
-  dingodb::Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
+  dingodb::Helper::HandleBoolControlConfigVariableByName(variable, config);
   EXPECT_FALSE(braft::FLAGS_raft_sync);
   EXPECT_FALSE(config.is_already_set()) << "flag was true; setting false should not be already_set";
   EXPECT_FALSE(config.is_error_occurred());
@@ -134,7 +134,7 @@ TEST_F(RaftSyncValueSemanticsTest, EnableValue_SetsFlagTrue) {
   dingodb::pb::common::ControlConfigVariable config;
   config.set_name(variable.name());
   config.set_value(variable.value());
-  dingodb::Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
+  dingodb::Helper::HandleBoolControlConfigVariableByName(variable, config);
   EXPECT_TRUE(braft::FLAGS_raft_sync);
   EXPECT_FALSE(config.is_already_set()) << "flag was false; setting true should not be already_set";
   EXPECT_FALSE(config.is_error_occurred());
@@ -149,7 +149,7 @@ TEST_F(RaftSyncValueSemanticsTest, QueryValue_DoesNotMutateFlag) {
   dingodb::pb::common::ControlConfigVariable config;
   config.set_name(variable.name());
   config.set_value(variable.value());
-  dingodb::Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
+  dingodb::Helper::HandleBoolControlConfigVariableByName(variable, config);
   EXPECT_EQ(before, braft::FLAGS_raft_sync) << "query must not mutate FLAGS_raft_sync";
   EXPECT_FALSE(config.is_already_set()) << "query is read-only; is_already_set is unused and set to false";
   EXPECT_EQ(before ? "true" : "false", config.value());
@@ -159,7 +159,7 @@ TEST_F(RaftSyncValueSemanticsTest, QueryValue_DoesNotMutateFlag) {
 // ============================================================
 // Verify the variable name constant: CoreRaftSync uses "FLAGS_raft_sync"
 // (not "raft_sync", "braft::raft_sync", etc.).  We check this by verifying
-// that HandleBoolControlConfigVariable is reachable via that exact name
+// that HandleBoolControlConfigVariableByName resolves that exact name
 // and that Storage::ControlConfig dispatches on it — the latter is the
 // focus of test_storage_control_config.cc; here we just confirm the string.
 // ============================================================
@@ -173,11 +173,10 @@ TEST_F(RaftSyncValueSemanticsTest, VariableName_IsFLAGS_raft_sync) {
   config.set_name(variable.name());
   config.set_value(variable.value());
 
-  // If the name is wrong, HandleBoolControlConfigVariable would not touch
-  // FLAGS_raft_sync at all.  By verifying there is no error and that the
-  // response carries back the flag value, we confirm that "FLAGS_raft_sync"
-  // is the right name for the braft raft_sync flag.
-  dingodb::Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
+  // If the name is wrong, the registry lookup reports an error. By verifying
+  // there is no error and the response carries back the flag value, we confirm
+  // that "FLAGS_raft_sync" is the registered braft flag name.
+  dingodb::Helper::HandleBoolControlConfigVariableByName(variable, config);
   EXPECT_FALSE(config.is_error_occurred());
   EXPECT_EQ("FLAGS_raft_sync", config.name()) << "request/response should preserve variable name";
 }
