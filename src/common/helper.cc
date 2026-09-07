@@ -360,6 +360,52 @@ bool Helper::IsDifferencePeers(const pb::common::RegionDefinition& src_definitio
   return false;
 }
 
+static std::string FailureDomainKeyFromLocation(const pb::common::Location& location, int64_t store_id) {
+  // An empty host must not collapse every unknown store into one shared domain.
+  if (location.host().empty()) {
+    return fmt::format("?{}", store_id);
+  }
+  return location.host();
+}
+
+std::string Helper::FailureDomainKey(const pb::common::Store& store) {
+  return FailureDomainKeyFromLocation(store.server_location(), store.id());
+}
+
+std::string Helper::FailureDomainKey(const pb::common::Peer& peer) {
+  return FailureDomainKeyFromLocation(peer.server_location(), peer.store_id());
+}
+
+std::vector<int32_t> Helper::FailureDomainProfile(const std::vector<std::string>& domain_keys) {
+  std::map<std::string, int32_t> count_by_domain;
+  for (const auto& key : domain_keys) {
+    ++count_by_domain[key];
+  }
+
+  std::vector<int32_t> profile;
+  profile.reserve(count_by_domain.size());
+  for (const auto& [domain, count] : count_by_domain) {
+    profile.push_back(count);
+  }
+  std::sort(profile.begin(), profile.end(), std::greater<>());
+  return profile;
+}
+
+std::vector<int32_t> Helper::FailureDomainProfile(const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
+  std::vector<std::string> domain_keys;
+  domain_keys.reserve(peers.size());
+  for (const auto& peer : peers) {
+    domain_keys.push_back(FailureDomainKey(peer));
+  }
+  return FailureDomainProfile(domain_keys);
+}
+
+bool Helper::IsFailureDomainNoWorse(const std::vector<int32_t>& new_profile, const std::vector<int32_t>& old_profile) {
+  // new <= old  <=>  !(old < new)
+  return !std::lexicographical_compare(old_profile.begin(), old_profile.end(), new_profile.begin(),
+                                       new_profile.end());
+}
+
 std::vector<pb::common::Location> Helper::ExtractRaftLocations(
     const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;
