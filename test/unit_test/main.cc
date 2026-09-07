@@ -82,6 +82,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":CandidateStoresTest.*";
 
     default_run_case += ":CandidateStoresTestByBlanceRegion.*";
+    default_run_case += ":FailureDomainGuardTest.*";
+    default_run_case += ":FailureDomainPlacementTest.*";
 
     default_run_case += ":RocksLogStorageTest.*";
 

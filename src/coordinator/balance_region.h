@@ -16,6 +16,7 @@
 #define DINGODB_BALANCE_REGION_H_
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -271,6 +272,25 @@ class BalanceRegionScheduler {
     return ParseTimePeriod(time_period);
   }
 
+  // store_id -> failure-domain key, built from the store map the scheduler runs on.
+  using StoreDomainMap = std::map<int64_t, std::string>;
+  static StoreDomainMap BuildStoreDomainMap(const pb::common::StoreMap& store_map);
+
+  // True when moving one replica of the region off source_store_id onto a store in target_domain
+  // keeps the failure-domain profile no worse. Unlike a Filter, this sees the source, so a move
+  // between two stores on the same host is recognised as neutral instead of being refused.
+  // Every peer's current domain is looked up in domain_by_store first and only falls back to the
+  // location cached in the definition, so the decision uses the same source of truth as the
+  // commit-side guard (ValidateFailureDomainNoWorse). Skipped only when both
+  // FLAGS_enable_failure_domain_placement and FLAGS_enable_failure_domain_guard are off. Reads no
+  // state beyond those two flags.
+  static bool IsFailureDomainNoWorse(const pb::common::RegionDefinition& definition, int64_t source_store_id,
+                                     const std::string& target_domain, const StoreDomainMap& domain_by_store);
+  static bool IsFailureDomainNoWorse(const pb::common::RegionDefinition& definition, int64_t source_store_id,
+                                     const std::string& target_domain) {
+    return IsFailureDomainNoWorse(definition, source_store_id, target_domain, StoreDomainMap{});
+  }
+
  private:
   // parse config item(coordinator.balance_leader_inspection_time_period)
   static std::vector<std::pair<int, int>> ParseTimePeriod(const std::string& time_period);
@@ -318,6 +338,9 @@ class BalanceRegionScheduler {
 
   // for track balance region schedule process
   TrackerPtr tracker_;
+
+  // store_id -> failure-domain key of the store map this round runs on; set by Schedule.
+  StoreDomainMap store_domain_by_id_;
 };
 
 }  // namespace balanceregion

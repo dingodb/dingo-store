@@ -51,6 +51,11 @@ BRPC_VALIDATE_GFLAG(balance_region_limit_score_diff, ValidatePositiveDouble);
 
 namespace dingodb {
 
+// Defined in coordinator_control_coor.cc inside namespace dingodb; the declaration has to sit in
+// the same namespace or it resolves to a different symbol and fails to link.
+DECLARE_bool(enable_failure_domain_placement);
+DECLARE_bool(enable_failure_domain_guard);
+
 namespace balanceregion {
 
 void Tracker::Print() {
@@ -513,6 +518,9 @@ ChangeRegionTaskPtr BalanceRegionScheduler::Schedule(const pb::common::RegionMap
   CHECK(raft_engine_ != nullptr) << "raft_engine is nullptr.";
   CHECK(coordinator_controller_ != nullptr) << "coordinator_controller is nullptr.";
 
+  // Same source of truth for peer hosts as the commit-side guard; see IsFailureDomainNoWorse.
+  store_domain_by_id_ = BuildStoreDomainMap(store_map);
+
   auto store_region_id_map = GenerateStoreRegionMap(region_map);
   if (store_region_id_map.empty()) {
     DINGO_LOG(WARNING) << "[balance.region] store region map is emtpy.";
@@ -648,13 +656,82 @@ ChangeRegionTaskPtr BalanceRegionScheduler::GenerateChangeRegionTask(CandidateSt
               return a.region_size() > b.region_size();
             });
 
+  const std::string target_domain = Helper::FailureDomainKey(target_store_entry->Store());
+  // One summary line per (source, target) pair rather than one per rejected region: on a cluster
+  // whose host count equals the replica count every cross-host pair rejects every region on the
+  // source, and the tracker is printed in full every round. Goes to the current record like the
+  // other per-region filters, so Tracker::Print emits it right above that pair's score line.
+  size_t examined = 0;
+  size_t domain_rejected = 0;
+  auto record_domain_rejections = [&]() {
+    if (domain_rejected > 0 && tracker_ && !tracker_->records.empty()) {
+      tracker_->GetLastRecord()->filter_records.push_back(fmt::format(
+          "[filter.domain] {}->{}: {} of {} examined regions would pack more replicas into failure domain {}",
+          source_store_entry->Id(), target_store_entry->Id(), domain_rejected, examined, target_domain));
+    }
+  };
   for (const auto& region_metric : region_metrics) {
+    ++examined;
+    if (!IsFailureDomainNoWorse(region_metric.region_definition(), source_store_entry->Id(), target_domain,
+                                store_domain_by_id_)) {
+      ++domain_rejected;
+      continue;
+    }
     if (!FilterResource(target_store_entry->Store(), region_metric.id()) &&
         !FilterPlacementSafeguard(target_store_entry->Store(), region_metric.id())) {
+      record_domain_rejections();
       return GenerateChangeRegionTask(region_metric, source_store_entry->Id(), target_store_entry);
     }
   }
+  record_domain_rejections();
   return nullptr;
+}
+
+BalanceRegionScheduler::StoreDomainMap BalanceRegionScheduler::BuildStoreDomainMap(
+    const pb::common::StoreMap& store_map) {
+  StoreDomainMap domain_by_store;
+  for (const auto& store : store_map.stores()) {
+    domain_by_store[store.id()] = Helper::FailureDomainKey(store);
+  }
+  return domain_by_store;
+}
+
+bool BalanceRegionScheduler::IsFailureDomainNoWorse(const pb::common::RegionDefinition& definition,
+                                                    int64_t source_store_id, const std::string& target_domain,
+                                                    const StoreDomainMap& domain_by_store) {
+  // The pre-check exists so balance region never proposes a move the commit-side guard would
+  // reject (the same task would otherwise be regenerated every round), so it stays on while
+  // either flag is on. Only with both off does balance region become domain-blind again.
+  if (!FLAGS_enable_failure_domain_placement && !FLAGS_enable_failure_domain_guard) {
+    return true;
+  }
+
+  // The store map is the source of truth for a store's host; the location cached in the region
+  // definition is written once and never refreshed, so a store that re-registered elsewhere
+  // would otherwise be judged differently here and by the commit-side guard.
+  auto resolve_domain = [&domain_by_store](const pb::common::Peer& peer) {
+    auto it = domain_by_store.find(peer.store_id());
+    return it != domain_by_store.end() ? it->second : Helper::FailureDomainKey(peer);
+  };
+
+  // The source peer leaves as the target joins, so a move within one host is neutral and must
+  // stay allowed -- on a cluster whose host count equals the replica count that is the only kind
+  // of move left, and refusing it would turn balance region into a no-op.
+  std::vector<std::string> old_domains;
+  std::vector<std::string> new_domains;
+  old_domains.reserve(definition.peers_size());
+  new_domains.reserve(definition.peers_size());
+  for (const auto& peer : definition.peers()) {
+    const std::string domain = resolve_domain(peer);
+    old_domains.push_back(domain);
+    new_domains.push_back(peer.store_id() == source_store_id ? target_domain : domain);
+  }
+  if (old_domains.empty()) {
+    return true;
+  }
+
+  return Helper::IsFailureDomainNoWorse(Helper::FailureDomainProfile(new_domains),
+                                        Helper::FailureDomainProfile(old_domains));
 }
 
 ChangeRegionTaskPtr BalanceRegionScheduler::GenerateChangeRegionTask(pb::common::RegionMetrics region_metrics,
