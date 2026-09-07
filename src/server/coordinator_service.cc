@@ -51,6 +51,7 @@
 // and config/config_helper.cc), unlike the flags declared inside namespace dingodb.
 DECLARE_double(balance_region_limit_score_diff);
 DECLARE_int64(balance_region_default_store_region_size);
+DECLARE_double(balance_leader_failure_domain_tolerance);
 
 namespace dingodb {
 
@@ -4194,9 +4195,12 @@ void DoControlConfig(google::protobuf::RpcController * /*controller*/,
     config.set_name(variable.name());
     config.set_value(variable.value());
 
-    if ("FLAGS_enable_balance_leader" == variable.name() ||
-        "FLAGS_enable_balance_region" == variable.name()) {
+    if ("FLAGS_enable_balance_leader" == variable.name() || "FLAGS_enable_balance_region" == variable.name() ||
+        "FLAGS_enable_failure_domain_guard" == variable.name() ||
+        "FLAGS_enable_failure_domain_placement" == variable.name()) {
       Helper::HandleBoolControlConfigVariableByName(variable, config);
+    } else if ("FLAGS_balance_leader_failure_domain_tolerance" == variable.name()) {
+      Helper::HandleDoubleControlConfigVariable(variable, config, FLAGS_balance_leader_failure_domain_tolerance);
     } else if ("FLAGS_balance_region_limit_score_diff" == variable.name()) {
       Helper::HandleDoubleControlConfigVariable(variable, config, FLAGS_balance_region_limit_score_diff);
     } else if ("FLAGS_balance_region_default_store_region_size" == variable.name()) {

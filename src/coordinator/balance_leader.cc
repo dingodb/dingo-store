@@ -16,12 +16,15 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "brpc/reloadable_flags.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -36,6 +39,18 @@
 DEFINE_uint32(balacne_leader_task_batch_size, 4, "balance leader task batch size");
 
 DEFINE_uint32(balacne_leader_random_select_region_num, 10, "balance leader random select region num");
+
+static bool ValidateLeaderDomainTolerance(const char* /*flag_name*/, double value) {
+  // Bounded above so the quota arithmetic below stays inside int64: a "practically infinite"
+  // tolerance would otherwise overflow and turn into a negative quota, disabling balance leader
+  // entirely -- the opposite of relaxing it. 1000 already means a thousand-fold even share.
+  return std::isfinite(value) && value >= 0 && value <= 1000.0;
+}
+
+DEFINE_double(balance_leader_failure_domain_tolerance, 0.1,
+              "balance leader refuses to move a leader into a failure domain (host) that already holds more than "
+              "its even share times (1 + tolerance); raise it to relax (max 1000), 0 for a strict share");
+BRPC_VALIDATE_GFLAG(balance_leader_failure_domain_tolerance, ValidateLeaderDomainTolerance);
 
 namespace dingodb {
 
@@ -728,6 +743,64 @@ std::vector<StoreEntryPtr> FilterScoreLessThanLeader(StoreEntryPtr leader_store_
   return reserve_store_entries;
 }
 
+bool BalanceLeaderScheduler::IsFailureDomainLeaderFull(const std::map<std::string, int64_t>& leaders_by_domain,
+                                                       const std::string& domain, double tolerance) {
+  if (leaders_by_domain.empty()) {
+    return false;
+  }
+
+  int64_t total = 0;
+  for (const auto& [_, count] : leaders_by_domain) {
+    total += count;
+  }
+  // quota = ceil(total / domains * (1 + tolerance)), in integers: computing it in doubles makes
+  // 50 * 1.1 come out as 55.000000000000007 and rounds the quota one leader too high.
+  auto domains = static_cast<int64_t>(leaders_by_domain.size());
+  int64_t tolerance_permille = std::llround(tolerance * 1000.0);
+  int64_t numerator = total * (1000 + tolerance_permille);
+  int64_t denominator = domains * 1000;
+  int64_t quota = (numerator + denominator - 1) / denominator;
+
+  auto it = leaders_by_domain.find(domain);
+  int64_t current = (it == leaders_by_domain.end()) ? 0 : it->second;
+  return current + 1 > quota;
+}
+
+std::map<std::string, int64_t> BalanceLeaderScheduler::CountLeadersByFailureDomain(
+    CandidateStoresPtr candidate_stores) {
+  std::map<std::string, int64_t> leaders_by_domain;
+  for (const auto& store_entry : candidate_stores->Stores()) {
+    auto leader_num = static_cast<int64_t>(store_entry->LeaderRegionIds().size()) + store_entry->DeltaLeaderNum();
+    leaders_by_domain[Helper::FailureDomainKey(store_entry->Store())] += leader_num;
+  }
+  return leaders_by_domain;
+}
+
+std::vector<StoreEntryPtr> BalanceLeaderScheduler::FilterFailureDomainLeaderQuota(
+    CandidateStoresPtr candidate_stores, const std::vector<StoreEntryPtr>& store_entries,
+    const std::string& source_domain) {
+  auto leaders_by_domain = CountLeadersByFailureDomain(candidate_stores);
+
+  std::vector<StoreEntryPtr> reserve_store_entries;
+  for (const auto& store_entry : store_entries) {
+    auto domain = Helper::FailureDomainKey(store_entry->Store());
+    // Moving a leader between two stores on the same host leaves that host's leader count
+    // unchanged, so the quota must not block it -- otherwise a hot host that is already over
+    // quota can never rebalance leaders among its own instances.
+    if (domain != source_domain &&
+        IsFailureDomainLeaderFull(leaders_by_domain, domain, FLAGS_balance_leader_failure_domain_tolerance)) {
+      if (tracker_) {
+        tracker_->filter_records.push_back(
+            fmt::format("[filter.domain({})] failure domain {} is full of leaders", store_entry->Id(), domain));
+      }
+      continue;
+    }
+    reserve_store_entries.push_back(store_entry);
+  }
+
+  return reserve_store_entries;
+}
+
 TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferLeaderTask(int64_t region_id, int64_t leader_store_id,
                                                                          StoreEntryPtr follower_store_entry) {
   auto task = std::make_shared<TransferLeaderTask>();
@@ -773,6 +846,13 @@ TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferOutLeaderTask(Cand
     return nullptr;
   }
 
+  // filter target whose failure domain already holds its share of leaders
+  follower_store_entries = FilterFailureDomainLeaderQuota(candidate_stores, follower_store_entries,
+                                                          Helper::FailureDomainKey(source_store_entry->Store()));
+  if (follower_store_entries.empty()) {
+    return nullptr;
+  }
+
   for (auto& store_entry : follower_store_entries) {
     auto task = GenerateTransferLeaderTask(region.id(), source_store_entry->Id(), store_entry);
     if (task) {
@@ -798,6 +878,14 @@ TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferInLeaderTask(Candi
 
   auto leader_store_entry = GetLeaderStore(candidate_stores, region);
   if (leader_store_entry == nullptr || leader_store_entry->LeaderScore(-1) < target_store_entry->LeaderScore(1)) {
+    return nullptr;
+  }
+
+  // check target failure domain still has room for another leader (the current leader's domain is
+  // exempt: a move inside one host does not change that host's leader count)
+  if (FilterFailureDomainLeaderQuota(candidate_stores, {target_store_entry},
+                                     Helper::FailureDomainKey(leader_store_entry->Store()))
+          .empty()) {
     return nullptr;
   }
 

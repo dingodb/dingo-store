@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <complex>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -209,6 +210,7 @@ class CandidateStores {
   StoreEntryPtr Store(int64_t store_id);
   StoreEntryPtr GetStore();
   uint32_t StoreSize();
+  const std::vector<StoreEntryPtr>& Stores() const { return stores_; }
 
   void Sort();
   void Next();
@@ -274,6 +276,12 @@ class BalanceLeaderScheduler {
     return ParseTimePeriod(time_period);
   }
 
+  // True when `domain` already holds its share of leaders: more than
+  // ceil(total / domain_count * (1 + tolerance)) after receiving one more. leaders_by_domain
+  // must cover every domain, including those with zero leaders. Pure function.
+  static bool IsFailureDomainLeaderFull(const std::map<std::string, int64_t>& leaders_by_domain,
+                                        const std::string& domain, double tolerance);
+
  private:
   // parse config item(coordinator.balance_leader_inspection_time_period)
   static std::vector<std::pair<int, int>> ParseTimePeriod(const std::string& time_period);
@@ -327,6 +335,16 @@ class BalanceLeaderScheduler {
   // true: eliminate false: reserve
   bool FilterResource(const dingodb::pb::common::Store& store, int64_t region_id);
   std::vector<StoreEntryPtr> FilterResource(const std::vector<StoreEntryPtr>& store_entries, int64_t region_id);
+
+  // Current leader count per failure domain over every candidate store, including the
+  // in-round deltas from tasks already generated.
+  static std::map<std::string, int64_t> CountLeadersByFailureDomain(CandidateStoresPtr candidate_stores);
+
+  // Drop transfer targets whose failure domain is already full of leaders. A move inside one
+  // domain does not change that domain's leader count, so source_domain is exempt.
+  std::vector<StoreEntryPtr> FilterFailureDomainLeaderQuota(CandidateStoresPtr candidate_stores,
+                                                            const std::vector<StoreEntryPtr>& store_entries,
+                                                            const std::string& source_domain);
 
   std::shared_ptr<CoordinatorControl> coordinator_controller_;
   // for commit transfer leader task

@@ -353,6 +353,44 @@ class CoordinatorControl : public MetaControl {
                                            const std::vector<int64_t> &exist_store_ids,
                                            const std::vector<int64_t> &not_exist_store_ids);
 
+  // Rebuild the peer set a ChangePeer request leaves behind, from the current peers and the
+  // final diff_less / diff_more vectors. Set semantics: every id in diff_less is removed, every
+  // id in diff_more is appended unless already present. The "already present" case is real:
+  // in verify_peer_on_store mode kAddShadow targets a store_id that is still registered in the
+  // region definition, so activating a shadow must leave the peer set unchanged. Pure function
+  // so the failure-domain guard input can be unit-tested.
+  static std::vector<int64_t> BuildEffectiveStoreIds(const std::vector<int64_t> &old_store_ids,
+                                                     const std::vector<int64_t> &diff_less,
+                                                     const std::vector<int64_t> &diff_more);
+
+  // Decide whether replacing the current peers (old_domain_keys) with new_domain_keys keeps the
+  // failure-domain profile no worse than before. Pure function: no state, no logging. The rule
+  // is "no worse", not "must be legal": regions placed before domain awareness may already be
+  // packed onto one host and must stay repairable.
+  static butil::Status CheckFailureDomainNoWorse(int64_t region_id, const std::vector<std::string> &old_domain_keys,
+                                                 const std::vector<std::string> &new_domain_keys);
+
+  // For an add-only change: reject when the added replica raises the largest per-domain count
+  // above both what the region already has and the best-effort quota ceil(n / domain_count).
+  // A cluster with fewer domains than replicas therefore still accepts the unavoidable stacking.
+  // Pure function.
+  static butil::Status CheckFailureDomainQuota(int64_t region_id, const std::vector<std::string> &old_domain_keys,
+                                               const std::vector<std::string> &new_domain_keys, int32_t domain_count);
+
+  struct FailureDomainPick {
+    std::vector<pb::common::Store> stores;
+    int32_t domain_count{0};    // distinct failure domains among the candidates
+    int32_t max_per_domain{0};  // largest number of picked stores sharing one domain
+  };
+
+  // Pick replica_num stores from candidates (already sorted best-first by weight), spread over
+  // failure domains best-effort: pass 1 takes at most one store per domain, pass 2 allows a
+  // second only once every domain holds one, and so on. It stops as soon as replica_num stores
+  // are chosen, so it never fails when there are fewer domains than replicas, and with a single
+  // domain it degrades to the plain top-N pick. Pure function.
+  static FailureDomainPick PickStoresAcrossFailureDomains(const std::vector<pb::common::Store> &candidates,
+                                                          int32_t replica_num);
+
   butil::Status ChangePairPeerRegionWithJob(int64_t region_id, std::vector<int64_t> &new_store_ids,
                                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
@@ -642,6 +680,16 @@ class CoordinatorControl : public MetaControl {
   butil::Status CheckRegionAllPeerOnline(int64_t region_id);
   butil::Status CheckRegionLeaderOnline(int64_t region_id);
   butil::Status CheckStoreNormal(int64_t store_id);
+
+  // Resolve failure-domain keys for the region's peers and for new_store_ids, then apply
+  // CheckFailureDomainNoWorse (same size), CheckFailureDomainQuota (adding) or accept
+  // (removing). Gated by FLAGS_enable_failure_domain_guard.
+  butil::Status ValidateFailureDomainNoWorse(int64_t region_id, const pb::common::RegionDefinition &definition,
+                                             const std::vector<int64_t> &new_store_ids);
+
+  // Distinct failure domains among stores that can host a replica of store_type right now
+  // (STORE_NORMAL and STORE_IN).
+  int32_t CountFailureDomains(pb::common::StoreType store_type);
 
   // force_read_only
   butil::Status UpdateForceReadOnly(bool is_force_read_only, const std::string &reason,

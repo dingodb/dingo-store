@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,6 +90,19 @@ BRPC_VALIDATE_GFLAG(max_region_count, brpc::PositiveInteger);
 DEFINE_bool(print_recycle_orphan_region_not_table_or_index, true,
             "print recycle orphan region not table or index. default true");
 BRPC_VALIDATE_GFLAG(print_recycle_orphan_region_not_table_or_index, brpc::PassValidate);
+
+DEFINE_bool(enable_failure_domain_guard, true,
+            "reject a change peer that packs more replicas of a region into one failure domain (host) than it "
+            "already has; the domain count comes from every STORE_NORMAL/STORE_IN store of the same type, so it "
+            "ignores resource_tag and capacity limits; balance region pre-checks its moves with the same rule "
+            "while this or enable_failure_domain_placement is on; runtime escape hatch, keep on");
+BRPC_VALIDATE_GFLAG(enable_failure_domain_guard, brpc::PassValidate);
+
+DEFINE_bool(enable_failure_domain_placement, true,
+            "spread the replicas of a new region over distinct failure domains (hosts) when selecting stores "
+            "(best-effort, never fails region creation), and keep balance region from proposing moves that pack "
+            "replicas together; the balance region pre-check stays on while enable_failure_domain_guard is on");
+BRPC_VALIDATE_GFLAG(enable_failure_domain_placement, brpc::PassValidate);
 
 DEFINE_bool(print_process_job_error, true, "print process job error. default true");
 BRPC_VALIDATE_GFLAG(print_process_job_error, brpc::PassValidate);
@@ -1924,12 +1938,40 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
   DINGO_LOG(INFO) << "store_more_vec.size=" << store_more_vec.size() << ", replica_num=" << replica_num;
 
-  // select replica_num stores
+  // select replica_num stores, spread over failure domains best-effort.
+  // store_more_vec is weight-descending, so the first store met in a domain is that domain's best
+  // candidate; the weight semantics (including the random jitter above) are preserved.
   std::string store_ids_str;
   selected_stores_for_regions.reserve(replica_num);
-  for (int i = 0; i < replica_num; i++) {
-    selected_stores_for_regions.push_back(store_more_vec[i].store);
-    store_ids_str += std::to_string(store_more_vec[i].store.id()) + ",";
+  if (FLAGS_enable_failure_domain_placement) {
+    std::vector<pb::common::Store> candidates;
+    candidates.reserve(store_more_vec.size());
+    for (const auto& store_more : store_more_vec) {
+      candidates.push_back(store_more.store);
+    }
+
+    auto pick = PickStoresAcrossFailureDomains(candidates, replica_num);
+    selected_stores_for_regions = std::move(pick.stores);
+
+    // Stacking is expected when there are fewer domains than replicas; only warn when the pick
+    // is worse than the quota those domains allow.
+    int32_t domain_quota = (replica_num + std::max(pick.domain_count, 1) - 1) / std::max(pick.domain_count, 1);
+    if (pick.max_per_domain > domain_quota) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "SelectStore degraded: {} replicas over {} failure domains, up to {} in one domain (quota {})",
+          replica_num, pick.domain_count, pick.max_per_domain, domain_quota);
+    } else if (pick.max_per_domain > 1) {
+      DINGO_LOG(INFO) << fmt::format(
+          "SelectStore stacked replicas: {} replicas over {} failure domains, up to {} in one", replica_num,
+          pick.domain_count, pick.max_per_domain);
+    }
+  } else {
+    for (int i = 0; i < replica_num; i++) {
+      selected_stores_for_regions.push_back(store_more_vec[i].store);
+    }
+  }
+  for (const auto& store : selected_stores_for_regions) {
+    store_ids_str += std::to_string(store.id()) + ",";
   }
 
   DINGO_LOG(INFO) << "selected_stores_for_regions.size=" << selected_stores_for_regions.size()
@@ -3358,6 +3400,24 @@ CoordinatorControl::ShadowDecision CoordinatorControl::DecideShadowAction(
   return decision;
 }
 
+std::vector<int64_t> CoordinatorControl::BuildEffectiveStoreIds(const std::vector<int64_t>& old_store_ids,
+                                                                const std::vector<int64_t>& diff_less,
+                                                                const std::vector<int64_t>& diff_more) {
+  std::vector<int64_t> effective_store_ids;
+  effective_store_ids.reserve(old_store_ids.size() + diff_more.size());
+  for (int64_t store_id : old_store_ids) {
+    if (std::find(diff_less.begin(), diff_less.end(), store_id) == diff_less.end()) {
+      effective_store_ids.push_back(store_id);
+    }
+  }
+  for (int64_t store_id : diff_more) {
+    if (std::find(effective_store_ids.begin(), effective_store_ids.end(), store_id) == effective_store_ids.end()) {
+      effective_store_ids.push_back(store_id);
+    }
+  }
+  return effective_store_ids;
+}
+
 // ChangePeerRegionWithJob
 butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std::vector<int64_t>& new_store_ids,
                                                           pb::coordinator_internal::MetaIncrement& meta_increment,
@@ -3562,6 +3622,19 @@ butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std
           new_store_ids_diff_more.at(0));
       return store_status;
     }
+  }
+
+  // new_store_ids is not the resulting peer set here: in verify mode it is only a subset of the
+  // current peers (see the size check above), and DecideShadowAction may even rewrite the diffs.
+  // The diffs are final at this point, so rebuild what the region will actually look like. A
+  // kAddShadow target is already one of old_store_ids and must not be counted twice, otherwise
+  // the guard sees N+1 replicas and applies the add quota to what is really a no-op.
+  auto effective_store_ids = BuildEffectiveStoreIds(old_store_ids, new_store_ids_diff_less, new_store_ids_diff_more);
+
+  auto domain_status = ValidateFailureDomainNoWorse(region_id, region.definition(), effective_store_ids);
+  if (!domain_status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("ChangePeerRegion rejected, {}", domain_status.error_str());
+    return domain_status;
   }
 
   // for region with epoch > 1, check if all peer has eligible snapshot (snapshot's epoch version is equal to region
@@ -3795,6 +3868,13 @@ butil::Status CoordinatorControl::ChangePairPeerRegionWithJob(int64_t region_id,
   std::sort(new_store_ids.begin(), new_store_ids.end());
   std::sort(old_store_ids.begin(), old_store_ids.end());
 
+  // std::set_difference has multiset semantics: a duplicated target id would still pass the
+  // one-add-one-remove check below and write two peers with the same store_id.
+  if (std::adjacent_find(new_store_ids.begin(), new_store_ids.end()) != new_store_ids.end()) {
+    DINGO_LOG(ERROR) << fmt::format("region_id:{}, new_store_ids has duplicate store id", region_id);
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "new_store_ids has duplicate store id");
+  }
+
   std::set_difference(new_store_ids.begin(), new_store_ids.end(), old_store_ids.begin(), old_store_ids.end(),
                       std::inserter(new_store_ids_diff_more, new_store_ids_diff_more.begin()));
   std::set_difference(old_store_ids.begin(), old_store_ids.end(), new_store_ids.begin(), new_store_ids.end(),
@@ -3817,6 +3897,12 @@ butil::Status CoordinatorControl::ChangePairPeerRegionWithJob(int64_t region_id,
           pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
           fmt::format("new_store_ids_diff_more store is not normal, errmsg:{}", store_status.error_cstr()));
     }
+  }
+
+  auto domain_status = ValidateFailureDomainNoWorse(region_id, region.definition(), new_store_ids);
+  if (!domain_status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("ChangePairPeerRegionWithJob rejected, {}", domain_status.error_str());
+    return domain_status;
   }
 
   // for region with epoch > 1, check if all peer has eligible snapshot (snapshot's epoch version is equal to region
@@ -7437,6 +7523,168 @@ butil::Status CoordinatorControl::CheckStoreNormal(int64_t store_id) {
   }
 
   return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CheckFailureDomainNoWorse(int64_t region_id,
+                                                            const std::vector<std::string>& old_domain_keys,
+                                                            const std::vector<std::string>& new_domain_keys) {
+  auto old_profile = Helper::FailureDomainProfile(old_domain_keys);
+  auto new_profile = Helper::FailureDomainProfile(new_domain_keys);
+  if (Helper::IsFailureDomainNoWorse(new_profile, old_profile)) {
+    return butil::Status::OK();
+  }
+
+  auto join = [](const std::vector<int32_t>& profile) {
+    std::string str;
+    for (size_t i = 0; i < profile.size(); ++i) {
+      str += (i == 0 ? "" : ",") + std::to_string(profile[i]);
+    }
+    return str;
+  };
+  return butil::Status(
+      pb::error::Errno::ECHANGE_PEER_FAILURE_DOMAIN_WORSE,
+      fmt::format("region_id:{}, change peer packs more replicas into one failure domain, before:[{}] after:[{}]",
+                  region_id, join(old_profile), join(new_profile)));
+}
+
+butil::Status CoordinatorControl::CheckFailureDomainQuota(int64_t region_id,
+                                                          const std::vector<std::string>& old_domain_keys,
+                                                          const std::vector<std::string>& new_domain_keys,
+                                                          int32_t domain_count) {
+  auto old_profile = Helper::FailureDomainProfile(old_domain_keys);
+  auto new_profile = Helper::FailureDomainProfile(new_domain_keys);
+  int32_t old_max = old_profile.empty() ? 0 : old_profile.front();
+  int32_t new_max = new_profile.empty() ? 0 : new_profile.front();
+
+  auto replica_num = static_cast<int32_t>(new_domain_keys.size());
+  int32_t domains = std::max(domain_count, 1);
+  int32_t quota = (replica_num + domains - 1) / domains;
+
+  if (new_max <= old_max || new_max <= quota) {
+    return butil::Status::OK();
+  }
+  return butil::Status(
+      pb::error::Errno::ECHANGE_PEER_FAILURE_DOMAIN_WORSE,
+      fmt::format("region_id:{}, adding a replica packs {} replicas into one failure domain (quota {} over {} "
+                  "domains); set FLAGS_enable_failure_domain_guard=false via ControlConfig to bypass",
+                  region_id, new_max, quota, domain_count));
+}
+
+CoordinatorControl::FailureDomainPick CoordinatorControl::PickStoresAcrossFailureDomains(
+    const std::vector<pb::common::Store>& candidates, int32_t replica_num) {
+  FailureDomainPick pick;
+
+  std::set<std::string> domains;
+  for (const auto& store : candidates) {
+    domains.insert(Helper::FailureDomainKey(store));
+  }
+  pick.domain_count = static_cast<int32_t>(domains.size());
+
+  std::map<std::string, int32_t> picked_per_domain;
+  std::set<int64_t> picked_ids;
+  auto picked = [&pick]() { return static_cast<int32_t>(pick.stores.size()); };
+
+  // Escalating per-domain cap: cap=1 spreads as wide as possible, each further pass only adds
+  // to domains that all already hold `cap - 1`. The loop is the whole degradation ladder.
+  for (int32_t cap = 1; cap <= replica_num && picked() < replica_num; ++cap) {
+    for (const auto& store : candidates) {
+      if (picked() >= replica_num) {
+        break;
+      }
+      if (picked_ids.count(store.id()) > 0) {
+        continue;
+      }
+      auto& count = picked_per_domain[Helper::FailureDomainKey(store)];
+      if (count >= cap) {
+        continue;
+      }
+      ++count;
+      picked_ids.insert(store.id());
+      pick.stores.push_back(store);
+      pick.max_per_domain = std::max(pick.max_per_domain, count);
+    }
+  }
+
+  return pick;
+}
+
+int32_t CoordinatorControl::CountFailureDomains(pb::common::StoreType store_type) {
+  butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
+  store_map_copy.init(100);
+  store_map_.GetRawMapCopy(store_map_copy);
+
+  std::set<std::string> domains;
+  for (const auto& element : store_map_copy) {
+    const auto& store = element.second;
+    if (store.state() != pb::common::StoreState::STORE_NORMAL ||
+        store.in_state() != pb::common::StoreInState::STORE_IN || store.store_type() != store_type) {
+      continue;
+    }
+    domains.insert(Helper::FailureDomainKey(store));
+  }
+  return static_cast<int32_t>(domains.size());
+}
+
+butil::Status CoordinatorControl::ValidateFailureDomainNoWorse(int64_t region_id,
+                                                               const pb::common::RegionDefinition& definition,
+                                                               const std::vector<int64_t>& new_store_ids) {
+  if (!FLAGS_enable_failure_domain_guard) {
+    return butil::Status::OK();
+  }
+
+  // store_map_ is the source of truth for a store's location; the copy cached in the region
+  // definition can be stale if a store re-registered under a different server.host. Both the old
+  // and the new key must come from the same source, otherwise one machine looks like two domains.
+  auto resolve_domain = [this](int64_t store_id, const pb::common::Peer* cached) -> std::string {
+    pb::common::Store store;
+    if (store_map_.Get(store_id, store) >= 0) {
+      return Helper::FailureDomainKey(store);
+    }
+    return cached != nullptr ? Helper::FailureDomainKey(*cached) : fmt::format("?{}", store_id);
+  };
+
+  std::vector<std::string> old_domain_keys;
+  old_domain_keys.reserve(definition.peers_size());
+  for (const auto& peer : definition.peers()) {
+    old_domain_keys.push_back(resolve_domain(peer.store_id(), &peer));
+  }
+
+  std::vector<std::string> new_domain_keys;
+  new_domain_keys.reserve(new_store_ids.size());
+  pb::common::StoreType added_store_type = pb::common::StoreType::NODE_TYPE_STORE;
+  for (int64_t store_id : new_store_ids) {
+    const pb::common::Peer* existing = nullptr;
+    for (const auto& peer : definition.peers()) {
+      if (peer.store_id() == store_id) {
+        existing = &peer;
+        break;
+      }
+    }
+
+    pb::common::Store store;
+    if (store_map_.Get(store_id, store) < 0) {
+      if (existing == nullptr) {
+        return butil::Status(
+            pb::error::Errno::ESTORE_NOT_FOUND,
+            fmt::format("region_id:{}, store:{} not found for failure domain check", region_id, store_id));
+      }
+      new_domain_keys.push_back(Helper::FailureDomainKey(*existing));
+      continue;
+    }
+    if (existing == nullptr) {
+      added_store_type = store.store_type();
+    }
+    new_domain_keys.push_back(Helper::FailureDomainKey(store));
+  }
+
+  if (new_domain_keys.size() == old_domain_keys.size()) {
+    return CheckFailureDomainNoWorse(region_id, old_domain_keys, new_domain_keys);
+  }
+  if (new_domain_keys.size() < old_domain_keys.size()) {
+    // Removing a replica never packs more of them together.
+    return butil::Status::OK();
+  }
+  return CheckFailureDomainQuota(region_id, old_domain_keys, new_domain_keys, CountFailureDomains(added_store_type));
 }
 
 butil::Status CoordinatorControl::UpdateForceReadOnly(bool is_force_read_only, const std::string& reason,
