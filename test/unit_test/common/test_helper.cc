@@ -1594,3 +1594,78 @@ TEST_F(HelperTest, PrefixNext) {
 
   EXPECT_EQ(next_start_key1, range.end_key());
 }
+
+static dingodb::pb::common::Peer MakePeerOnHost(int64_t store_id, const std::string& host) {
+  dingodb::pb::common::Peer peer;
+  peer.set_store_id(store_id);
+  peer.mutable_server_location()->set_host(host);
+  peer.mutable_server_location()->set_port(20000);
+  return peer;
+}
+
+TEST_F(HelperTest, FailureDomainKey) {
+  dingodb::pb::common::Store store;
+  store.set_id(1001);
+  store.mutable_server_location()->set_host("10.220.68.25");
+  store.mutable_server_location()->set_port(20000);
+  EXPECT_EQ("10.220.68.25", dingodb::Helper::FailureDomainKey(store));
+
+  // Two store instances on the same machine share one domain regardless of port.
+  auto peer_a = MakePeerOnHost(1001, "10.220.68.25");
+  auto peer_b = MakePeerOnHost(1002, "10.220.68.25");
+  peer_b.mutable_server_location()->set_port(20001);
+  EXPECT_EQ(dingodb::Helper::FailureDomainKey(peer_a), dingodb::Helper::FailureDomainKey(peer_b));
+
+  // An empty host yields a per-store sentinel, never a shared bucket.
+  auto unknown_a = MakePeerOnHost(1003, "");
+  auto unknown_b = MakePeerOnHost(1004, "");
+  EXPECT_NE(dingodb::Helper::FailureDomainKey(unknown_a), dingodb::Helper::FailureDomainKey(unknown_b));
+  EXPECT_NE(dingodb::Helper::FailureDomainKey(unknown_a), dingodb::Helper::FailureDomainKey(peer_a));
+}
+
+TEST_F(HelperTest, FailureDomainProfile) {
+  google::protobuf::RepeatedPtrField<dingodb::pb::common::Peer> peers;
+
+  // Production shape (1002,1005,1007): two replicas on .25, one on .26.
+  *peers.Add() = MakePeerOnHost(1002, "10.220.68.25");
+  *peers.Add() = MakePeerOnHost(1005, "10.220.68.25");
+  *peers.Add() = MakePeerOnHost(1007, "10.220.68.26");
+  EXPECT_EQ((std::vector<int32_t>{2, 1}), dingodb::Helper::FailureDomainProfile(peers));
+
+  peers.Clear();
+  *peers.Add() = MakePeerOnHost(1002, "10.220.68.25");
+  *peers.Add() = MakePeerOnHost(1007, "10.220.68.26");
+  *peers.Add() = MakePeerOnHost(1019, "10.220.68.28");
+  EXPECT_EQ((std::vector<int32_t>{1, 1, 1}), dingodb::Helper::FailureDomainProfile(peers));
+
+  peers.Clear();
+  *peers.Add() = MakePeerOnHost(1002, "10.220.68.25");
+  *peers.Add() = MakePeerOnHost(1003, "10.220.68.25");
+  *peers.Add() = MakePeerOnHost(1005, "10.220.68.25");
+  EXPECT_EQ((std::vector<int32_t>{3}), dingodb::Helper::FailureDomainProfile(peers));
+
+  peers.Clear();
+  EXPECT_TRUE(dingodb::Helper::FailureDomainProfile(peers).empty());
+
+  // Key-based overload agrees with the peer-based one.
+  EXPECT_EQ((std::vector<int32_t>{2, 1}),
+            dingodb::Helper::FailureDomainProfile(std::vector<std::string>{"a", "b", "a"}));
+}
+
+TEST_F(HelperTest, IsFailureDomainNoWorse) {
+  const std::vector<int32_t> spread{1, 1, 1};
+  const std::vector<int32_t> paired{2, 1};
+  const std::vector<int32_t> packed{3};
+
+  // Improvement and no-op are both allowed; the guard must never lock an already-bad
+  // layout in place, so a neutral same-host swap has to pass.
+  EXPECT_TRUE(dingodb::Helper::IsFailureDomainNoWorse(spread, paired));
+  EXPECT_TRUE(dingodb::Helper::IsFailureDomainNoWorse(paired, paired));
+  EXPECT_TRUE(dingodb::Helper::IsFailureDomainNoWorse(spread, spread));
+  EXPECT_TRUE(dingodb::Helper::IsFailureDomainNoWorse(paired, packed));
+
+  // Packing more replicas into one domain is rejected.
+  EXPECT_FALSE(dingodb::Helper::IsFailureDomainNoWorse(packed, paired));
+  EXPECT_FALSE(dingodb::Helper::IsFailureDomainNoWorse(paired, spread));
+  EXPECT_FALSE(dingodb::Helper::IsFailureDomainNoWorse(packed, spread));
+}

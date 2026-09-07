@@ -84,6 +84,22 @@ class Helper {
   static bool IsDifferencePeers(const pb::common::RegionDefinition& src_definition,
                                 const pb::common::RegionDefinition& dst_definition);
 
+  // Failure domain: the unit whose members fail together. Several store instances on one
+  // machine share its kernel, power and NIC, so the domain is currently the store's host.
+  // To add rack/zone awareness later, change only these two functions; every placement
+  // path (SelectStore, ChangePeer guard, balance region/leader) goes through them.
+  static std::string FailureDomainKey(const pb::common::Store& store);
+  static std::string FailureDomainKey(const pb::common::Peer& peer);
+
+  // Domain fingerprint of a peer set: replica count per domain, sorted descending.
+  // Lexicographically smaller is safer: [1,1,1] < [2,1] < [3].
+  static std::vector<int32_t> FailureDomainProfile(const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers);
+  static std::vector<int32_t> FailureDomainProfile(const std::vector<std::string>& domain_keys);
+
+  // True when new_profile <= old_profile lexicographically, i.e. the change does not pack
+  // more replicas into one failure domain than before. Meant for peer sets of equal size.
+  static bool IsFailureDomainNoWorse(const std::vector<int32_t>& new_profile, const std::vector<int32_t>& old_profile);
+
   static void SortPeers(std::vector<pb::common::Peer>& peers);
 
   static std::vector<pb::common::Location> ExtractRaftLocations(
