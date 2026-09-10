@@ -18,7 +18,7 @@ git -C "$source_dir" checkout --detach "$braft_revision"
 cmake -S "$source_dir" -B "$build_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_STANDARD=17 \
-  -DCMAKE_CXX_FLAGS=-DUSE_BTHREAD_MUTEX \
+  "-DCMAKE_CXX_FLAGS=-DUSE_BTHREAD_MUTEX -I$source_dir/src -I$build_dir" \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DCMAKE_PREFIX_PATH="$eureka_root" \
   -DCMAKE_LIBRARY_PATH="$eureka_root/lib" \
