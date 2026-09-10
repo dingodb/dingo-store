@@ -51,6 +51,8 @@
 namespace dingodb {
 
 class Server {
+  friend class DingoSnapshotReaderTest;
+
  public:
   static Server& GetInstance();
 

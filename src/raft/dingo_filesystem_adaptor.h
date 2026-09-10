@@ -263,6 +263,8 @@ class PosixFileAdaptor : public braft::FileAdaptor {
 
 // DingoFileSystemAdaptor is passed to raft to handle snapshot file read and write
 class DingoFileSystemAdaptor : public braft::FileSystemAdaptor {
+  friend class DingoSnapshotReaderTest;
+
  public:
   DingoFileSystemAdaptor(int64_t region_id);
   ~DingoFileSystemAdaptor() override;
