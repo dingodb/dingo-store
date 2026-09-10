@@ -22,6 +22,12 @@ set(OPENBLAS_LIBRARIES
     "${OPENBLAS_INSTALL_DIR}/lib/libopenblas.a"
     CACHE FILEPATH "openblas library." FORCE)
 
+set(OPENBLAS_TARGET "" CACHE STRING "OpenBLAS CPU target (empty uses host detection)")
+set(OPENBLAS_TARGET_ARGS)
+if(OPENBLAS_TARGET)
+  list(APPEND OPENBLAS_TARGET_ARGS -DTARGET=${OPENBLAS_TARGET})
+endif()
+
 ExternalProject_Add(
   extern_openblas
   ${EXTERNAL_PROJECT_LOG_ARGS}
@@ -40,6 +46,7 @@ ExternalProject_Add(
              -DBUILD_STATIC_LIBS=ON
              -DBUILD_TESTING=OFF
              -DC_LAPACK=ON
+             ${OPENBLAS_TARGET_ARGS}
              ${EXTERNAL_OPTIONAL_ARGS}
   LIST_SEPARATOR |
   CMAKE_CACHE_ARGS
