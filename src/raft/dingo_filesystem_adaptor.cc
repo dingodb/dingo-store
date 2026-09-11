@@ -124,7 +124,7 @@ void DingoDataReaderAdaptor::ContextReset() {
   iter_options.lower_bound = temp_iter_context->lower_bound;
   iter_options.upper_bound = temp_iter_context->upper_bound;
   auto new_iter = iter_ctx_in_adaptor_->snapshot_context->raw_engine->Reader()->NewIterator(
-      iter_ctx_in_adaptor_->cf_name, iter_ctx_in_adaptor_->snapshot_context->snapshot, IteratorOptions());
+      iter_ctx_in_adaptor_->cf_name, iter_ctx_in_adaptor_->snapshot_context->snapshot, iter_options);
   temp_iter_context->iter = new_iter;
   temp_iter_context->iter->Seek(temp_iter_context->lower_bound);
   temp_iter_context->snapshot_context->data_iterators[iter_ctx_in_adaptor_->cf_name] = temp_iter_context;
@@ -188,7 +188,9 @@ ssize_t DingoDataReaderAdaptor::read(butil::IOPortal* portal, off_t offset, size
 
   while (count < size) {
     if (!iter_ctx_in_adaptor_->iter->Valid() ||
-        !(iter_ctx_in_adaptor_->iter->Key() >= iter_ctx_in_adaptor_->lower_bound)) {
+        !(iter_ctx_in_adaptor_->iter->Key() >= iter_ctx_in_adaptor_->lower_bound) ||
+        (!iter_ctx_in_adaptor_->upper_bound.empty() &&
+         !(iter_ctx_in_adaptor_->iter->Key() < iter_ctx_in_adaptor_->upper_bound))) {
       iter_ctx_in_adaptor_->done = true;
       // portal->append((void*)iter_context->offset, sizeof(size_t));
       DINGO_LOG(WARNING) << "region_id: " << region_id_
@@ -715,7 +717,7 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
     iter_options.lower_bound = iter_context->lower_bound;
     iter_options.upper_bound = iter_context->upper_bound;
     auto new_iter = iter_context->snapshot_context->raw_engine->Reader()->NewIterator(
-        iter_context->cf_name, iter_context->snapshot_context->snapshot, IteratorOptions());
+        iter_context->cf_name, iter_context->snapshot_context->snapshot, iter_options);
     iter_context->iter = new_iter;
     iter_context->iter->Seek(iter_context->lower_bound);
 
